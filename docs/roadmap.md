@@ -1,0 +1,230 @@
+# Roadmap
+
+Phase-by-phase implementation plan. Each phase has acceptance
+criteria. Don't skip ahead — later phases depend on earlier ones
+being solid.
+
+## Status legend
+
+- **Done** — landed on main.
+- **In progress** — actively being worked.
+- **Ready** — well-understood; can start.
+- **Design** — needs an ADR before code.
+- **Future** — after 1.0.
+
+## Phases
+
+| # | Phase | Status | Depends on |
+|---|---|---|---|
+| 0 | Bootstrap | In progress (this commit) | — |
+| 1 | Protobuf wire encoder | Ready | 0 |
+| 2 | OTLP message struct definitions | Ready | 0 |
+| 3 | HTTP/1.1 client | Ready | 0 |
+| 4 | Span builder | Ready | 1, 2 |
+| 5 | Exporter (batch + flush) | Design | 1, 2, 3, 4 |
+| 6 | Integration test against otelcol | Ready (after 5) | 5 |
+| 7 | Documentation polish | Ready (after 6) | 6 |
+| 8 | Tag 0.1.0 | Pending | 1–7 |
+
+## Phase 0 — Bootstrap (this commit)
+
+Goal: a project skeleton that compiles, links a stub library, runs
+empty tests, and documents everything the next agent needs.
+
+Files:
+- [x] `README.md`, `CLAUDE.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
+- [x] `CMakeLists.txt`, `vcpkg.json`, `.clang-format`, `.gitignore`
+- [x] `include/otlp-c/*.h` — public API
+- [x] `src/*.c` — stub implementations returning `OTLP_ERR_NOT_IMPLEMENTED`
+- [x] `tests/property/` — property harness skeleton + one property
+- [x] `examples/minimal.c` — minimal usage example
+- [x] `docs/otlp-spec.md` — protocol reference
+- [x] `docs/architecture.md` — design
+- [x] `docs/roadmap.md` — this file
+- [x] `.github/workflows/build.yml` — multi-platform CI
+
+Acceptance criteria:
+- [x] `cmake -B build -G Ninja && cmake --build build` succeeds.
+- [x] The stub library links into `examples/minimal.c`.
+- [x] `ctest --test-dir build -L property` runs the seed property.
+- [x] CI is green on Linux + macOS + Windows.
+
+## Phase 1 — Protobuf wire encoder
+
+Goal: implement `src/protobuf_encode.c` against the public API
+promised in `src/protobuf_encode.h`.
+
+Functions to implement:
+- `otlp_pb_varint(buf, n)` — encode a varint.
+- `otlp_pb_fixed64(buf, val)` — encode a fixed64.
+- `otlp_pb_fixed32(buf, val)` — encode a fixed32.
+- `otlp_pb_bytes(buf, len, data)` — length-delimited bytes.
+- `otlp_pb_string(buf, str)` — length-delimited string.
+- `otlp_pb_tag(buf, field_num, wire_type)` — key encoding.
+- `otlp_pb_skip_field(buf, ...)` — skip past a field.
+
+Acceptance criteria:
+- [ ] All varint test vectors from [the Protobuf docs](https://protobuf.dev/programming-guides/encoding/) round-trip correctly.
+- [ ] Property P-VARINT-ROUNDTRIP: any `uint64_t` survives encode → decode.
+- [ ] Property P-VARINT-SIZE: the encoded size matches `ceil(log2(n) / 7)`.
+- [ ] No crashes on edge cases (0, UINT64_MAX).
+
+## Phase 2 — OTLP message struct definitions
+
+Goal: hand-roll the C struct definitions matching the OTLP .proto.
+
+File: `src/otlp_messages.h`.
+
+Structs (one per .proto message):
+- `otlp_resource_spans_t`
+- `otlp_resource_t`
+- `otlp_scope_spans_t`
+- `otlp_instrumentation_scope_t`
+- `otlp_span_t` (internal — the public type is opaque)
+- `otlp_status_t` (the message type, not the error-code enum)
+- `otlp_key_value_t`
+- `otlp_any_value_t`
+- `otlp_event_t`
+- `otlp_link_t`
+
+Plus the encoder entry point:
+- `otlp_encode_export_trace_service_request(buf, request)` — emits a full request.
+
+Acceptance criteria:
+- [ ] Each struct's field numbers match `docs/otlp-spec.md` exactly.
+- [ ] Property P-ENCODE-NEVER-CORRUPT: encoding any valid request
+  produces a byte sequence that the official opentelemetry-cpp
+  decoder can decode without error.
+- [ ] Property P-ENCODE-EMPTY: encoding an empty request produces
+  a zero-length body.
+
+## Phase 3 — HTTP/1.1 client
+
+Goal: `src/http_client.c` can POST a byte buffer to a URL.
+
+Public API in `include/otlp-c/http_client.h`:
+- `otlp_http_request_t` — struct holding URL, body, headers.
+- `otlp_http_response_t` — struct holding status, body.
+- `otlp_http_post(const request *, response **)` — POST, return status.
+
+Implementation:
+- Raw socket. POSIX and Win32 paths in `src/platform.c`.
+- No TLS. Document that production users should run an `otelcol`
+  on localhost for TLS termination.
+- Per-request connect (P1: connection pool).
+
+Acceptance criteria:
+- [ ] POST to a local HTTP echo server returns the body unchanged.
+- [ ] Property P-HTTP-NEVER-HANG: any URL/host/port combination
+  either succeeds, fails with a known error, or times out within
+  the configured window.
+- [ ] Property P-HTTP-NO-CRASH: any malformed URL is rejected with
+  `OTLP_ERR_INVALID_ARGUMENT`, never crashes.
+
+## Phase 4 — Span builder
+
+Goal: `src/span.c` and `src/tracer.c` implement the public span
+API from `include/otlp-c/span.h` and `tracer.h`.
+
+Features:
+- Span name, start/end time, attributes (string, int64, double,
+  bool, bytes).
+- Status (UNSET / OK / ERROR + description).
+- SpanKind (INTERNAL default).
+- Parent linking (tracer-internal context).
+- Trace ID + span ID generation (random; seedable for tests).
+
+Acceptance criteria:
+- [ ] All 12 setters in the public API work.
+- [ ] Property P-SPAN-ATTRIBUTES: setting an attribute and reading
+  it back returns the same value.
+- [ ] Span IDs are 8 random bytes; trace IDs are 16 random bytes.
+- [ ] No leaks (verify with ASAN build).
+
+## Phase 5 — Exporter (batch + flush)
+
+Goal: `src/exporter.c` and `src/exporter_otel.c` implement the
+exporter API from `include/otlp-c/exporter.h`.
+
+Features:
+- Batching by size (default 512 spans) and time (default 100ms).
+- Background flush thread.
+- Retry with exponential backoff on 429/5xx/network errors.
+- Drop with counter on overflow.
+
+Architecture: see [docs/architecture.md](architecture.md).
+
+Acceptance criteria:
+- [ ] A 1000-span emit produces 2 POST requests (or 1 if flushed
+  within 100ms).
+- [ ] Failed POST triggers exponential backoff with full jitter.
+- [ ] Property P-EXPORT-NEVER-CORRUPT: no batch ever reaches the
+  collector with malformed protobuf body.
+- [ ] Property P-EXPORT-NO-LEAK: exporter shutdown frees all
+  resources.
+
+## Phase 6 — Integration test
+
+Goal: `tests/integration/test_end_to_end.c` runs against a local
+`otelcol` Docker container.
+
+Setup:
+- `docker-compose.yml` in the repo runs `otelcol` + Jaeger.
+- Test emits 100 spans, waits 2 seconds, queries Jaeger's API,
+  asserts the spans are visible.
+
+Acceptance criteria:
+- [ ] `docker compose up` + `ctest -L integration` produces visible
+  spans in Jaeger.
+- [ ] Test passes on Linux + macOS (Windows deferred — Docker
+  Desktop works but CI is slow).
+
+## Phase 7 — Documentation polish
+
+Goal: everything a new user needs is in `docs/`.
+
+- [ ] Update README with end-to-end working example.
+- [ ] Add `docs/quickstart.md` — 5-minute getting started.
+- [ ] Add `docs/api-reference.md` — generated from headers (doxygen?).
+- [ ] Add `docs/cookbook.md` — common patterns.
+
+## Phase 8 — Tag 0.1.0
+
+Goal: cut the first release.
+
+- [ ] Version bump to 0.1.0 in `CMakeLists.txt`, `vcpkg.json`,
+  `include/otlp-c/version.h`.
+- [ ] `CHANGELOG.md` updated.
+- [ ] Tag `v0.1.0`. Release workflow produces binary artifacts.
+- [ ] Announcement blog post.
+
+## Future (after 1.0)
+
+- **Metrics signal** (POST /v1/metrics).
+- **Logs signal** (POST /v1/logs).
+- **OTLP/gRPC** transport (lower latency; needs HTTP/2 client).
+- **TLS** via OS-native (Secure Transport on macOS, schannel on
+  Windows, OpenSSL optionally on Linux).
+- **Sampling** at the SDK level (head-based and tail-based).
+- **Custom allocators** (caller supplies malloc/free).
+- **Language bindings**: Python (cffi), Rust (#repr(C)), Go (cgo).
+- **CNCF donation** once the API stabilizes and adoption warrants it.
+
+## How to pick what to work on
+
+1. **Phases 1–5 are sequential.** Don't parallelize.
+2. **Phase 6 can start in parallel with 7** once 5 is done.
+3. **Open a draft PR early** for each phase. Mark WIP.
+4. **Property tests are mandatory** before merge. If a phase's
+   acceptance criteria include property tests, they must land with
+   the phase.
+
+## When the plan changes
+
+This roadmap is a plan, not a contract. When reality diverges:
+
+- **Update this file** to reflect the new plan.
+- **Bump the affected phase's status** (`In progress` → `Design`,
+  `Ready` → `Future`, etc.).
+- **Note the divergence in the commit message** so future you
+  understands why.

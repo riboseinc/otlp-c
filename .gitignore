@@ -1,0 +1,47 @@
+# Build outputs
+build/
+build-*/
+out/
+dist/
+*.o
+*.obj
+*.so
+*.so.*
+*.dylib
+*.dll
+*.a
+*.lib
+*.pdb
+*.exp
+
+# vcpkg
+vcpkg_installed/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+.cache/
+
+# Coverage / sanitizer output
+*.gcno
+*.gcda
+*.gcov
+ASANLog.*
+TSANLog.*
+
+# Generated docs
+docs/_build/
+site/
+
+# Test artifacts
+Testing/
+test-output/

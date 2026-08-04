@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "otlp-c",
+  "version": "0.1.0",
+  "port-version": 0,
+  "description": "Pure-C OTLP/HTTP client for OpenTelemetry. Standalone, zero non-libc dependencies.",
+  "homepage": "https://github.com/riboseinc/otlp-c",
+  "license": "Apache-2.0",
+  "dependencies": [],
+  "supports": "!uwp",
+  "features": {
+    "tests": {
+      "description": "Build unit + property + integration tests"
+    },
+    "examples": {
+      "description": "Build example programs"
+    }
+  }
+}
