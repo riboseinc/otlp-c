@@ -1,0 +1,75 @@
+name: Quality Checks
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trailing-whitespace:
+    name: Check trailing whitespace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        run: |
+          if git grep -nE '[[:space:]]+$' -- ':!*.md' ':!build/**'; then
+            echo '::error::Found trailing whitespace'
+            exit 1
+          fi
+          echo 'No trailing whitespace found'
+
+  clang-format:
+    name: Check clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check formatting
+        run: |
+          FILES=$(find include src tests examples -name '*.c' -o -name '*.h' 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "No C files to check"
+            exit 0
+          fi
+          DIFF=$(clang-format --dry-run --Werror $FILES 2>&1) || true
+          if echo "$DIFF" | grep -q "diff"; then
+            echo "::error::clang-format found formatting issues:"
+            echo "$DIFF"
+            exit 1
+          fi
+          echo "clang-format: clean"
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+      - uses: lukka/get-cmake@latest
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - uses: github/codeql-action/analyze@v3

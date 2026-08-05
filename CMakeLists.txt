@@ -30,6 +30,7 @@ option(OTLP_C_BUILD_TESTS "Build unit + property + integration tests" OFF)
 option(OTLP_C_BUILD_EXAMPLES "Build example programs" OFF)
 option(OTLP_C_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(OTLP_C_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(OTLP_C_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(BUILD_SHARED_LIBS "Build as shared library instead of static" OFF)
 
 # Sanitizers
@@ -40,6 +41,10 @@ endif()
 if(OTLP_C_ENABLE_UBSAN)
     add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=undefined)
+endif()
+if(OTLP_C_ENABLE_TSAN)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
 endif()
 
 # Warnings (gcc + clang)

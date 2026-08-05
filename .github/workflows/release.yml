@@ -1,0 +1,258 @@
+name: Release
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      next_version:
+        description: |
+          Next release version. Possible values: x.y.z, major, minor, patch, or skip.
+          - major: Bump major version (0.1.0 -> 1.0.0)
+          - minor: Bump minor version (0.1.0 -> 0.2.0)
+          - patch: Bump patch version (0.1.0 -> 0.1.1)
+          - x.y.z: Specific version (e.g. 0.2.1)
+          - skip: Skip version bump, create release from current version
+        required: true
+        default: 'patch'
+      create_github_release:
+        description: 'Create GitHub release after tagging?'
+        required: true
+        type: boolean
+        default: true
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  validate-and-bump:
+    name: Validate and bump version
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      release_branch: ${{ steps.create_branch.outputs.branch }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version input
+        id: validate
+        run: |
+          VERSION_INPUT="${{ github.event.inputs.next_version }}"
+          if [ "$VERSION_INPUT" = "skip" ]; then
+            echo "skip_bump=true" >> $GITHUB_OUTPUT
+          elif echo "$VERSION_INPUT" | grep -qE '^(major|minor|patch)$'; then
+            echo "skip_bump=false" >> $GITHUB_OUTPUT
+          elif echo "$VERSION_INPUT" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "skip_bump=false" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Invalid version input: $VERSION_INPUT"
+            exit 1
+          fi
+
+      - name: Bump version
+        if: steps.validate.outputs.skip_bump == 'false'
+        run: |
+          echo "y" | ./.github/scripts/bump-version.sh "${{ github.event.inputs.next_version }}"
+
+      - name: Get new version
+        id: get_version
+        run: |
+          if [ "${{ steps.validate.outputs.skip_bump }}" = "true" ]; then
+            VERSION=$(grep -oP '"version"\s*:\s*"\K[^"]+' vcpkg.json)
+          else
+            VERSION=$(grep -oP '"version"\s*:\s*"\K[^"]+' vcpkg.json)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Determined version: $VERSION"
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create release branch
+        id: create_branch
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BRANCH="release/v${VERSION}"
+          git checkout -b "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        if: steps.validate.outputs.skip_bump == 'false'
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          git add CMakeLists.txt vcpkg.json include/otlp-c/version.h CHANGELOG.md
+          git commit -m "chore: bump version to ${VERSION}"
+
+      - name: Push release branch
+        run: |
+          BRANCH="${{ steps.create_branch.outputs.branch }}"
+          git push origin "$BRANCH"
+
+  create-pr:
+    name: Create release PR
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate-and-bump
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ needs.validate-and-bump.outputs.release_branch }}
+          VERSION: ${{ needs.validate-and-bump.outputs.version }}
+          CREATE_GH_RELEASE: ${{ github.event.inputs.create_github_release }}
+        run: |
+          PR_BODY_FILE="$(mktemp)"
+          {
+            echo "## Release v${VERSION}"
+            echo ""
+            echo "This PR prepares the release for version ${VERSION}."
+            echo ""
+            echo "### Before Merging"
+            echo "- [ ] Review and complete the CHANGELOG.md entry"
+            echo "- [ ] Verify all CI tests pass"
+            echo ""
+            echo "### After Merging"
+            echo "- Git tag v${VERSION} will be created"
+            echo "- Binary artifacts will be built and uploaded"
+            if [ "${CREATE_GH_RELEASE}" = "true" ]; then
+              echo "- GitHub release will be published"
+            fi
+          } > "$PR_BODY_FILE"
+
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "Release v${VERSION}" \
+            --body-file "$PR_BODY_FILE" \
+            --label release
+
+  tag-and-release:
+    name: Tag and create GitHub release
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag: ${{ steps.get_version.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep -oP '"version"\s*:\s*"\K[^"]+' vcpkg.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Git tag
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: otlp-c v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'beta') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-artifacts:
+    name: Build artifacts (${{ matrix.name }})
+    needs: tag-and-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            archive: tar.gz
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            archive: tar.gz
+          - name: macos-x86_64
+            os: macos-13
+            archive: tar.gz
+          - name: macos-arm64
+            os: macos-14
+            archive: tar.gz
+          - name: windows-x64
+            os: windows-latest
+            archive: zip
+            msvc: true
+          - name: windows-arm64
+            os: windows-11-arm
+            archive: zip
+            msvc: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag-and-release.outputs.tag }}
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Setup MSVC
+        if: matrix.msvc == true
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ contains(matrix.name, 'arm64') && 'arm64' || 'x64' }}
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=staging
+          cmake --build build
+          cmake --install build
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build -G "Ninja Multi-Config" -DCMAKE_INSTALL_PREFIX=staging
+          cmake --build build --config Release
+          cmake --install build --config Release
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          VERSION="${{ needs.tag-and-release.outputs.version }}"
+          tar -czf "otlp-c-${VERSION}-${{ matrix.name }}.tar.gz" -C staging .
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $VERSION = "${{ needs.tag-and-release.outputs.version }}"
+          Compress-Archive -Path staging/* -DestinationPath "otlp-c-$VERSION-${{ matrix.name }}.zip"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag-and-release.outputs.tag }}
+          files: |
+            otlp-c-*-${{ matrix.name }}.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
