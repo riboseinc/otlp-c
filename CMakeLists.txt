@@ -65,6 +65,18 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     )
 endif()
 
+# POSIX feature macros for clock_gettime, nanosleep, etc. on glibc/musl
+# with -std=c11 (which disables the default _GNU_SOURCE). macOS
+# declares these by default.
+if(UNIX AND NOT APPLE)
+    add_compile_definitions(_POSIX_C_SOURCE=200809L _DEFAULT_SOURCE)
+endif()
+
+# MSVC needs explicit /std:c11 for <stdatomic.h>
+if(MSVC)
+    add_compile_options(/std:c11)
+endif()
+
 # Threads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
