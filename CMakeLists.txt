@@ -75,6 +75,11 @@ endif()
 # MSVC needs explicit /std:c11 for <stdatomic.h>
 if(MSVC)
     add_compile_options(/std:c11)
+    # Force C11 atomics support macro — the vcruntime header checks
+    # _HAS_C11_ATOMICS which depends on the VS installation having
+    # the "C11 atomics" component. On GitHub CI runners this isn't
+    # always present. The compiler itself supports the operations.
+    add_compile_definitions(_HAS_C11_ATOMICS=1)
 endif()
 
 # Threads
