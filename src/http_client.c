@@ -31,7 +31,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#if defined(_WIN32)
+#  include <string.h>
+#  define otlp_strncasecmp _strnicmp
+#else
+#  include <strings.h>
+#  define otlp_strncasecmp strncasecmp
+#endif
 
 /* ── URL parser ───────────────────────────────────────────────── */
 
@@ -298,7 +304,7 @@ try_parse_response(struct otlp_http_request *r)
 	/* Find Content-Length (case-insensitive). */
 	for (cl = (const char *) r->resp_buf; cl < body_start - 2; cl++)
 	{
-		if (strncasecmp(cl, "Content-Length:", 15) == 0)
+		if (otlp_strncasecmp(cl, "Content-Length:", 15) == 0)
 		{
 			cl += 15;
 			while (cl < body_start && *cl == ' ')
