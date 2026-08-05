@@ -13,20 +13,24 @@ add_test(NAME smoke
 	COMMAND otlp_test_smoke)
 set_tests_properties(smoke PROPERTIES LABELS "smoke;unit")
 
-# Phase 3: HTTP echo test (in-process TCP echo server).
-add_executable(otlp_test_http_echo test_http_echo.c test_helper_echo.c)
-target_link_libraries(otlp_test_http_echo PRIVATE otlp_c Threads::Threads)
-add_test(NAME http-echo
-	COMMAND otlp_test_http_echo)
-set_tests_properties(http-echo PROPERTIES LABELS "unit" TIMEOUT 30)
+# Phase 3 + Phase 5 echo tests use pthread (in-process TCP echo
+# server). POSIX only; Windows skips via in-source #if defined(_WIN32)
+# stubs but we don't compile the helper on Windows to avoid pulling
+# in <arpa/inet.h>.
+if(NOT WIN32)
+    add_executable(otlp_test_http_echo test_http_echo.c test_helper_echo.c)
+    target_link_libraries(otlp_test_http_echo PRIVATE otlp_c Threads::Threads)
+    add_test(NAME http-echo
+        COMMAND otlp_test_http_echo)
+    set_tests_properties(http-echo PROPERTIES LABELS "unit" TIMEOUT 30)
 
-# Phase 5: end-to-end exporter test.
-add_executable(otlp_test_exporter_echo
-    test_exporter_echo.c test_helper_echo.c)
-target_link_libraries(otlp_test_exporter_echo PRIVATE otlp_c Threads::Threads)
-add_test(NAME exporter-echo
-	COMMAND otlp_test_exporter_echo)
-set_tests_properties(exporter-echo PROPERTIES LABELS "unit" TIMEOUT 60)
+    add_executable(otlp_test_exporter_echo
+        test_exporter_echo.c test_helper_echo.c)
+    target_link_libraries(otlp_test_exporter_echo PRIVATE otlp_c Threads::Threads)
+    add_test(NAME exporter-echo
+        COMMAND otlp_test_exporter_echo)
+    set_tests_properties(exporter-echo PROPERTIES LABELS "unit" TIMEOUT 60)
+endif()
 
 # Property tests — see property/ for the harness.
 add_subdirectory(property)
