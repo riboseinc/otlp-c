@@ -6,6 +6,10 @@
  *   - response status line is parsed correctly
  *   - response body is captured intact
  */
+#if !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "test_helper_echo.h"
 
 #include "../src/http_client.h"

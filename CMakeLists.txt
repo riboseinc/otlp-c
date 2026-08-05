@@ -15,7 +15,13 @@ set(OTLP_C_VERSION_STRING "${PROJECT_VERSION}")
 # atomics; we write C99-style code everywhere else.
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+# MSVC's <stdatomic.h> requires C11 with extensions enabled (/std:c11
+# without /Za). GCC/Clang are fine with extensions off.
+if(MSVC)
+    set(CMAKE_C_EXTENSIONS ON)
+else()
+    set(CMAKE_C_EXTENSIONS OFF)
+endif()
 
 # Position-independent code by default (so the static lib can be
 # linked into a shared lib).
