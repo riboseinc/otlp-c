@@ -25,6 +25,7 @@
 
 #include "exporter_otel.h"
 #include "http_client.h"
+#include "internal_util.h"
 #include "mpsc_queue.h"
 #include "platform.h"
 #include "span_internal.h"
@@ -88,22 +89,6 @@ struct otlp_exporter
 };
 
 /* ── Helpers ──────────────────────────────────────────────────── */
-
-static char *
-dup_str(const char *s)
-{
-	size_t len;
-	char *out;
-
-	if (!s)
-		return NULL;
-	len = strlen(s);
-	out = malloc(len + 1);
-	if (!out)
-		return NULL;
-	memcpy(out, s, len + 1);
-	return out;
-}
 
 static uint64_t
 now_mono_ms(void)
@@ -188,8 +173,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (st != OTLP_OK)
 		goto fail;
 
-	e->user_agent = dup_str(o.user_agent);
-	e->service_name = dup_str(o.service_name);
+	e->user_agent = otlp_dup_str(o.user_agent);
+	e->service_name = otlp_dup_str(o.service_name);
 	if (!e->user_agent || !e->service_name)
 		goto fail;
 	e->batch_size = o.batch_size;

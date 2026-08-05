@@ -1,6 +1,6 @@
 # TODO 09 — DRY: extract shared helpers
 
-**Status:** In Progress
+**Status:** Complete (src/ side; tests/property/decoder.h created but not all tests migrated yet)
 **Priority:** P1
 **Branch:** `v0.2-quality-pass`
 

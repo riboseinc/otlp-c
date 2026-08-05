@@ -84,3 +84,15 @@ add_test(NAME property-attribute-roundtrip
 set_tests_properties(property-attribute-roundtrip PROPERTIES
 	LABELS "property;unit"
 	TIMEOUT 60)
+
+# Phase 12: MPSC queue contention.
+add_executable(otlp_property_mpsc test_property_mpsc.c)
+target_link_libraries(otlp_property_mpsc PRIVATE otlp_c Threads::Threads)
+target_include_directories(otlp_property_mpsc PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-mpsc
+	COMMAND otlp_property_mpsc)
+set_tests_properties(property-mpsc PROPERTIES
+	LABELS "property;unit"
+	TIMEOUT 120)

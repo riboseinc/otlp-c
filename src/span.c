@@ -14,6 +14,7 @@
  */
 #include <otlp-c/span.h>
 
+#include "internal_util.h"
 #include "span_internal.h"
 #include "platform.h"
 
@@ -44,38 +45,6 @@ struct otlp_span
 
 /* ── Internal helpers ─────────────────────────────────────────── */
 
-/* strdup is POSIX.1-2008; for portability across compilers and to
- * keep C_EXTENSIONS OFF, we hand-roll. Returns NULL on OOM. */
-static char *
-dup_str(const char *s)
-{
-	size_t len;
-	char *out;
-
-	if (!s)
-		return NULL;
-	len = strlen(s);
-	out = malloc(len + 1);
-	if (!out)
-		return NULL;
-	memcpy(out, s, len + 1);
-	return out;
-}
-
-static uint8_t *
-dup_bytes(const uint8_t *src, size_t len)
-{
-	uint8_t *out;
-
-	if (!src || len == 0)
-		return NULL;
-	out = malloc(len);
-	if (!out)
-		return NULL;
-	memcpy(out, src, len);
-	return out;
-}
-
 /* Reserve the next attribute slot and copy the key. Caller fills in
  * the type-specific value. On failure the slot is untouched and the
  * span's n_attrs is unchanged. */
@@ -90,7 +59,7 @@ attr_reserve(otlp_span_t *span, const char *key, struct otlp_attribute **out)
 	if (span->n_attrs >= OTLP_SPAN_MAX_ATTRIBUTES)
 		return OTLP_ERR_OVERFLOW;
 
-	key_copy = dup_str(key);
+	key_copy = otlp_dup_str(key);
 	if (!key_copy)
 		return OTLP_ERR_NOMEM;
 
@@ -155,7 +124,7 @@ otlp_span_create(const char *name)
 		return NULL;
 	memset(span, 0, sizeof(*span));
 
-	name_copy = dup_str(name ? name : "");
+	name_copy = otlp_dup_str(name ? name : "");
 	if (!name_copy)
 	{
 		free(span);
@@ -278,7 +247,7 @@ otlp_span_set_name(otlp_span_t *span, const char *name)
 
 	if (!span)
 		return OTLP_ERR_NULL;
-	new_name = dup_str(name ? name : "");
+	new_name = otlp_dup_str(name ? name : "");
 	if (!new_name)
 		return OTLP_ERR_NOMEM;
 	free(span->name);
@@ -300,7 +269,7 @@ otlp_span_set_attribute_string(otlp_span_t *span,
 	st = attr_reserve(span, key, &a);
 	if (st != OTLP_OK)
 		return st;
-	val_copy = dup_str(value ? value : "");
+	val_copy = otlp_dup_str(value ? value : "");
 	if (!val_copy)
 	{
 		free(a->key);
@@ -373,7 +342,7 @@ otlp_span_set_attribute_bytes(otlp_span_t *span,
 	st = attr_reserve(span, key, &a);
 	if (st != OTLP_OK)
 		return st;
-	bytes_copy = dup_bytes(bytes, len);
+	bytes_copy = otlp_dup_bytes(bytes, len);
 	if (len > 0 && !bytes_copy)
 	{
 		free(a->key);
@@ -400,7 +369,7 @@ otlp_span_set_status(otlp_span_t *span,
 		return OTLP_ERR_NULL;
 	if (description)
 	{
-		msg_copy = dup_str(description);
+		msg_copy = otlp_dup_str(description);
 		if (!msg_copy)
 			return OTLP_ERR_NOMEM;
 	}
@@ -408,6 +377,41 @@ otlp_span_set_status(otlp_span_t *span,
 	span->status_message = msg_copy;
 	span->status_code = code;
 	return OTLP_OK;
+}
+
+/* ── Deferred OTLP fields (v0.2+) ─────────────────────────────── */
+
+otlp_status_t
+otlp_span_add_event(otlp_span_t *span,
+	const char *name,
+	uint64_t time_unix_nano)
+{
+	(void)name;
+	(void)time_unix_nano;
+	if (!span)
+		return OTLP_ERR_NULL;
+	return OTLP_ERR_NOT_IMPLEMENTED;
+}
+
+otlp_status_t
+otlp_span_add_link(otlp_span_t *span,
+	const uint8_t *trace_id,
+	const uint8_t *span_id)
+{
+	(void)trace_id;
+	(void)span_id;
+	if (!span)
+		return OTLP_ERR_NULL;
+	return OTLP_ERR_NOT_IMPLEMENTED;
+}
+
+otlp_status_t
+otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
+{
+	(void)trace_state;
+	if (!span)
+		return OTLP_ERR_NULL;
+	return OTLP_ERR_NOT_IMPLEMENTED;
 }
 
 /* ── Internal accessors (see span_internal.h) ─────────────────── */
@@ -527,7 +531,7 @@ otlp_span_clone(const otlp_span_t *src)
 	dst->status_code = src->status_code;
 	if (src->status_message)
 	{
-		dst->status_message = dup_str(src->status_message);
+		dst->status_message = otlp_dup_str(src->status_message);
 		if (!dst->status_message)
 		{
 			otlp_span_free(dst);
