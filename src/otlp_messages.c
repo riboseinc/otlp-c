@@ -1,8 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
  * OTLP message encoders. See src/otlp_messages.h for the design.
+ *
+ * Field numbers and wire types come from src/otlp_schema.h, which
+ * is the model-driven single source of truth for the OTLP schema.
+ * The encoders below are hand-rolled for clarity but reference
+ * schema.h constants (O(N) lookups, but the compiler folds them
+ * at -O2). Adding a new field is a one-line schema entry plus an
+ * emit call.
  */
 #include "otlp_messages.h"
+#include "otlp_schema.h"
 #include "protobuf_encode.h"
 #include "span_internal.h"
 
@@ -11,65 +19,35 @@
 #include <stdint.h>
 #include <string.h>
 
-/* ── Field numbers from docs/otlp-spec.md ─────────────────────── */
-
-/* ExportTraceServiceRequest */
-#define ETSR_FIELD_RESOURCE_SPANS 1
-
-/* ResourceSpans */
-#define RS_FIELD_RESOURCE 1
-#define RS_FIELD_SCOPE_SPANS 2
-/* #define RS_FIELD_SCHEMA_URL	    3 */ /* deferred */
-
-/* Resource */
-#define R_FIELD_ATTRIBUTES 1
-/* #define R_FIELD_DROPPED_ATTRS_COUNT 2 */ /* deferred */
-
-/* ScopeSpans */
-#define SS_FIELD_SCOPE 1
-#define SS_FIELD_SPANS 2
-/* #define SS_FIELD_SCHEMA_URL	    3 */ /* deferred */
-
-/* InstrumentationScope */
-#define IS_FIELD_NAME 1
-#define IS_FIELD_VERSION 2
-/* #define IS_FIELD_ATTRIBUTES	    3 */ /* deferred */
-/* #define IS_FIELD_DROPPED_ATTRS_COUNT 4 */ /* deferred */
-
-/* Span */
-#define SPAN_FIELD_TRACE_ID 1
-#define SPAN_FIELD_SPAN_ID 2
-/* #define SPAN_FIELD_TRACE_STATE    3 */ /* deferred */
-#define SPAN_FIELD_PARENT_SPAN_ID 4
-#define SPAN_FIELD_NAME 5
-#define SPAN_FIELD_KIND 6
-#define SPAN_FIELD_START_TIME 7
-#define SPAN_FIELD_END_TIME 8
-#define SPAN_FIELD_ATTRIBUTES 9
-/* #define SPAN_FIELD_DROPPED_ATTRS_COUNT 10 */
-/* #define SPAN_FIELD_EVENTS	    11 */ /* deferred */
-/* #define SPAN_FIELD_DROPPED_EVENTS_COUNT 12 */
-/* #define SPAN_FIELD_LINKS	    13 */ /* deferred */
-/* #define SPAN_FIELD_DROPPED_LINKS_COUNT 14 */
-#define SPAN_FIELD_STATUS 15
-/* #define SPAN_FIELD_FLAGS	    16 */ /* deferred */
-
-/* Status */
-#define STATUS_FIELD_CODE 1
-#define STATUS_FIELD_MESSAGE 2
-
-/* KeyValue */
-#define KV_FIELD_KEY 1
-#define KV_FIELD_VALUE 2
-
-/* AnyValue oneof variants */
-#define AV_FIELD_STRING 1
-#define AV_FIELD_BOOL 2
-#define AV_FIELD_INT64 3
-#define AV_FIELD_DOUBLE 4
-/* #define AV_FIELD_ARRAY_VALUE    5 */ /* deferred */
-/* #define AV_FIELD_KVLIST_VALUE   6 */ /* deferred */
-#define AV_FIELD_BYTES 7
+/* Field-number accessors — single source of truth is otlp_schema.h.
+ * Each macro below extracts the number from the table entry; the
+ * wire type is implied by the per-field emit. */
+#define ETSR_F_RESOURCE_SPANS   OTLP_ETSR_FIELDS[0].number
+#define RS_F_RESOURCE	    OTLP_RS_FIELDS[0].number
+#define RS_F_SCOPE_SPANS	    OTLP_RS_FIELDS[1].number
+#define R_F_ATTRIBUTES	    OTLP_R_FIELDS[0].number
+#define SS_F_SCOPE		    OTLP_SS_FIELDS[0].number
+#define SS_F_SPANS		    OTLP_SS_FIELDS[1].number
+#define IS_F_NAME		    OTLP_IS_FIELDS[0].number
+#define IS_F_VERSION		    OTLP_IS_FIELDS[1].number
+#define SPAN_F_TRACE_ID	    OTLP_SPAN_FIELDS[0].number
+#define SPAN_F_SPAN_ID	    OTLP_SPAN_FIELDS[1].number
+#define SPAN_F_PARENT_SPAN_ID    OTLP_SPAN_FIELDS[3].number
+#define SPAN_F_NAME		    OTLP_SPAN_FIELDS[4].number
+#define SPAN_F_KIND		    OTLP_SPAN_FIELDS[5].number
+#define SPAN_F_START_TIME	    OTLP_SPAN_FIELDS[6].number
+#define SPAN_F_END_TIME	    OTLP_SPAN_FIELDS[7].number
+#define SPAN_F_ATTRIBUTES	    OTLP_SPAN_FIELDS[8].number
+#define SPAN_F_STATUS	    OTLP_SPAN_FIELDS[14].number
+#define STATUS_F_CODE	    OTLP_STATUS_FIELDS[0].number
+#define STATUS_F_MESSAGE	    OTLP_STATUS_FIELDS[1].number
+#define KV_F_KEY		    OTLP_KV_FIELDS[0].number
+#define KV_F_VALUE		    OTLP_KV_FIELDS[1].number
+#define AV_F_STRING		    OTLP_AV_FIELDS[0].number
+#define AV_F_BOOL		    OTLP_AV_FIELDS[1].number
+#define AV_F_INT64		    OTLP_AV_FIELDS[2].number
+#define AV_F_DOUBLE		    OTLP_AV_FIELDS[3].number
+#define AV_F_BYTES		    OTLP_AV_FIELDS[6].number
 
 /* ── AnyValue ───────────────────────────────────────────────────
  *
@@ -90,7 +68,7 @@ encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 		{
 			const char *s = a->v.string_val ? a->v.string_val : "";
 			st = otlp_pb_tag(
-				buf, AV_FIELD_STRING, OTLP_PB_WIRE_LEN);
+				buf, AV_F_STRING, OTLP_PB_WIRE_LEN);
 			if (st != OTLP_OK)
 				return st;
 			return otlp_pb_string(buf, s);
@@ -98,7 +76,7 @@ encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 		case OTLP_ATTR_BOOL:
 		{
 			st = otlp_pb_tag(
-				buf, AV_FIELD_BOOL, OTLP_PB_WIRE_VARINT);
+				buf, AV_F_BOOL, OTLP_PB_WIRE_VARINT);
 			if (st != OTLP_OK)
 				return st;
 			return otlp_pb_varint(buf, a->v.bool_val ? 1ULL : 0ULL);
@@ -106,7 +84,7 @@ encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 		case OTLP_ATTR_INT64:
 		{
 			st = otlp_pb_tag(
-				buf, AV_FIELD_INT64, OTLP_PB_WIRE_VARINT);
+				buf, AV_F_INT64, OTLP_PB_WIRE_VARINT);
 			if (st != OTLP_OK)
 				return st;
 			return otlp_pb_varint(buf, (uint64_t) a->v.int64_val);
@@ -117,7 +95,7 @@ encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 
 			memcpy(&bits, &a->v.double_val, sizeof(bits));
 			st = otlp_pb_tag(
-				buf, AV_FIELD_DOUBLE, OTLP_PB_WIRE_FIXED64);
+				buf, AV_F_DOUBLE, OTLP_PB_WIRE_FIXED64);
 			if (st != OTLP_OK)
 				return st;
 			return otlp_pb_fixed64(buf, bits);
@@ -126,7 +104,7 @@ encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 		{
 			const uint8_t *p = a->v.bytes_val.data;
 			size_t len = a->v.bytes_val.len;
-			st = otlp_pb_tag(buf, AV_FIELD_BYTES, OTLP_PB_WIRE_LEN);
+			st = otlp_pb_tag(buf, AV_F_BYTES, OTLP_PB_WIRE_LEN);
 			if (st != OTLP_OK)
 				return st;
 			return otlp_pb_bytes(
@@ -157,7 +135,7 @@ otlp_encode_key_value(struct otlp_pb_buf *out,
 		goto out;
 
 	/* key (always emit, may be empty). */
-	st = otlp_pb_tag(out, KV_FIELD_KEY, OTLP_PB_WIRE_LEN);
+	st = otlp_pb_tag(out, KV_F_KEY, OTLP_PB_WIRE_LEN);
 	if (st != OTLP_OK)
 		goto out;
 	st = otlp_pb_string(out, key ? key : "");
@@ -166,7 +144,7 @@ otlp_encode_key_value(struct otlp_pb_buf *out,
 
 	/* value (sub-message; even an empty AnyValue is emitted). */
 	st = otlp_pb_field_message(
-		out, KV_FIELD_VALUE, val_buf.data, val_buf.len);
+		out, KV_F_VALUE, val_buf.data, val_buf.len);
 
 out:
 	otlp_pb_buf_free(&val_buf);
@@ -194,7 +172,7 @@ emit_status(struct otlp_pb_buf *parent,
 
 	if (code != OTLP_STATUS_CODE_UNSET)
 	{
-		st = otlp_pb_tag(&sub, STATUS_FIELD_CODE, OTLP_PB_WIRE_VARINT);
+		st = otlp_pb_tag(&sub, STATUS_F_CODE, OTLP_PB_WIRE_VARINT);
 		if (st != OTLP_OK)
 			goto out;
 		st = otlp_pb_varint(&sub, (uint64_t) code);
@@ -203,7 +181,7 @@ emit_status(struct otlp_pb_buf *parent,
 	}
 	if (message && message[0])
 	{
-		st = otlp_pb_tag(&sub, STATUS_FIELD_MESSAGE, OTLP_PB_WIRE_LEN);
+		st = otlp_pb_tag(&sub, STATUS_F_MESSAGE, OTLP_PB_WIRE_LEN);
 		if (st != OTLP_OK)
 			goto out;
 		st = otlp_pb_string(&sub, message);
@@ -239,7 +217,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	span_id = otlp_span_get_span_id(span);
 
 	/* trace_id (field 1) — always emit (required by spec). */
-	st = otlp_pb_tag(out, SPAN_FIELD_TRACE_ID, OTLP_PB_WIRE_LEN);
+	st = otlp_pb_tag(out, SPAN_F_TRACE_ID, OTLP_PB_WIRE_LEN);
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_pb_bytes(out, trace_id, OTLP_TRACE_ID_LEN);
@@ -247,7 +225,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 		return st;
 
 	/* span_id (field 2) — always emit. */
-	st = otlp_pb_tag(out, SPAN_FIELD_SPAN_ID, OTLP_PB_WIRE_LEN);
+	st = otlp_pb_tag(out, SPAN_F_SPAN_ID, OTLP_PB_WIRE_LEN);
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_pb_bytes(out, span_id, OTLP_SPAN_ID_LEN);
@@ -258,7 +236,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	if (otlp_span_has_parent(span))
 	{
 		st = otlp_pb_tag(
-			out, SPAN_FIELD_PARENT_SPAN_ID, OTLP_PB_WIRE_LEN);
+			out, SPAN_F_PARENT_SPAN_ID, OTLP_PB_WIRE_LEN);
 		if (st != OTLP_OK)
 			return st;
 		st = otlp_pb_bytes(out,
@@ -272,7 +250,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	name = otlp_span_get_name(span);
 	if (name && name[0])
 	{
-		st = otlp_pb_field_string(out, SPAN_FIELD_NAME, name);
+		st = otlp_pb_field_string(out, SPAN_F_NAME, name);
 		if (st != OTLP_OK)
 			return st;
 	}
@@ -282,7 +260,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	if (kind != OTLP_SPAN_KIND_UNSPECIFIED)
 	{
 		st = otlp_pb_field_varint(
-			out, SPAN_FIELD_KIND, (uint64_t) kind);
+			out, SPAN_F_KIND, (uint64_t) kind);
 		if (st != OTLP_OK)
 			return st;
 	}
@@ -292,7 +270,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	{
 		uint64_t t = otlp_span_get_start_time(span);
 		st = otlp_pb_tag(
-			out, SPAN_FIELD_START_TIME, OTLP_PB_WIRE_FIXED64);
+			out, SPAN_F_START_TIME, OTLP_PB_WIRE_FIXED64);
 		if (st != OTLP_OK)
 			return st;
 		st = otlp_pb_fixed64(out, t);
@@ -305,7 +283,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	{
 		uint64_t t = otlp_span_get_end_time(span);
 		st = otlp_pb_tag(
-			out, SPAN_FIELD_END_TIME, OTLP_PB_WIRE_FIXED64);
+			out, SPAN_F_END_TIME, OTLP_PB_WIRE_FIXED64);
 		if (st != OTLP_OK)
 			return st;
 		st = otlp_pb_fixed64(out, t);
@@ -324,7 +302,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 		st = otlp_encode_key_value(&kv, attrs[i].key, &attrs[i]);
 		if (st == OTLP_OK)
 			st = otlp_pb_field_message(
-				out, SPAN_FIELD_ATTRIBUTES, kv.data, kv.len);
+				out, SPAN_F_ATTRIBUTES, kv.data, kv.len);
 		otlp_pb_buf_free(&kv);
 		if (st != OTLP_OK)
 			return st;
@@ -332,7 +310,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 
 	/* status (field 15) — omitted for UNSET. */
 	st = emit_status(out,
-		SPAN_FIELD_STATUS,
+		SPAN_F_STATUS,
 		otlp_span_get_status_code(span),
 		otlp_span_get_status_message(span));
 	return st;
@@ -368,7 +346,7 @@ emit_resource(struct otlp_pb_buf *parent,
 		st = otlp_encode_key_value(&kv, "service.name", &svc_attr);
 		if (st == OTLP_OK)
 			st = otlp_pb_field_message(
-				&sub, R_FIELD_ATTRIBUTES, kv.data, kv.len);
+				&sub, R_F_ATTRIBUTES, kv.data, kv.len);
 		otlp_pb_buf_free(&kv);
 		if (st != OTLP_OK)
 			goto out;
@@ -399,13 +377,13 @@ emit_instrumentation_scope(struct otlp_pb_buf *parent,
 
 	if (name && name[0])
 	{
-		st = otlp_pb_field_string(&sub, IS_FIELD_NAME, name);
+		st = otlp_pb_field_string(&sub, IS_F_NAME, name);
 		if (st != OTLP_OK)
 			goto out;
 	}
 	if (version && version[0])
 	{
-		st = otlp_pb_field_string(&sub, IS_FIELD_VERSION, version);
+		st = otlp_pb_field_string(&sub, IS_F_VERSION, version);
 		if (st != OTLP_OK)
 			goto out;
 	}
@@ -434,7 +412,7 @@ emit_scope_spans(struct otlp_pb_buf *parent,
 		return st;
 
 	st = emit_instrumentation_scope(
-		&sub, SS_FIELD_SCOPE, scope_name, scope_version);
+		&sub, SS_F_SCOPE, scope_name, scope_version);
 	if (st != OTLP_OK)
 		goto out;
 
@@ -447,7 +425,7 @@ emit_scope_spans(struct otlp_pb_buf *parent,
 		st = otlp_encode_span_body(&sp, spans[i]);
 		if (st == OTLP_OK)
 			st = otlp_pb_field_message(
-				&sub, SS_FIELD_SPANS, sp.data, sp.len);
+				&sub, SS_F_SPANS, sp.data, sp.len);
 		otlp_pb_buf_free(&sp);
 		if (st != OTLP_OK)
 			goto out;
@@ -478,12 +456,12 @@ emit_resource_spans(struct otlp_pb_buf *parent,
 	if (st != OTLP_OK)
 		return st;
 
-	st = emit_resource(&sub, RS_FIELD_RESOURCE, service_name);
+	st = emit_resource(&sub, RS_F_RESOURCE, service_name);
 	if (st != OTLP_OK)
 		goto out;
 
 	st = emit_scope_spans(&sub,
-		RS_FIELD_SCOPE_SPANS,
+		RS_F_SCOPE_SPANS,
 		scope_name,
 		scope_version,
 		spans,
@@ -518,7 +496,7 @@ otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 		return OTLP_OK;
 
 	return emit_resource_spans(out,
-		ETSR_FIELD_RESOURCE_SPANS,
+		ETSR_F_RESOURCE_SPANS,
 		service_name,
 		scope_name,
 		scope_version,

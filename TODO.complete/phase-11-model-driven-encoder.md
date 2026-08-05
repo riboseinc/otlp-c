@@ -1,8 +1,8 @@
 # TODO 11 — Model-driven encoder: field tables
 
-**Status:** Complete (schema table header added; encoder migration incremental)
+**Status:** Complete — encoder now references `otlp_schema.h` constants; local `#define`s removed.
 **Priority:** P1
-**Branch:** `v0.2-quality-pass`
+**Branch:** `v0.3-model-driven-encoder`
 
 ## Goal
 
