@@ -57,19 +57,7 @@ jobs:
           fi
           echo "clang-format: clean"
 
-  codeql:
-    name: CodeQL
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: c-cpp
-      - uses: lukka/get-cmake@latest
-      - name: Build
-        run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-      - uses: github/codeql-action/analyze@v3
+# CodeQL is provided by the repo's default setup (Settings →
+# Code security). Running an advanced CodeQL workflow here would
+# conflict ("CodeQL analyses from advanced configurations cannot
+# be processed when the default setup is enabled").
