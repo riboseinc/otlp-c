@@ -1,0 +1,87 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+    "name": "otlp-c",
+    "description": "Pure-C OTLP/HTTP client with zero non-libc dependencies",
+    "configureOnPress": false,
+    "generator": "Ninja",
+    "cacheVariables": {
+        "CMAKE_C_STANDARD": "11",
+        "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+        "OTLP_C_BUILD_EXAMPLES": { "type": "BOOL", "value": true }
+    },
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default",
+            "targets": [ "otlp_c" ]
+        },
+        {
+            "name": "all",
+            "configurePreset": "all",
+            "targets": [ "all" ]
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default",
+            "output": { "outputOnFailure": true }
+        }
+    ],
+    "configurePresets": [
+        {
+            "name": "default",
+            "cacheVariables": {
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+                "OTLP_C_BUILD_EXAMPLES": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "asan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+                "OTLP_C_ENABLE_ASAN": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "tsan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+                "OTLP_C_ENABLE_TSAN": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "ubsan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+                "OTLP_C_ENABLE_UBSAN": { "type": "BOOL", "value": true }
+            }
+        },
+        {
+            "name": "all",
+            "inherits": "default",
+            "cacheVariables": {
+                "OTLP_C_BUILD_TESTS": { "type": "BOOL", "value": true },
+                "OTLP_C_BUILD_EXAMPLES": { "type": "BOOL", "value": true }
+            }
+        }
+    ]
+}

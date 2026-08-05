@@ -253,6 +253,28 @@ otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
+{
+	otlp_status_t st;
+
+	if (!e || !span)
+		return OTLP_ERR_NULL;
+	if (atomic_load_explicit(&e->shutdown_requested, memory_order_acquire))
+		return OTLP_ERR_SHUTDOWN;
+
+	st = mpsc_queue_push(&e->queue, span);
+	if (st != OTLP_OK)
+	{
+		otlp_span_free(span);
+		atomic_fetch_add_explicit(
+			&e->dropped_full, 1, memory_order_relaxed);
+		return st;
+	}
+	atomic_fetch_add_explicit(&e->emitted, 1, memory_order_relaxed);
+	return OTLP_OK;
+}
+
 /* ── tick (single thread) ─────────────────────────────────────── */
 
 static otlp_status_t

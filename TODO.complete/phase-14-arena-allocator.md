@@ -1,8 +1,8 @@
 # TODO 14 — Performance: arena allocator for encoder
 
-**Status:** Pending
+**Status:** Partial — `struct otlp_arena` primitive added; encoder migration is incremental (TODO 14 follow-up).
 **Priority:** P2
-**Branch:** future (v0.3+)
+**Branch:** `v0.2-final-pass`
 
 ## Goal
 

@@ -1,8 +1,8 @@
 # TODO 15 — Doxygen API reference + cookbook
 
-**Status:** Pending
+**Status:** Partial — cookbook added (`docs/cookbook.md` with 8 patterns); Doxygen part still TODO.
 **Priority:** P1
-**Branch:** future (v0.2.x)
+**Branch:** `v0.2-final-pass`
 
 ## Goal
 
