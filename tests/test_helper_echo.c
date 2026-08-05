@@ -6,6 +6,7 @@
 /* _DEFAULT_SOURCE for CLOCK_MONOTONIC + INADDR_LOOPBACK under glibc
  * with -std=c11. */
 #define _DEFAULT_SOURCE
+#define _POSIX_C_SOURCE 200809L
 
 #include "test_helper_echo.h"
 
