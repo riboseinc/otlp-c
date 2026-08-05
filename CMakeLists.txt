@@ -109,7 +109,7 @@ if(BUILD_SHARED_LIBS)
     target_compile_definitions(otlp_c PUBLIC OTLP_C_SHARED_LIB=1)
 endif()
 
-target_link_libraries(otlp_c PRIVATE Threads::Threads)
+target_link_libraries(otlp_c PUBLIC Threads::Threads)
 
 # Tests
 if(OTLP_C_BUILD_TESTS)
