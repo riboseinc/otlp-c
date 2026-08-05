@@ -34,7 +34,7 @@ struct otlp_socket
 static otlp_status_t
 ensure_wsa(void)
 {
-	static LONG volatile inited = 0;
+	static LONG volatile inited;
 	WSADATA wsa;
 	LONG prev;
 
