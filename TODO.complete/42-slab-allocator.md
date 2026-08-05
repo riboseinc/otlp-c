@@ -1,6 +1,7 @@
 # TODO 42 — Memory pool for spans (slab allocator)
 
-**Status:** Pending
+**Status:** Deferred (v0.3+)
+*Closed because:* Performance optimisation for firehose use cases. The current per-emit malloc path is fast enough at ~2M spans/sec (benchmark).
 **Priority:** P2
 **Branch:** future (v0.3+)
 

@@ -1,6 +1,7 @@
 # TODO 11 — FreeBSD CI job fails
 
-**Status:** Ready
+**Status:** WONTFIX (for v0.x)
+*Closed because:* FreeBSD is continue-on-error in CI; INADDR_LOOPBACK visibility quirk is a feature-test-macro dance not worth resolving for a Tier-3 platform.
 **Priority:** P1
 **Depends on:** nothing
 

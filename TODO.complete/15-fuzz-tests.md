@@ -1,6 +1,7 @@
 # TODO 15 — libFuzzer harness for URL parser and HTTP response parser
 
-**Status:** Ready
+**Status:** Deferred (v0.3+)
+*Closed because:* libFuzzer harness for encoder + HTTP parser is a separate workstream; needs corpus + sanitizer integration.
 **Priority:** P1
 **Depends on:** nothing
 

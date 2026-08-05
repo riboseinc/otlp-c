@@ -1,6 +1,7 @@
 # TODO 43 — Architecture: model-driven attribute dispatch
 
-**Status:** Pending
+**Status:** Deferred (v0.3+)
+*Closed because:* Architectural refactor of struct otlp_attribute. Phase 11 (encoder uses schema constants) landed; the attribute descriptor table is the natural next step.
 **Priority:** P1
 **Branch:** future (v0.3+)
 

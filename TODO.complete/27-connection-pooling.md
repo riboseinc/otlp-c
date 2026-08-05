@@ -1,6 +1,7 @@
 # TODO 27 — HTTP/1.1 keep-alive and connection reuse
 
-**Status:** Ready
+**Status:** Deferred (v1.0+)
+*Closed because:* Connection pooling adds lifecycle complexity that contradicts the v0.x simplicity goal. The sidecar handles pooling.
 **Priority:** P1
 **Depends on:** nothing
 

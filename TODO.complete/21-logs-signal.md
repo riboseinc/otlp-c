@@ -1,6 +1,7 @@
 # TODO 21 — Add OTLP logs signal (POST /v1/logs)
 
-**Status:** Ready
+**Status:** Deferred (post-1.0)
+*Closed because:* OTLP logs signal is a separate major workstream. v0.x is traces-only.
 **Priority:** P1
 **Depends on:** nothing
 

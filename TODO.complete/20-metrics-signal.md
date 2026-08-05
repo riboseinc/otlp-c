@@ -1,6 +1,7 @@
 # TODO 20 — Add OTLP metrics signal (POST /v1/metrics)
 
-**Status:** Ready
+**Status:** Deferred (post-1.0)
+*Closed because:* OTLP metrics signal is a separate major workstream. v0.x is traces-only.
 **Priority:** P1
 **Depends on:** nothing
 

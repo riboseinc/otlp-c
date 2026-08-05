@@ -1,6 +1,7 @@
 # TODO 31 — vcpkg, Homebrew, Conan, Nix
 
-**Status:** Ready
+**Status:** Out of scope (this repo)
+*Closed because:* Downstream packagers (Debian, Fedora, Homebrew, vcpkg) own their packaging recipes. vcpkg port is tracked separately (phase-21).
 **Priority:** P1
 **Depends on:** nothing
 

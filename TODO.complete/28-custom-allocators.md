@@ -1,6 +1,7 @@
 # TODO 28 — Allow caller to supply malloc/free
 
-**Status:** Ready
+**Status:** Deferred (v1.0+)
+*Closed because:* Custom allocator hook is a v1.0 API stability commitment. Defer until API freezes.
 **Priority:** P1
 **Depends on:** nothing
 

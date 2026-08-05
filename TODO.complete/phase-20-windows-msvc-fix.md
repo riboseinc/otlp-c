@@ -1,6 +1,7 @@
 # TODO 20 — Windows MSVC real fix for stdatomic.h
 
-**Status:** Pending (workaround in place)
+**Status:** Deferred (MSVC team)
+*Closed because:* _HAS_C11_ATOMICS=1 + /std:c11 workaround in place; Windows CI is continue-on-error. Real fix needs MSVC team engagement on stdatomic.h in VS preview toolchains.
 **Priority:** P1
 **Branch:** future (v0.2.x)
 

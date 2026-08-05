@@ -1,6 +1,7 @@
 # TODO 14 — Performance: arena allocator for encoder
 
-**Status:** Partial — `struct otlp_arena` primitive added; encoder migration is incremental (TODO 14 follow-up).
+**Status:** Deferred (v0.3+) — primitive landed; encoder migration is a design exercise
+*Closed because:* `struct otlp_arena` with bump allocator + 256-byte inline SBO landed in v0.2 final pass. Wiring it into `otlp_messages.c` requires either (a) refactoring every `otlp_pb_buf` to accept an arena, or (b) replacing `otlp_pb_buf` entirely with arena-backed buffers. Either is a substantial v0.3 refactor.
 **Priority:** P2
 **Branch:** `v0.2-final-pass`
 

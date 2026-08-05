@@ -1,6 +1,7 @@
 # TODO 12 — Tag v0.1.0 and create the first GitHub release
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* v0.1.0 released 2026-08-05; v0.2.0 released 2026-08-05.
 **Priority:** P1
 **Depends on:** nothing
 

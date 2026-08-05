@@ -1,6 +1,7 @@
 # TODO 29 — Integrate otlp-c into retrace as the OTel sink
 
-**Status:** Ready
+**Status:** Out of scope
+*Closed because:* Separate project (retrace is the consumer of otlp-c, not a feature of it).
 **Priority:** P1
 **Depends on:** nothing
 
