@@ -293,10 +293,11 @@ try_start_post(struct otlp_exporter *e)
 	if (st != OTLP_OK)
 		return st;
 	e->in_flight_count = e->pending_count;
-	/* Pending ownership transferred to the request body (encoded).
-	 * Free our references; the encoded bytes carry the data. */
-	free_pending_batch(e->pending, e->pending_count);
-	e->pending_count = 0;
+	/* IMPORTANT: do NOT free the pending batch here. It must stay
+	 * alive until the in-flight request completes successfully or
+	 * is permanently dropped, so retry can re-encode it. The batch
+	 * is freed in record_outcome on success / permanent-failure
+	 * paths. */
 	e->first_pending_set = false;
 	return OTLP_OK;
 }
@@ -306,9 +307,31 @@ record_outcome(struct otlp_exporter *e, int http_status)
 {
 	if (http_status == 0)
 	{
-		/* Network-level failure (no HTTP response received). */
+		/* Network-level failure (no HTTP response received).
+		 * Treat as transient — same retry path as 5xx. */
 		atomic_fetch_add_explicit(
 			&e->network_err, 1, memory_order_relaxed);
+		e->attempt++;
+		if (e->attempt > e->max_retries)
+		{
+			atomic_fetch_add_explicit(&e->dropped_err,
+				e->in_flight_count,
+				memory_order_relaxed);
+			free_pending_batch(e->pending, e->pending_count);
+			e->pending_count = 0;
+			e->attempt = 0;
+			e->backoff_armed = false;
+			return;
+		}
+		{
+			uint32_t delay = e->backoff_initial_ms
+				<< (e->attempt - 1);
+			if (delay > e->backoff_max_ms ||
+				delay < e->backoff_initial_ms)
+				delay = e->backoff_max_ms;
+			e->backoff_deadline_mono = now_mono_ms() + delay;
+			e->backoff_armed = true;
+		}
 		return;
 	}
 	if (http_status >= 200 && http_status < 300)
@@ -317,6 +340,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			&e->http_2xx, 1, memory_order_relaxed);
 		atomic_fetch_add_explicit(
 			&e->sent, e->in_flight_count, memory_order_relaxed);
+		/* Success — free the pending batch (kept across retries). */
+		free_pending_batch(e->pending, e->pending_count);
+		e->pending_count = 0;
 		e->attempt = 0;
 		e->backoff_armed = false;
 		return;
@@ -331,6 +357,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			atomic_fetch_add_explicit(&e->dropped_err,
 				e->in_flight_count,
 				memory_order_relaxed);
+			/* Permanent failure — free the pending batch. */
+			free_pending_batch(e->pending, e->pending_count);
+			e->pending_count = 0;
 			e->attempt = 0;
 			e->backoff_armed = false;
 		}
@@ -350,6 +379,11 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	atomic_fetch_add_explicit(&e->http_4xx, 1, memory_order_relaxed);
 	atomic_fetch_add_explicit(
 		&e->dropped_err, e->in_flight_count, memory_order_relaxed);
+	/* Permanent failure — free the pending batch. */
+	free_pending_batch(e->pending, e->pending_count);
+	e->pending_count = 0;
+	e->attempt = 0;
+	e->backoff_armed = false;
 }
 
 otlp_status_t
@@ -393,7 +427,6 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					e->pending_count > 0)))
 		{
 			otlp_status_t st = try_start_post(e);
-
 			if (st == OTLP_OK)
 				work_done = true;
 		}
@@ -421,18 +454,25 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			(void) st;
 		}
 
-		/* 4. Backoff timer. */
+		/* 4. Backoff timer. The pending batch is retained
+		 * across retries (freed in record_outcome on success
+		 * or permanent failure); re-encode + retry now. */
 		if (e->backoff_armed && !e->in_flight &&
 			now_mono_ms() >= e->backoff_deadline_mono)
 		{
-			/* Re-encode and retry. We've freed the pending
-			 * batch already (encoded into the request body
-			 * that failed). For v0.1.0, the retry uses the
-			 * last batch we tried — but we've lost it. So
-			 * just clear backoff; the next emit will start
-			 * a new batch. */
 			e->backoff_armed = false;
-			/* TODO: cache the last encoded body for retries. */
+			if (try_start_post(e) == OTLP_OK && e->in_flight)
+				work_done = true;
+		}
+
+		/* 5. If nothing else to do but we're waiting on backoff,
+		 * sleep briefly so the tick actually advances time toward
+		 * the deadline instead of returning immediately. */
+		if (!work_done && e->backoff_armed && !e->in_flight)
+		{
+			struct timespec ts = { 0, 1 * 1000 * 1000 /* 1ms */ };
+			nanosleep(&ts, NULL);
+			work_done = true;  /* keep the loop alive */
 		}
 
 		if (!work_done)
