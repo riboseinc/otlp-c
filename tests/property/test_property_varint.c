@@ -13,35 +13,11 @@
  */
 #include "prng.h"
 #include "property_harness.h"
+#include "decoder.h"
 
 #include "../src/protobuf_encode.h"
 
 #include <stdint.h>
-
-/* ── Hand-rolled decoder ──────────────────────────────────────── */
-
-static otlp_status_t
-decode_varint(const uint8_t *data, size_t len, size_t *pos, uint64_t *out)
-{
-	uint64_t v = 0;
-	int shift = 0;
-
-	while (*pos < len)
-	{
-		uint8_t b = data[(*pos)++];
-
-		v |= (uint64_t) (b & 0x7F) << shift;
-		if ((b & 0x80) == 0)
-		{
-			*out = v;
-			return OTLP_OK;
-		}
-		shift += 7;
-		if (shift > 63)
-			return OTLP_ERR_PROTOCOL; /* malformed */
-	}
-	return OTLP_ERR_PROTOCOL; /* ran off end without terminator */
-}
 
 /* ── Properties ───────────────────────────────────────────────── */
 

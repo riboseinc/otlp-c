@@ -1,21 +1,22 @@
-# TODO 26 — Add OTLP/gRPC transport option
+# TODO 26 — OTLP/gRPC transport option — REJECTED
 
-**Status:** Ready
-**Priority:** P1
-**Depends on:** nothing
+**Status:** WONTFIX (v1.x)
+**Priority:** —
+**Reason:** requires HTTP/2 (which itself requires TLS) — both
+violate ADR 0001.
 
-## Goal
+## Why rejected
 
-Lower latency than HTTP/1.1 for high-volume deployments. Needs HTTP/2 client (hand-rolled or minimal vendored). Option in exporter: OTLP_TRANSPORT_GRPC.
+gRPC requires HTTP/2. HTTP/2 in production requires TLS (h2c is
+rarely supported by collectors). TLS is rejected in TODO 25. So
+gRPC transitively violates the same invariants.
 
-## Tasks
+A sidecar collector (otelcol) accepts OTLP/HTTP on :4318 and can
+forward to OTLP/gRPC on :4317 internally — that's the standard
+deployment topology. The library's job is plain HTTP to localhost.
 
-### P0
-- [ ] Implement
+## When this could be revisited
 
-### P1
-- [ ] Test
-
-## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+Same as TODO 25: a future `otlp-c-grpc` package could exist
+alongside the zero-deps core, but only if HTTP/2 + TLS deps are
+acceptable. Out of scope for the 0.x release line.

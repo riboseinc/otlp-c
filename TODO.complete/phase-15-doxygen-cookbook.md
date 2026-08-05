@@ -1,8 +1,8 @@
 # TODO 15 — Doxygen API reference + cookbook
 
-**Status:** Partial — cookbook added (`docs/cookbook.md` with 8 patterns); Doxygen part still TODO.
+**Status:** Complete (cookbook in earlier pass; Doxyfile + cmake `docs` target added here)
 **Priority:** P1
-**Branch:** `v0.2-final-pass`
+**Branch:** `v0.2-convergence-pass`
 
 ## Goal
 

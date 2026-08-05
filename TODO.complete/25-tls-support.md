@@ -1,21 +1,27 @@
-# TODO 25 — OS-native TLS for HTTPS endpoints
+# TODO 25 — OS-native TLS for HTTPS endpoints — REJECTED
 
-**Status:** Ready
-**Priority:** P1
-**Depends on:** nothing
+**Status:** WONTFIX (v1.x)
+**Priority:** —
+**Reason:** violates ADR 0001 (zero non-libc deps).
 
-## Goal
+## Why rejected
 
-macOS Secure Transport, Windows Schannel, optional OpenSSL on Linux. New option in otlp_exporter_opts_t: use_tls, ca_cert_path.
+TLS libraries (OpenSSL, mbedTLS, GnuTLS, BoringSSL) are all
+third-party and ~100 KLOC+ each. OS-native TLS APIs
+(Security.framework on macOS, SChannel on Windows) are not part of
+libc and vary by platform. Adding any of these violates the load-
+bearing embedding constraint that defines the project.
 
-## Tasks
+Direct-to-cloud HTTPS is the otelcol sidecar's job — see ADR 0004
+(`docs/adr/0004-otlpcol-sidecar-tls.md`) and
+`docs/deployment.md`. The library talks plain HTTP to localhost;
+the sidecar terminates TLS to the real backend.
 
-### P0
-- [ ] Implement
+## When this could be revisited
 
-### P1
-- [ ] Test
+If a future major version (1.0+) ships a separate `otlp-c-tls`
+package alongside the zero-deps core, that package could bundle
+mbedTLS as an optional dependency. The core library stays zero-deps.
 
-## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+That decision is out of scope for the 0.x release line. Close this
+TODO until v1.0 planning.

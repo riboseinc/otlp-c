@@ -34,6 +34,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 # Options
 option(OTLP_C_BUILD_TESTS "Build unit + property + integration tests" OFF)
 option(OTLP_C_BUILD_EXAMPLES "Build example programs" OFF)
+option(OTLP_C_BUILD_BENCH "Build microbenchmarks" OFF)
 option(OTLP_C_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(OTLP_C_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(OTLP_C_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -141,6 +142,11 @@ if(OTLP_C_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+# Benchmarks (opt-in)
+if(OTLP_C_BUILD_BENCH)
+    add_subdirectory(bench)
+endif()
+
 # Install
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -181,6 +187,59 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/otlp-c-config-version.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/otlp-c
 )
+
+# ── Doxygen API reference ───────────────────────────────────────
+# `cmake --build build --target docs` produces HTML in build/docs/html/.
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating Doxygen API reference"
+        VERBATIM)
+endif()
+
+# ── CPack (binary distribution) ─────────────────────────────────
+set(CPACK_PACKAGE_NAME              "otlp-c")
+set(CPACK_PACKAGE_VERSION           "${OTLP_C_VERSION_STRING}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Pure-C99 OTLP/HTTP client with zero non-libc dependencies")
+set(CPACK_PACKAGE_VENDOR            "Ribose, Inc.")
+set(CPACK_PACKAGE_CONTACT           "open.source@ribose.com")
+set(CPACK_RESOURCE_FILE_LICENSE     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README      "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGE_HOMEPAGE_URL      "https://github.com/riboseinc/otlp-c")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "otlp-c")
+
+# Per-platform archive formats.
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+elseif(APPLE)
+    set(CPACK_GENERATOR "TGZ;ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ;TXZ")
+endif()
+
+# Source tarball (always .tar.gz for portability).
+set(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_SOURCE_IGNORE_FILES
+    "/\\\\.git/;"/build/;"/build-.*/;\\\\.swp$;~$")
+
+include(CPack)
+
+# ── Code coverage instrumentation ───────────────────────────────
+# `cmake -DOTLP_C_ENABLE_COVERAGE=ON` adds gcov / llvm-cov flags.
+# Use with `ctest --test-dir build` then `gcovr` or `llvm-cov report`.
+option(OTLP_C_ENABLE_COVERAGE "Instrument for code coverage (gcov/llvm-cov)" OFF)
+if(OTLP_C_ENABLE_COVERAGE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        add_compile_options(-fprofile-instr-generate -fcoverage-mapping -O0 -g)
+        add_link_options(-fprofile-instr-generate)
+        message(STATUS "Coverage instrumentation enabled (clang Profile)")
+    else()
+        message(WARNING "OTLP_C_ENABLE_COVERAGE: unsupported compiler; ignoring")
+    endif()
+endif()
 
 # Status
 message(STATUS "otlp-c ${OTLP_C_VERSION_STRING}")

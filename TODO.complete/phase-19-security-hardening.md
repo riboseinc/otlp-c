@@ -1,8 +1,8 @@
 # TODO 19 — Security hardening review
 
-**Status:** Pending
+**Status:** Complete (v0.1.x internal audit; external review still scheduled for v1.0)
 **Priority:** P0 (for v1.0)
-**Branch:** future (v0.2.x)
+**Branch:** `v0.2-convergence-pass`
 
 ## Goal
 
