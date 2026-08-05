@@ -10,8 +10,10 @@ project(otlp-c
 set(OTLP_C_VERSION ${PROJECT_VERSION})
 set(OTLP_C_VERSION_STRING "${PROJECT_VERSION}")
 
-# Standards
-set(CMAKE_C_STANDARD 99)
+# Standards. C11 (not C99) because we use <stdatomic.h> for
+# lock-free MPSC queues and PRNG state. CLAUDE.md allows C11 for
+# atomics; we write C99-style code everywhere else.
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
@@ -64,9 +66,19 @@ add_library(otlp_c
     src/exporter.c
     src/exporter_otel.c
     src/http_client.c
+    src/otlp_messages.c
     src/protobuf_encode.c
+    src/mpsc_queue.c
     src/platform.c
 )
+
+# Platform-specific socket layer. POSIX vs Win32.
+if(WIN32)
+    target_sources(otlp_c PRIVATE src/platform_win.c)
+    target_link_libraries(otlp_c PRIVATE Ws2_32)
+else()
+    target_sources(otlp_c PRIVATE src/platform_unix.c)
+endif()
 
 add_library(otlp-c::otlp_c ALIAS otlp_c)
 

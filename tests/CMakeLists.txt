@@ -13,8 +13,24 @@ add_test(NAME smoke
 	COMMAND otlp_test_smoke)
 set_tests_properties(smoke PROPERTIES LABELS "smoke;unit")
 
+# Phase 3: HTTP echo test (in-process TCP echo server).
+add_executable(otlp_test_http_echo test_http_echo.c test_helper_echo.c)
+target_link_libraries(otlp_test_http_echo PRIVATE otlp_c Threads::Threads)
+add_test(NAME http-echo
+	COMMAND otlp_test_http_echo)
+set_tests_properties(http-echo PROPERTIES LABELS "unit" TIMEOUT 30)
+
+# Phase 5: end-to-end exporter test.
+add_executable(otlp_test_exporter_echo
+    test_exporter_echo.c test_helper_echo.c)
+target_link_libraries(otlp_test_exporter_echo PRIVATE otlp_c Threads::Threads)
+add_test(NAME exporter-echo
+	COMMAND otlp_test_exporter_echo)
+set_tests_properties(exporter-echo PROPERTIES LABELS "unit" TIMEOUT 60)
+
 # Property tests — see property/ for the harness.
 add_subdirectory(property)
 
-# Integration tests — require docker for otelcol.
-# add_subdirectory(integration)
+# Integration tests — require docker for otelcol + Jaeger.
+# Gated by OTLP_C_RUN_INTEGRATION=1 at runtime.
+add_subdirectory(integration)

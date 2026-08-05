@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Integration test topology: otelcol + Jaeger all-in-one.
+# Mirrors the recommended production deployment (sidecar TLS
+# termination). otelcol receives OTLP/HTTP on :4318 and exports
+# to Jaeger on :14250 (gRPC) / exposes Jaeger UI on :16686.
+#
+# Usage:
+#   docker compose up -d
+#   OTLP_C_RUN_INTEGRATION=1 ctest --test-dir build -L integration
+#   docker compose down
+
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otlp-c-otelcol
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otelcol-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"   # OTLP/HTTP
+      - "4317:4317"   # OTLP/gRPC (unused by otlp-c, kept for tooling)
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: otlp-c-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI + HTTP query API
+      - "14250:14250"  # gRPC from otelcol
