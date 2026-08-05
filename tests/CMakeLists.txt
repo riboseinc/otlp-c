@@ -32,6 +32,8 @@ if(UNIX)
     set_tests_properties(exporter-echo PROPERTIES LABELS "unit" TIMEOUT 60)
 endif()
 
+add_subdirectory(unit)
+
 # Property tests — see property/ for the harness.
 add_subdirectory(property)
 
