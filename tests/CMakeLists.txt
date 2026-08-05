@@ -30,6 +30,15 @@ if(UNIX)
     add_test(NAME exporter-echo
         COMMAND otlp_test_exporter_echo)
     set_tests_properties(exporter-echo PROPERTIES LABELS "unit" TIMEOUT 60)
+
+    # Concurrency stress test: 8 threads x 200 spans into one exporter.
+    # Catches data races in the MPSC queue + tracer PRNG under ASAN.
+    add_executable(otlp_test_concurrency_stress
+        test_concurrency_stress.c test_helper_echo.c)
+    target_link_libraries(otlp_test_concurrency_stress PRIVATE otlp_c Threads::Threads)
+    add_test(NAME concurrency-stress
+        COMMAND otlp_test_concurrency_stress)
+    set_tests_properties(concurrency-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
 endif()
 
 add_subdirectory(unit)

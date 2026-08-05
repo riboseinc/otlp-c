@@ -1,0 +1,21 @@
+# TODO 24 — Head-based and tail-based sampling
+
+**Status:** Ready
+**Priority:** P1
+**Depends on:** nothing
+
+## Goal
+
+Head: decide at span creation whether to record. Tail: decide at span end based on attributes/duration. Configurable via otlp_sampler_t interface.
+
+## Tasks
+
+### P0
+- [ ] Implement
+
+### P1
+- [ ] Test
+
+## Acceptance criteria
+- [ ] CI green on all platforms
+- [ ] No regression in existing tests
