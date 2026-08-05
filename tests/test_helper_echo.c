@@ -4,9 +4,10 @@
  * code; the library is portable, the test helper is not).
  */
 /* _DEFAULT_SOURCE for CLOCK_MONOTONIC + INADDR_LOOPBACK under glibc
- * with -std=c11. */
+ * with -std=c11. _DEFAULT_SOURCE implies _POSIX_C_SOURCE on glibc;
+ * declaring _POSIX_C_SOURCE explicitly here hides INADDR_LOOPBACK
+ * on macOS, so we keep just _DEFAULT_SOURCE. */
 #define _DEFAULT_SOURCE
-#define _POSIX_C_SOURCE 200809L
 
 #include "test_helper_echo.h"
 
