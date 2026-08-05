@@ -15,9 +15,14 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**Pre-alpha.** The repository is bootstrapped with the public API, build system, and protocol reference in place; the encoder is being implemented. See [docs/roadmap.md](docs/roadmap.md) for phase-by-phase status.
+**0.1.0 (alpha).** Phases 1-7 complete: protobuf encoder, OTLP
+message encoders, HTTP/1.1 non-blocking client, span/tracer,
+caller-tick exporter with lock-free MPSC, integration test against
+otelcol + Jaeger. See [CHANGELOG.md](CHANGELOG.md) and
+[TODO.complete/](TODO.complete/) for phase-by-phase status.
 
-Do not use in production yet. The API surface is unstable until 1.0.0.
+The API surface is unstable until 1.0.0. Within the 0.x line, minor
+versions may break the API (documented in CHANGELOG).
 
 ## Why
 
@@ -70,31 +75,47 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cma
 
 ## Quick start
 
+`otlp-c` is **caller-tick**: the library never spawns threads, so it
+embeds cleanly into event loops (libuv, epoll, IOCP), game loops,
+language VMs, and libc-preloaded tracers. The caller drives I/O by
+calling `otlp_exporter_tick()` from a thread it controls.
+
 ```c
 #include <otlp-c/otlp.h>
 
 int main(void) {
+    /* Defaults: endpoint=http://localhost:4318/v1/traces,
+     * batch_size=512, batch_ms=100, retries=5. */
     otlp_exporter_opts_t opts = {
-        .endpoint = "http://localhost:4318/v1/traces",
         .service_name = "my-service",
     };
-
-    otlp_exporter_t *exp = otlp_exporter_create(&opts);
-    otlp_tracer_t *tracer = otlp_tracer_create("my-service");
+    otlp_exporter_t *exp    = otlp_exporter_create(&opts);
+    otlp_tracer_t   *tracer = otlp_tracer_create(
+        "my-service", "my-app", "1.0.0");
 
     otlp_span_t *span = otlp_tracer_start_span(tracer, "do-work");
     otlp_span_set_attribute_string(span, "user.id", "alice");
-    otlp_span_end(span);
+    otlp_span_mark_end(span);
 
-    otlp_exporter_emit(exp, span);
-    otlp_exporter_flush(exp);  /* synchronous */
-
+    otlp_exporter_emit(exp, span);     /* any thread, lock-free */
     otlp_span_free(span);
+
+    /* Drive the exporter until drained. flush() loops tick()
+     * internally; for hot paths, call tick() from your event loop
+     * or periodic timer instead. */
+    otlp_exporter_flush(exp);
+
     otlp_tracer_free(tracer);
     otlp_exporter_free(exp);
     return 0;
 }
 ```
+
+**HTTPS:** the library talks plain HTTP to localhost; an
+[otelcol](https://github.com/open-telemetry/opentelemetry-collector)
+sidecar terminates TLS to the real backend. This is the standard
+production deployment and the only model compatible with the
+zero-deps invariant. See [docs/deployment.md](docs/deployment.md).
 
 See [examples/minimal.c](examples/minimal.c) for a working example.
 

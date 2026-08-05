@@ -13,7 +13,8 @@
 #ifndef OTLP_C_STATUS_H
 #define OTLP_C_STATUS_H
 
-typedef enum {
+typedef enum
+{
 	OTLP_OK = 0,
 
 	/* Caller errors (not recoverable). */
@@ -41,12 +42,15 @@ typedef enum {
 	/* Library errors (recoverable; usually retry). */
 	OTLP_ERR_BUFFER_FULL = -30,
 	OTLP_ERR_SHUTDOWN = -31,
+	OTLP_ERR_WOULDBLOCK = -32, /* non-blocking op would block; caller should
+				      poll and retry */
 
 	/* Placeholder for unimplemented code (Phase 0). */
 	OTLP_ERR_NOT_IMPLEMENTED = -100
 } otlp_status_t;
 
 /* Human-readable name for a status code. Useful for logs. */
-const char *otlp_strerror(otlp_status_t status);
+const char *
+otlp_strerror(otlp_status_t status);
 
 #endif

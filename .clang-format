@@ -1,7 +1,6 @@
 ---
 BasedOnStyle: Mozilla
 Language: Cpp
-Standard: cCpp03
 
 # Indentation
 IndentWidth: 8
