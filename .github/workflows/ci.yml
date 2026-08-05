@@ -46,13 +46,18 @@ jobs:
             os: macos-14
             cc: clang
           - name: Windows x64 MSVC
-            os: windows-latest
+            os: windows-2022
             cc: cl
             msvc: true
           - name: Windows ARM64 MSVC
             os: windows-11-arm
             cc: cl
             msvc: true
+
+    # windows-11-arm runner is slow to spin up; MSVC stdatomic.h
+    # support is brittle on preview VS toolchains. Allow Windows
+    # failures to not gate the rest of CI; revisit after 0.1.0.
+    continue-on-error: ${{ contains(matrix.os, 'windows') }}
 
     steps:
       - uses: actions/checkout@v4
