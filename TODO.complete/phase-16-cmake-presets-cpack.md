@@ -1,8 +1,8 @@
 # TODO 16 — Build polish: CMake presets + CPack
 
-**Status:** Pending
+**Status:** Partial — `CMakePresets.json` added (7 presets); CPack part still TODO.
 **Priority:** P2
-**Branch:** future (v0.2.x)
+**Branch:** `v0.2-final-pass`
 
 ## Goal
 

@@ -113,6 +113,22 @@ extern "C"
 	otlp_status_t otlp_exporter_emit(otlp_exporter_t *exp,
 		const otlp_span_t *span);
 
+	/* Take ownership of `span` and enqueue it. The exporter frees
+	 * the span once it has been encoded (or dropped on shutdown).
+	 * The caller MUST NOT touch, free, or re-emit the span after
+	 * this call returns.
+	 *
+	 * Identical semantics to otlp_exporter_emit() otherwise (OK,
+	 * NULL, BUFFER_FULL, SHUTDOWN). Faster because it skips the
+	 * deep clone. Use this in hot paths where the span is built
+	 * fresh for emission and never reused.
+	 *
+	 * Mixing emit() and emit_move() on the same span is a
+	 * use-after-free; pass the span to exactly one of them. */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_emit_move(otlp_exporter_t *exp,
+		otlp_span_t *span);
+
 	/* Drive exporter progress by one step. Drains the queue into a
 	 * pending batch, starts or advances the in-flight HTTP request,
 	 * fires batch/backoff timers. Returns when there is nothing left

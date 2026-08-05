@@ -1,8 +1,8 @@
 # TODO 10 — Performance: span move semantics
 
-**Status:** Pending
+**Status:** Complete
 **Priority:** P2
-**Branch:** `v0.2-quality-pass` (later)
+**Branch:** `v0.2-final-pass`
 
 ## Goal
 
