@@ -18,6 +18,9 @@
  * up to either Content-Length bytes or EOF. No chunked encoding
  * (collector responses are short, Connection: close).
  */
+/* _POSIX_C_SOURCE for strncasecmp under glibc with -std=c11. */
+#define _POSIX_C_SOURCE 200809L
+
 #include "http_client.h"
 #include "platform.h"
 
@@ -28,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 /* ── URL parser ───────────────────────────────────────────────── */
 

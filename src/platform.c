@@ -5,6 +5,15 @@
  * Real platform.c (and platform_unix.c / platform_win.c) lands in
  * Phase 3 alongside http_client.c.
  */
+
+/* Linux glibc needs _POSIX_C_SOURCE >= 199309L for clock_gettime
+ * and CLOCK_REALTIME/MONOTONIC. macOS declares them by default.
+ * Define before any system header.
+ */
+#if !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "platform.h"
 
 #if defined(_WIN32)

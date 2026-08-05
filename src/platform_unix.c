@@ -8,6 +8,10 @@
  * returns EINPROGRESS, and the caller drives _finish_connect via
  * poll()/select() on the fd.
  */
+/* _POSIX_C_SOURCE for getaddrinfo / strncasecmp under glibc with
+ * -std=c11. macOS declares these unconditionally. */
+#define _POSIX_C_SOURCE 200809L
+
 #include "platform.h"
 
 #include <otlp-c/status.h>
