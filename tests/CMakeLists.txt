@@ -17,7 +17,7 @@ set_tests_properties(smoke PROPERTIES LABELS "smoke;unit")
 # server). POSIX only; Windows skips via in-source #if defined(_WIN32)
 # stubs but we don't compile the helper on Windows to avoid pulling
 # in <arpa/inet.h>.
-if(NOT WIN32)
+if(UNIX)
     add_executable(otlp_test_http_echo test_http_echo.c test_helper_echo.c)
     target_link_libraries(otlp_test_http_echo PRIVATE otlp_c Threads::Threads)
     add_test(NAME http-echo
