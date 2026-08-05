@@ -39,6 +39,14 @@ if(UNIX)
     add_test(NAME concurrency-stress
         COMMAND otlp_test_concurrency_stress)
     set_tests_properties(concurrency-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
+
+    # Phase 12 finish: exporter retry + permanent-failure paths.
+    add_executable(otlp_test_exporter_retry
+        test_exporter_retry.c test_helper_echo.c)
+    target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c Threads::Threads)
+    add_test(NAME exporter-retry
+        COMMAND otlp_test_exporter_retry)
+    set_tests_properties(exporter-retry PROPERTIES LABELS "unit" TIMEOUT 30)
 endif()
 
 add_subdirectory(unit)
