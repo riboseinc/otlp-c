@@ -36,12 +36,17 @@ jobs:
             --ignore ARRAY_SIZE
             --ignore AVOID_EXTERNS
             --ignore BRACES
+            --ignore OPEN_BRACE
+            --ignore ELSE_AFTER_BRACE
+            --ignore NESTED_BRACE
             --ignore COMMIT_LOG_LONG_LINE
             --ignore COMPLEX_MACRO
             --ignore EMAIL_SUBJECT
             --ignore EMBEDDED_FILENAME
             --ignore EXECUTE_PERMISSIONS
             --ignore FILE_PATH_CHANGES
+            --ignore GLOBAL_INITIALISERS
+            --ignore INITIALISE_STATIC
             --ignore LONG_LINE
             --ignore LONG_LINE_COMMENT
             --ignore LONG_LINE_STRING

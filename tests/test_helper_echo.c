@@ -3,6 +3,10 @@
  * In-process HTTP echo server implementation. POSIX only (test
  * code; the library is portable, the test helper is not).
  */
+/* _DEFAULT_SOURCE for CLOCK_MONOTONIC + INADDR_LOOPBACK under glibc
+ * with -std=c11. */
+#define _DEFAULT_SOURCE
+
 #include "test_helper_echo.h"
 
 #if defined(_WIN32)

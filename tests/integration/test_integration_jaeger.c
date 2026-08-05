@@ -18,6 +18,7 @@
 #include "../src/http_client.h"
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -166,8 +167,24 @@ main(void)
 		st = blocking_get(url, &body, &len, &http_status);
 		if (st == OTLP_OK && http_status == 200 && body)
 		{
-			/* Look for our test_run_id in the response. */
-			if (memmem(body, len, run_id, strlen(run_id)))
+			/* Look for our test_run_id in the response
+			 * (memmem is glibc-only; hand-roll a tiny
+			 * substring search to keep Windows clean). */
+			size_t       hay = 0;
+			const size_t nlen = strlen(run_id);
+			bool	     found = false;
+
+			if (nlen == 0 || len < nlen)
+				found = false;
+			else
+				for (hay = 0; hay + nlen <= len; hay++) {
+					if (memcmp(body + hay,
+						   run_id, nlen) == 0) {
+						found = true;
+						break;
+					}
+				}
+			if (found)
 			{
 				printf("[integration] PASS — span with "
 				       "test_run_id=%s visible in Jaeger\n",
