@@ -1,6 +1,7 @@
 # TODO 14 — Multi-threaded stress tests for MPSC queue and tracer
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* test_concurrency_stress.c merged (8 threads × 200 spans).
 **Priority:** P1
 **Depends on:** nothing
 

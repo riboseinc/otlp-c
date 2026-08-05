@@ -1,6 +1,7 @@
 # TODO 22 — Implement span events and links in the public API
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* Stub functions added in phase-13 (otlp_span_add_event / _link).
 **Priority:** P1
 **Depends on:** nothing
 

@@ -1,6 +1,7 @@
 # TODO 13 — Add P-EXPORT-NEVER-CORRUPT and P-EXPORT-NO-LEAK property tests
 
-**Status:** Ready
+**Status:** Deferred (v0.3+)
+*Closed because:* Property tests for exporter retry/drop semantics need a deterministic clock + echo-server mock; design exercise for v0.3.
 **Priority:** P1
 **Depends on:** nothing
 

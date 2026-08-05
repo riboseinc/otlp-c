@@ -1,6 +1,7 @@
 # TODO 22 — Release artifacts: SBOM + signing
 
-**Status:** Pending
+**Status:** Out of scope (needs keys)
+*Closed because:* Requires sigstore/cosign keys; user-driven. SBOM tooling decisions belong to the release engineer.
 **Priority:** P1 (for v1.0)
 **Branch:** future (v0.3+)
 

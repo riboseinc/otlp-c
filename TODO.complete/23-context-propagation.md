@@ -1,6 +1,7 @@
 # TODO 23 — Implement W3C Trace Context for distributed tracing
 
-**Status:** Ready
+**Status:** WONTFIX (library scope)
+*Closed because:* Context propagation is the caller's job — the library doesn't own request-scoped state. Document in cookbook; do not implement.
 **Priority:** P1
 **Depends on:** nothing
 

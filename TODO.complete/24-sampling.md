@@ -1,6 +1,7 @@
 # TODO 24 — Head-based and tail-based sampling
 
-**Status:** Ready
+**Status:** WONTFIX (library scope)
+*Closed because:* Sampling is a caller decision (head-based) or a collector decision (tail-based). The library emits what it's told.
 **Priority:** P1
 **Depends on:** nothing
 

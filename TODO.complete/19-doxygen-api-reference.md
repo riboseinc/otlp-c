@@ -1,6 +1,7 @@
 # TODO 19 — Generate API reference docs from headers
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* Doxyfile + cmake docs target added in v0.2 convergence pass.
 **Priority:** P1
 **Depends on:** nothing
 

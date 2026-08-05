@@ -1,6 +1,7 @@
 # TODO 17 — Audit codebase for OCP, MECE, DRY, encapsulation violations
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* CODE-QUALITY-AUDIT.md written; findings + recommendations captured.
 **Priority:** P1
 **Depends on:** nothing
 

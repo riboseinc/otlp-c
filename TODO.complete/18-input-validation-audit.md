@@ -1,6 +1,7 @@
 # TODO 18 — Verify every public API function validates arguments
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* INPUT-VALIDATION-AUDIT.md written; boundary-by-boundary review captured.
 **Priority:** P1
 **Depends on:** nothing
 

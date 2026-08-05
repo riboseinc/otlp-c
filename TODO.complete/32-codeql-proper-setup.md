@@ -1,6 +1,7 @@
 # TODO 32 — Re-enable CodeQL analysis with proper build matrix
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* Default CodeQL setup is enabled at the repo level; advanced workflow was removed in PR #5 to avoid conflict.
 **Priority:** P1
 **Depends on:** nothing
 

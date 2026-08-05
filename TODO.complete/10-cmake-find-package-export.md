@@ -1,6 +1,7 @@
 # TODO 10 — CMake find_package consumer test fails on some platforms
 
-**Status:** Ready
+**Status:** Complete
+*Closed because:* otlp-c-config.cmake.in uses find_dependency(Threads); consumer test passes.
 **Priority:** P1
 **Depends on:** nothing
 
