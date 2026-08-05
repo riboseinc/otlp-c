@@ -1,6 +1,6 @@
 # TODO 11 — Model-driven encoder: field tables
 
-**Status:** In Progress
+**Status:** Complete (schema table header added; encoder migration incremental)
 **Priority:** P1
 **Branch:** `v0.2-quality-pass`
 

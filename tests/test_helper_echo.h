@@ -34,16 +34,25 @@ struct echo_server
 	bool running;
 	echo_handler_t handler;
 	size_t requests_to_serve;
-	size_t requests_served;
+	size_t requests_served;  /* incremented per request; alias of requests_seen for older tests */
+	size_t requests_seen;    /* backwards-compat alias; same value as requests_served */
 };
 
 /* Start an echo server bound to a kernel-chosen port on localhost.
- * The server thread runs in the background; stop with _join. The
- * handler may be NULL (default: 200 OK + empty body). */
+ * The server thread runs in the background; stop with _stop. The
+ * handler may be NULL (default: 200 OK + empty body).
+ *
+ * `requests_to_serve` is the upper bound on accepted requests; 0
+ * means "unbounded" (server runs until _stop). */
 otlp_status_t
 echo_server_start(struct echo_server *s,
 	echo_handler_t handler,
 	size_t requests_to_serve);
+
+/* Stop the server: closes the listening socket, waits for the
+ * worker thread to exit. Safe to call multiple times. */
+void
+echo_server_stop(struct echo_server *s);
 
 /* Block until the server has served its allotted requests or until
  * the timeout elapses (microseconds). Returns OTLP_OK on clean

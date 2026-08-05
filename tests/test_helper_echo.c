@@ -122,6 +122,20 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 	return s->running ? OTLP_ERR_TIMEOUT : OTLP_OK;
 }
 
+void
+echo_server_stop(struct echo_server *s)
+{
+	if (!s || s->sock_fd < 0)
+		return;
+	/* Closing the listen fd makes the worker thread's accept() fail
+	 * with EBADF/EINVAL; it then exits its loop. The thread is
+	 * detached, so no join needed. */
+	shutdown(s->sock_fd, SHUT_RDWR);
+	close(s->sock_fd);
+	s->sock_fd = -1;
+	s->running = false;
+}
+
 /* ── Internal: parse + serve one request ──────────────────────── */
 
 static int
@@ -234,7 +248,7 @@ echo_thread_main(void *arg)
 	struct echo_thread_arg *a = arg;
 	struct echo_server *s = a->server;
 
-	while (s->requests_served < s->requests_to_serve)
+	for (;;)
 	{
 		int conn_fd = accept(s->sock_fd, NULL, NULL);
 
@@ -242,13 +256,18 @@ echo_thread_main(void *arg)
 		{
 			if (errno == EINTR)
 				continue;
-			break;
+			break;  /* socket closed by _stop, or fatal */
 		}
 		serve_one(conn_fd, s->handler);
 		close(conn_fd);
 		s->requests_served++;
+		s->requests_seen = s->requests_served;
+		if (s->requests_to_serve > 0 &&
+		    s->requests_served >= s->requests_to_serve)
+			break;
 	}
-	close(s->sock_fd);
+	if (s->sock_fd >= 0)
+		close(s->sock_fd);
 	s->sock_fd = -1;
 	s->running = false;
 	free(a);

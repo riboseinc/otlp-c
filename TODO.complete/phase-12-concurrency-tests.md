@@ -1,6 +1,6 @@
 # TODO 12 — Test coverage: concurrency + retries
 
-**Status:** In Progress
+**Status:** Partial — MPSC contention test added; exporter concurrency covered by test_concurrency_stress; exporter-retry test still TODO.
 **Priority:** P0
 **Branch:** `v0.2-quality-pass`
 

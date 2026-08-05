@@ -1,6 +1,6 @@
 # TODO 13 — Spec completion: deferred-feature stubs
 
-**Status:** In Progress
+**Status:** Complete
 **Priority:** P1
 **Branch:** `v0.2-quality-pass`
 

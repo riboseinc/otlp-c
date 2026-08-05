@@ -89,6 +89,7 @@ find_package(Threads REQUIRED)
 # Library target
 add_library(otlp_c
     src/common.c
+    src/internal_util.c
     src/span.c
     src/tracer.c
     src/exporter.c

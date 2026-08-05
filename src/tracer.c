@@ -16,6 +16,7 @@
  */
 #include <otlp-c/tracer.h>
 
+#include "internal_util.h"
 #include "platform.h"
 #include "span_internal.h"
 
@@ -40,22 +41,6 @@ struct otlp_tracer
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
-
-static char *
-dup_str(const char *s)
-{
-	size_t len;
-	char *out;
-
-	if (!s)
-		return NULL;
-	len = strlen(s);
-	out = malloc(len + 1);
-	if (!out)
-		return NULL;
-	memcpy(out, s, len + 1);
-	return out;
-}
 
 static uint64_t
 get_thread_id(void)
@@ -175,9 +160,9 @@ otlp_tracer_create(const char *service_name,
 		return NULL;
 	memset(t, 0, sizeof(*t));
 
-	t->service_name = dup_str(service_name ? service_name : "");
-	t->scope_name = dup_str(scope_name ? scope_name : "");
-	t->scope_version = dup_str(scope_version ? scope_version : "");
+	t->service_name = otlp_dup_str(service_name ? service_name : "");
+	t->scope_name = otlp_dup_str(scope_name ? scope_name : "");
+	t->scope_version = otlp_dup_str(scope_version ? scope_version : "");
 	if (!t->service_name || !t->scope_name || !t->scope_version)
 	{
 		free(t->service_name);
