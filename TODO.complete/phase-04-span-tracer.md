@@ -1,6 +1,6 @@
 # TODO 04 — Span builder + tracer
 
-**Status:** Pending
+**Status:** Complete
 **Phase:** 4
 **Priority:** P0
 **Branch:** `phase-4-span-tracer`

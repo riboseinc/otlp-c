@@ -1,8 +1,8 @@
 # TODO 18 — Code coverage
 
-**Status:** Pending
+**Status:** Complete (instrumentation flag + cmake coverage build option)
 **Priority:** P2
-**Branch:** future (v0.3+)
+**Branch:** `v0.2-convergence-pass`
 
 ## Goal
 

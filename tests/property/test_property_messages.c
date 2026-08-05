@@ -14,6 +14,7 @@
  */
 #include "prng.h"
 #include "property_harness.h"
+#include "decoder.h"
 
 #include "../src/otlp_messages.h"
 #include "../src/protobuf_encode.h"
@@ -23,87 +24,6 @@
 
 #include <stdint.h>
 #include <string.h>
-
-/* ── Hand-rolled decoder (mirrors test_property_varint.c) ─────── */
-
-static otlp_status_t
-decode_varint(const uint8_t *data, size_t len, size_t *pos, uint64_t *out)
-{
-	uint64_t v = 0;
-	int shift = 0;
-
-	while (*pos < len)
-	{
-		uint8_t b = data[(*pos)++];
-		v |= (uint64_t) (b & 0x7F) << shift;
-		if ((b & 0x80) == 0)
-		{
-			*out = v;
-			return OTLP_OK;
-		}
-		shift += 7;
-		if (shift > 63)
-			return OTLP_ERR_PROTOCOL;
-	}
-	return OTLP_ERR_PROTOCOL;
-}
-
-/* Decode the next field tag at *pos. Returns OTLP_OK + advances *pos,
- * writes field_num and wire_type. */
-static otlp_status_t
-decode_tag(const uint8_t *data,
-	size_t len,
-	size_t *pos,
-	uint32_t *field_num,
-	int *wire_type)
-{
-	uint64_t key;
-	otlp_status_t st;
-
-	st = decode_varint(data, len, pos, &key);
-	if (st != OTLP_OK)
-		return st;
-	*field_num = (uint32_t) (key >> 3);
-	*wire_type = (int) (key & 0x7);
-	return OTLP_OK;
-}
-
-/* Skip a value of the given wire type at *pos. */
-static otlp_status_t
-skip_value(const uint8_t *data, size_t len, size_t *pos, int wire_type)
-{
-	uint64_t v;
-	size_t field_len;
-
-	switch (wire_type)
-	{
-		case 0: /* varint */
-			return decode_varint(data, len, pos, &v);
-		case 1: /* fixed64 */
-			if (*pos + 8 > len)
-				return OTLP_ERR_PROTOCOL;
-			*pos += 8;
-			return OTLP_OK;
-		case 2:
-		{ /* length-delimited */
-			otlp_status_t st = decode_varint(data, len, pos, &v);
-			if (st != OTLP_OK)
-				return st;
-			field_len = (size_t) v;
-			if (*pos + field_len > len)
-				return OTLP_ERR_PROTOCOL;
-			*pos += field_len;
-			return OTLP_OK;
-		}
-		case 5: /* fixed32 */
-			if (*pos + 4 > len)
-				return OTLP_ERR_PROTOCOL;
-			*pos += 4;
-			return OTLP_OK;
-		default:
-			return OTLP_ERR_PROTOCOL;
-	}
-}
 
 /* ── Properties ───────────────────────────────────────────────── */
 

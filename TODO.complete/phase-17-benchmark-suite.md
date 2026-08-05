@@ -1,8 +1,8 @@
 # TODO 17 — Benchmark suite
 
-**Status:** Pending
+**Status:** Complete (encode microbenchmark; emit+tick benchmarks deferred)
 **Priority:** P2
-**Branch:** future (v0.3+)
+**Branch:** `v0.2-convergence-pass`
 
 ## Goal
 
