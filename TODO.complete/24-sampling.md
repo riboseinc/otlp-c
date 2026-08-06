@@ -1,7 +1,7 @@
 # TODO 24 — Head-based and tail-based sampling
 
-**Status:** WONTFIX (library scope)
-*Closed because:* Sampling is a caller decision (head-based) or a collector decision (tail-based). The library emits what it's told.
+**Status:** Complete
+*Closed because:* otlp_span_set_sampled() added to span.h. Encoder emits Span.flags (field 16, fixed32) with sampled bit. traceparent_format includes the flag.
 **Priority:** P1
 **Depends on:** nothing
 

@@ -16,6 +16,7 @@
 #include "span.h"
 #include "tracer.h"
 #include "exporter.h"
+#include "w3c.h"
 #include "visibility.h"
 
 #ifdef __cplusplus

@@ -1,0 +1,13 @@
+{
+    "name": "otlp-c",
+    "version": "0.3.0",
+    "description": "Pure-C99 OTLP/HTTP client for OpenTelemetry. Zero non-libc dependencies.",
+    "homepage": "https://github.com/riboseinc/otlp-c",
+    "license": "Apache-2.0",
+    "dependencies": [
+        {
+            "name": "vcpkg-cmake",
+            "host": true
+        }
+    ]
+}

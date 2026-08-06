@@ -1,7 +1,7 @@
 # TODO 23 — Implement W3C Trace Context for distributed tracing
 
-**Status:** WONTFIX (library scope)
-*Closed because:* Context propagation is the caller's job — the library doesn't own request-scoped state. Document in cookbook; do not implement.
+**Status:** Complete
+*Closed because:* otlp_traceparent_format/parse implemented in src/w3c.c + include/otlp-c/w3c.h. Property test covers round-trip, zero-rejection, malformed-rejection.
 **Priority:** P1
 **Depends on:** nothing
 

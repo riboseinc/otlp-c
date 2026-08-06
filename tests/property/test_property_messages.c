@@ -103,6 +103,10 @@ prop_encode_span_field_numbers(uint64_t seed)
 				if (wtype != OTLP_PB_WIRE_FIXED64)
 					goto out_buf;
 				break;
+			case 16: /* flags (W3C trace-flags) */
+				if (wtype != OTLP_PB_WIRE_FIXED32)
+					goto out_buf;
+				break;
 			default:
 				/* Unexpected field — fail. */
 				goto out_buf;

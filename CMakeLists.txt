@@ -94,6 +94,7 @@ add_library(otlp_c
     src/internal_util.c
     src/span.c
     src/tracer.c
+    src/w3c.c
     src/exporter.c
     src/exporter_otel.c
     src/http_client.c

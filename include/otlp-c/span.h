@@ -152,6 +152,20 @@ otlp_status_t otlp_span_set_status(otlp_span_t *span,
 				   otlp_status_code_t code,
 				   const char *description);
 
+/* ── Sampling ──────────────────────────────────────────────────
+ *
+ * The sampled flag controls the W3C trace-flags byte (bit 0).
+ * Default: true (sampled). Set to false for unsampled spans; the
+ * exporter will emit the flags field on the wire as 0x00, and
+ * the collector may drop the span.
+ *
+ * The library does NOT implement sampling policies (rate-limited,
+ * probabilistic, etc.). The caller decides which spans to sample
+ * and calls this function accordingly. */
+
+OTLP_C_EXPORT
+otlp_status_t otlp_span_set_sampled(otlp_span_t *span, bool sampled);
+
 /* ── Deferred OTLP fields (v0.2+) ───────────────────────────────
  *
  * The following setters cover OTLP span fields that v0.1.x emits as

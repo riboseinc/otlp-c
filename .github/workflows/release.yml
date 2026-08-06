@@ -256,3 +256,31 @@ jobs:
             otlp-c-*-${{ matrix.name }}.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  generate-sbom:
+    name: Generate SBOM
+    needs: tag-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag-and-release.outputs.tag }}
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+      - name: Generate SPDX SBOM
+        run: |
+          syft . -o spdx-json \
+            --file otlp-c-${{ needs.tag-and-release.outputs.version }}-sbom.spdx.json
+      - name: Generate SHA256 manifest
+        run: sha256sum otlp-c-*.spdx.json > SHA256SUMS
+      - name: Upload SBOM to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag-and-release.outputs.tag }}
+          files: |
+            otlp-c-*-sbom.spdx.json
+            SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

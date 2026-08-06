@@ -80,6 +80,9 @@ otlp_span_get_status_code(const otlp_span_t *span);
 const char *
 otlp_span_get_status_message(const otlp_span_t *span);
 
+/* Sampling flag (W3C trace-flags bit 0). Default: true. */
+bool otlp_span_is_sampled(const otlp_span_t *span);
+
 /* Returns a pointer to the internal attribute array and writes the
  * count to *n_out. The array is owned by the span. */
 const struct otlp_attribute *
