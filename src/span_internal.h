@@ -22,13 +22,21 @@
 
 /* Attribute types map 1:1 to the OTLP AnyValue oneof variants we
  * support in v0.1.0. ArrayValue and KeyValueList are post-1.0. */
+/* Attribute types map 1:1 to the AnyValue oneof field indices in
+ * otlp_schema.h (OTLP_AV_FI_*). This alignment lets the encoder
+ * look up the field spec via OTLP_AV_FIELDS[attr->type] without
+ * a switch — OCP: adding a new type is a table entry, not a new
+ * case statement. Gaps (ARRAY_VALUE=4, KVLIST_VALUE=5) are
+ * reserved for future attribute variants. */
 enum otlp_attr_type
 {
-	OTLP_ATTR_STRING,
-	OTLP_ATTR_INT64,
-	OTLP_ATTR_DOUBLE,
-	OTLP_ATTR_BOOL,
-	OTLP_ATTR_BYTES,
+	OTLP_ATTR_STRING	    = 0, /* OTLP_AV_FI_STRING  (field 1) */
+	OTLP_ATTR_BOOL		    = 1, /* OTLP_AV_FI_BOOL    (field 2) */
+	OTLP_ATTR_INT64	    = 2, /* OTLP_AV_FI_INT64   (field 3) */
+	OTLP_ATTR_DOUBLE	    = 3, /* OTLP_AV_FI_DOUBLE  (field 4) */
+	/* 4 = OTLP_AV_FI_ARRAY_VALUE (deferred) */
+	/* 5 = OTLP_AV_FI_KVLIST_VALUE (deferred) */
+	OTLP_ATTR_BYTES	    = 6, /* OTLP_AV_FI_BYTES   (field 7) */
 };
 
 struct otlp_attribute

@@ -1,7 +1,7 @@
 # TODO 43 — Architecture: model-driven attribute dispatch
 
-**Status:** Deferred (v0.3+)
-*Closed because:* Architectural refactor of struct otlp_attribute. Phase 11 (encoder uses schema constants) landed; the attribute descriptor table is the natural next step.
+**Status:** Complete
+*Closed because:* enum otlp_attr_type reordered to match AnyValue schema indices. encode_any_value refactored from 5-case switch to table dispatch via attr_encoders[]. Adding a new attribute type is now a one-line table entry + one function — no switch to modify. OCP achieved.
 **Priority:** P1
 **Branch:** future (v0.3+)
 
