@@ -150,6 +150,18 @@ free_pending_batch(otlp_span_t **pending, size_t count)
 		otlp_span_free(pending[i]);
 }
 
+/* Clear the pending batch and reset retry state. Called from
+ * record_outcome on every terminal path (success, permanent-fail,
+ * retry-exhausted). DRY: was duplicated 4 times. */
+static void
+clear_batch(struct otlp_exporter *e)
+{
+	free_pending_batch(e->pending, e->pending_count);
+	e->pending_count = 0;
+	e->attempt = 0;
+	e->backoff_armed = false;
+}
+
 /* ── Lifecycle ────────────────────────────────────────────────── */
 
 otlp_exporter_t *
@@ -317,10 +329,7 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			atomic_fetch_add_explicit(&e->dropped_err,
 				e->in_flight_count,
 				memory_order_relaxed);
-			free_pending_batch(e->pending, e->pending_count);
-			e->pending_count = 0;
-			e->attempt = 0;
-			e->backoff_armed = false;
+			clear_batch(e);
 			return;
 		}
 		{
@@ -341,10 +350,7 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		atomic_fetch_add_explicit(
 			&e->sent, e->in_flight_count, memory_order_relaxed);
 		/* Success — free the pending batch (kept across retries). */
-		free_pending_batch(e->pending, e->pending_count);
-		e->pending_count = 0;
-		e->attempt = 0;
-		e->backoff_armed = false;
+		clear_batch(e);
 		return;
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
@@ -358,10 +364,7 @@ record_outcome(struct otlp_exporter *e, int http_status)
 				e->in_flight_count,
 				memory_order_relaxed);
 			/* Permanent failure — free the pending batch. */
-			free_pending_batch(e->pending, e->pending_count);
-			e->pending_count = 0;
-			e->attempt = 0;
-			e->backoff_armed = false;
+			clear_batch(e);
 		}
 		else
 		{
@@ -380,10 +383,7 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	atomic_fetch_add_explicit(
 		&e->dropped_err, e->in_flight_count, memory_order_relaxed);
 	/* Permanent failure — free the pending batch. */
-	free_pending_batch(e->pending, e->pending_count);
-	e->pending_count = 0;
-	e->attempt = 0;
-	e->backoff_armed = false;
+	clear_batch(e);
 }
 
 otlp_status_t

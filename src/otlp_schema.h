@@ -5,6 +5,11 @@
  * otlp_messages.c reference these constants instead of local #defines.
  *
  * Source: docs/otlp-spec.md (which mirrors opentelemetry-proto).
+ *
+ * Design: each message has a named-enum index + designated-initializer
+ * table. Adding or reordering fields is safe — the enum ensures the
+ * accessor macros (in otlp_messages.c) always reference the right
+ * entry regardless of array order.
  */
 #ifndef OTLP_C_OTLP_SCHEMA_H
 #define OTLP_C_OTLP_SCHEMA_H
@@ -15,16 +20,11 @@
 
 #include "protobuf_encode.h"
 
-/* Wire types are reused from protobuf_encode.h:
- *   OTLP_PB_WIRE_VARINT, OTLP_PB_WIRE_FIXED64, OTLP_PB_WIRE_LEN,
- *   OTLP_PB_WIRE_FIXED32.
- */
+/* ── Types ────────────────────────────────────────────────────── */
 
-/* Field presence semantics: protobuf3 default-omission vs explicit
- * emit (used for AnyValue oneof selectors). */
 enum otlp_field_presence {
-	OTLP_PRESENCE_DEFAULT_OMITTED = 0,  /* skip if zero value */
-	OTLP_PRESENCE_ALWAYS_EMIT,	    /* emit even if zero (oneof selector) */
+	OTLP_PRESENCE_DEFAULT_OMITTED = 0,
+	OTLP_PRESENCE_ALWAYS_EMIT,
 };
 
 struct otlp_field_spec {
@@ -35,98 +35,168 @@ struct otlp_field_spec {
 	bool		       repeated;
 };
 
-/* ExportTraceServiceRequest */
+/* ── ExportTraceServiceRequest ────────────────────────────────── */
+
+enum {
+	OTLP_ETSR_FI_RESOURCE_SPANS,
+	OTLP_ETSR_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_ETSR_FIELDS[] = {
-	{"resource_spans", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_ETSR_FI_RESOURCE_SPANS] = {
+		"resource_spans", 1, OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED, true
+	},
 };
-static const size_t OTLP_ETSR_FIELDS_N =
-    sizeof(OTLP_ETSR_FIELDS) / sizeof(OTLP_ETSR_FIELDS[0]);
 
-/* ResourceSpans */
+/* ── ResourceSpans ────────────────────────────────────────────── */
+
+enum {
+	OTLP_RS_FI_RESOURCE,
+	OTLP_RS_FI_SCOPE_SPANS,
+	OTLP_RS_FI_SCHEMA_URL,
+	OTLP_RS_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_RS_FIELDS[] = {
-	{"resource",	     1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"scope_spans",     2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
-	{"schema_url",	     3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
+	[OTLP_RS_FI_RESOURCE]	    = {"resource", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_RS_FI_SCOPE_SPANS]    = {"scope_spans", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_RS_FI_SCHEMA_URL]	    = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_RS_FIELDS_N =
-    sizeof(OTLP_RS_FIELDS) / sizeof(OTLP_RS_FIELDS[0]);
 
-/* Resource */
+/* ── Resource ─────────────────────────────────────────────────── */
+
+enum {
+	OTLP_R_FI_ATTRIBUTES,
+	OTLP_R_FI_DROPPED_ATTRS,
+	OTLP_R_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_R_FIELDS[] = {
-	{"attributes",		     1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
-	{"dropped_attributes_count", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
+	[OTLP_R_FI_ATTRIBUTES]	 = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_R_FI_DROPPED_ATTRS] = {"dropped_attributes_count", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_R_FIELDS_N =
-    sizeof(OTLP_R_FIELDS) / sizeof(OTLP_R_FIELDS[0]);
 
-/* ScopeSpans */
+/* ── ScopeSpans ───────────────────────────────────────────────── */
+
+enum {
+	OTLP_SS_FI_SCOPE,
+	OTLP_SS_FI_SPANS,
+	OTLP_SS_FI_SCHEMA_URL,
+	OTLP_SS_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_SS_FIELDS[] = {
-	{"scope",	     1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"spans",	     2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
-	{"schema_url",	     3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
+	[OTLP_SS_FI_SCOPE]	 = {"scope", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SS_FI_SPANS]	 = {"spans", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SS_FI_SCHEMA_URL]	 = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_SS_FIELDS_N =
-    sizeof(OTLP_SS_FIELDS) / sizeof(OTLP_SS_FIELDS[0]);
 
-/* InstrumentationScope */
+/* ── InstrumentationScope ─────────────────────────────────────── */
+
+enum {
+	OTLP_IS_FI_NAME,
+	OTLP_IS_FI_VERSION,
+	OTLP_IS_FI_ATTRIBUTES,
+	OTLP_IS_FI_DROPPED_ATTRS,
+	OTLP_IS_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_IS_FIELDS[] = {
-	{"name",		     1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"version",		     2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"attributes",		     3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true}, /* deferred */
-	{"dropped_attributes_count", 4, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
+	[OTLP_IS_FI_NAME]		 = {"name", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_IS_FI_VERSION]		 = {"version", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_IS_FI_ATTRIBUTES]	 = {"attributes", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_IS_FI_DROPPED_ATTRS]	 = {"dropped_attributes_count", 4, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_IS_FIELDS_N =
-    sizeof(OTLP_IS_FIELDS) / sizeof(OTLP_IS_FIELDS[0]);
 
-/* Span */
+/* ── Span ─────────────────────────────────────────────────────── */
+
+enum {
+	OTLP_SPAN_FI_TRACE_ID,
+	OTLP_SPAN_FI_SPAN_ID,
+	OTLP_SPAN_FI_TRACE_STATE,
+	OTLP_SPAN_FI_PARENT_SPAN_ID,
+	OTLP_SPAN_FI_NAME,
+	OTLP_SPAN_FI_KIND,
+	OTLP_SPAN_FI_START_TIME,
+	OTLP_SPAN_FI_END_TIME,
+	OTLP_SPAN_FI_ATTRIBUTES,
+	OTLP_SPAN_FI_DROPPED_ATTRS,
+	OTLP_SPAN_FI_EVENTS,
+	OTLP_SPAN_FI_DROPPED_EVENTS,
+	OTLP_SPAN_FI_LINKS,
+	OTLP_SPAN_FI_DROPPED_LINKS,
+	OTLP_SPAN_FI_STATUS,
+	OTLP_SPAN_FI_FLAGS,
+	OTLP_SPAN_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_SPAN_FIELDS[] = {
-	{"trace_id",		     1,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"span_id",		     2,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"trace_state",		     3,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
-	{"parent_span_id",	     4,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"name",		     5,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"kind",		     6,  OTLP_PB_WIRE_VARINT,	  OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"start_time_unix_nano",     7,  OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"end_time_unix_nano",	     8,  OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"attributes",		     9,  OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, true},
-	{"dropped_attributes_count", 10, OTLP_PB_WIRE_VARINT,  OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
-	{"events",		     11, OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, true}, /* deferred */
-	{"dropped_events_count",     12, OTLP_PB_WIRE_VARINT,  OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
-	{"links",		     13, OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, true}, /* deferred */
-	{"dropped_links_count",	     14, OTLP_PB_WIRE_VARINT,  OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
-	{"status",		     15, OTLP_PB_WIRE_LEN,	  OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"flags",		     16, OTLP_PB_WIRE_FIXED32, OTLP_PRESENCE_DEFAULT_OMITTED, false}, /* deferred */
+	[OTLP_SPAN_FI_TRACE_ID]	 = {"trace_id", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_SPAN_FI_SPAN_ID]	 = {"span_id", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_SPAN_FI_TRACE_STATE]	 = {"trace_state", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_PARENT_SPAN_ID] = {"parent_span_id", 4, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_NAME]		 = {"name", 5, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_KIND]		 = {"kind", 6, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_START_TIME]	 = {"start_time_unix_nano", 7, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_SPAN_FI_END_TIME]	 = {"end_time_unix_nano", 8, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_SPAN_FI_ATTRIBUTES]	 = {"attributes", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SPAN_FI_DROPPED_ATTRS]	 = {"dropped_attributes_count", 10, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_EVENTS]		 = {"events", 11, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SPAN_FI_DROPPED_EVENTS]	 = {"dropped_events_count", 12, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_LINKS]		 = {"links", 13, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SPAN_FI_DROPPED_LINKS]	 = {"dropped_links_count", 14, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_STATUS]		 = {"status", 15, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SPAN_FI_FLAGS]		 = {"flags", 16, OTLP_PB_WIRE_FIXED32, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_SPAN_FIELDS_N =
-    sizeof(OTLP_SPAN_FIELDS) / sizeof(OTLP_SPAN_FIELDS[0]);
 
-/* Status */
+/* ── Status ───────────────────────────────────────────────────── */
+
+enum {
+	OTLP_STATUS_FI_CODE,
+	OTLP_STATUS_FI_MESSAGE,
+	OTLP_STATUS_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_STATUS_FIELDS[] = {
-	{"code",    1, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	{"message", 2, OTLP_PB_WIRE_LEN,    OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_STATUS_FI_CODE]	 = {"code", 1, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_STATUS_FI_MESSAGE]	 = {"message", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
-static const size_t OTLP_STATUS_FIELDS_N =
-    sizeof(OTLP_STATUS_FIELDS) / sizeof(OTLP_STATUS_FIELDS[0]);
 
-/* KeyValue */
+/* ── KeyValue ─────────────────────────────────────────────────── */
+
+enum {
+	OTLP_KV_FI_KEY,
+	OTLP_KV_FI_VALUE,
+	OTLP_KV_FI_COUNT,
+};
+
 static const struct otlp_field_spec OTLP_KV_FIELDS[] = {
-	{"key",   1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"value", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_KV_FI_KEY]	 = {"key", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_KV_FI_VALUE]	 = {"value", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
 };
-static const size_t OTLP_KV_FIELDS_N =
-    sizeof(OTLP_KV_FIELDS) / sizeof(OTLP_KV_FIELDS[0]);
 
-/* AnyValue oneof variants. */
-static const struct otlp_field_spec OTLP_AV_FIELDS[] = {
-	{"string_value",   1, OTLP_PB_WIRE_LEN,	    OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"bool_value",     2, OTLP_PB_WIRE_VARINT,   OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"int_value",      3, OTLP_PB_WIRE_VARINT,   OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"double_value",   4, OTLP_PB_WIRE_FIXED64,  OTLP_PRESENCE_ALWAYS_EMIT, false},
-	{"array_value",    5, OTLP_PB_WIRE_LEN,	    OTLP_PRESENCE_ALWAYS_EMIT, false}, /* deferred */
-	{"kvlist_value",   6, OTLP_PB_WIRE_LEN,	    OTLP_PRESENCE_ALWAYS_EMIT, false}, /* deferred */
-	{"bytes_value",    7, OTLP_PB_WIRE_LEN,	    OTLP_PRESENCE_ALWAYS_EMIT, false},
+/* ── AnyValue oneof variants ──────────────────────────────────── */
+
+enum {
+	OTLP_AV_FI_STRING,
+	OTLP_AV_FI_BOOL,
+	OTLP_AV_FI_INT64,
+	OTLP_AV_FI_DOUBLE,
+	OTLP_AV_FI_ARRAY_VALUE,
+	OTLP_AV_FI_KVLIST_VALUE,
+	OTLP_AV_FI_BYTES,
+	OTLP_AV_FI_COUNT,
 };
-static const size_t OTLP_AV_FIELDS_N =
-    sizeof(OTLP_AV_FIELDS) / sizeof(OTLP_AV_FIELDS[0]);
+
+static const struct otlp_field_spec OTLP_AV_FIELDS[] = {
+	[OTLP_AV_FI_STRING]	 = {"string_value", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_BOOL]	 = {"bool_value", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_INT64]	 = {"int_value", 3, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_DOUBLE]	 = {"double_value", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_ARRAY_VALUE] = {"array_value", 5, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_KVLIST_VALUE] = {"kvlist_value", 6, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_AV_FI_BYTES]	 = {"bytes_value", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
+};
 
 #endif

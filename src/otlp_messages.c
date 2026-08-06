@@ -20,34 +20,33 @@
 #include <string.h>
 
 /* Field-number accessors — single source of truth is otlp_schema.h.
- * Each macro below extracts the number from the table entry; the
- * wire type is implied by the per-field emit. */
-#define ETSR_F_RESOURCE_SPANS   OTLP_ETSR_FIELDS[0].number
-#define RS_F_RESOURCE	    OTLP_RS_FIELDS[0].number
-#define RS_F_SCOPE_SPANS	    OTLP_RS_FIELDS[1].number
-#define R_F_ATTRIBUTES	    OTLP_R_FIELDS[0].number
-#define SS_F_SCOPE		    OTLP_SS_FIELDS[0].number
-#define SS_F_SPANS		    OTLP_SS_FIELDS[1].number
-#define IS_F_NAME		    OTLP_IS_FIELDS[0].number
-#define IS_F_VERSION		    OTLP_IS_FIELDS[1].number
-#define SPAN_F_TRACE_ID	    OTLP_SPAN_FIELDS[0].number
-#define SPAN_F_SPAN_ID	    OTLP_SPAN_FIELDS[1].number
-#define SPAN_F_PARENT_SPAN_ID    OTLP_SPAN_FIELDS[3].number
-#define SPAN_F_NAME		    OTLP_SPAN_FIELDS[4].number
-#define SPAN_F_KIND		    OTLP_SPAN_FIELDS[5].number
-#define SPAN_F_START_TIME	    OTLP_SPAN_FIELDS[6].number
-#define SPAN_F_END_TIME	    OTLP_SPAN_FIELDS[7].number
-#define SPAN_F_ATTRIBUTES	    OTLP_SPAN_FIELDS[8].number
-#define SPAN_F_STATUS	    OTLP_SPAN_FIELDS[14].number
-#define STATUS_F_CODE	    OTLP_STATUS_FIELDS[0].number
-#define STATUS_F_MESSAGE	    OTLP_STATUS_FIELDS[1].number
-#define KV_F_KEY		    OTLP_KV_FIELDS[0].number
-#define KV_F_VALUE		    OTLP_KV_FIELDS[1].number
-#define AV_F_STRING		    OTLP_AV_FIELDS[0].number
-#define AV_F_BOOL		    OTLP_AV_FIELDS[1].number
-#define AV_F_INT64		    OTLP_AV_FIELDS[2].number
-#define AV_F_DOUBLE		    OTLP_AV_FIELDS[3].number
-#define AV_F_BYTES		    OTLP_AV_FIELDS[6].number
+ * Named indices make this robust against table reordering. */
+#define ETSR_F_RESOURCE_SPANS   OTLP_ETSR_FIELDS[OTLP_ETSR_FI_RESOURCE_SPANS].number
+#define RS_F_RESOURCE	    OTLP_RS_FIELDS[OTLP_RS_FI_RESOURCE].number
+#define RS_F_SCOPE_SPANS	    OTLP_RS_FIELDS[OTLP_RS_FI_SCOPE_SPANS].number
+#define R_F_ATTRIBUTES	    OTLP_R_FIELDS[OTLP_R_FI_ATTRIBUTES].number
+#define SS_F_SCOPE		    OTLP_SS_FIELDS[OTLP_SS_FI_SCOPE].number
+#define SS_F_SPANS		    OTLP_SS_FIELDS[OTLP_SS_FI_SPANS].number
+#define IS_F_NAME		    OTLP_IS_FIELDS[OTLP_IS_FI_NAME].number
+#define IS_F_VERSION		    OTLP_IS_FIELDS[OTLP_IS_FI_VERSION].number
+#define SPAN_F_TRACE_ID	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_TRACE_ID].number
+#define SPAN_F_SPAN_ID	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_SPAN_ID].number
+#define SPAN_F_PARENT_SPAN_ID    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_PARENT_SPAN_ID].number
+#define SPAN_F_NAME		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_NAME].number
+#define SPAN_F_KIND		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_KIND].number
+#define SPAN_F_START_TIME	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_START_TIME].number
+#define SPAN_F_END_TIME	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_END_TIME].number
+#define SPAN_F_ATTRIBUTES	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_ATTRIBUTES].number
+#define SPAN_F_STATUS	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_STATUS].number
+#define STATUS_F_CODE	    OTLP_STATUS_FIELDS[OTLP_STATUS_FI_CODE].number
+#define STATUS_F_MESSAGE	    OTLP_STATUS_FIELDS[OTLP_STATUS_FI_MESSAGE].number
+#define KV_F_KEY		    OTLP_KV_FIELDS[OTLP_KV_FI_KEY].number
+#define KV_F_VALUE		    OTLP_KV_FIELDS[OTLP_KV_FI_VALUE].number
+#define AV_F_STRING		    OTLP_AV_FIELDS[OTLP_AV_FI_STRING].number
+#define AV_F_BOOL		    OTLP_AV_FIELDS[OTLP_AV_FI_BOOL].number
+#define AV_F_INT64		    OTLP_AV_FIELDS[OTLP_AV_FI_INT64].number
+#define AV_F_DOUBLE		    OTLP_AV_FIELDS[OTLP_AV_FI_DOUBLE].number
+#define AV_F_BYTES		    OTLP_AV_FIELDS[OTLP_AV_FI_BYTES].number
 
 /* ── AnyValue ───────────────────────────────────────────────────
  *
@@ -320,7 +319,8 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 	 * so the wire value is 0x01 (the protobuf3 default 0x00 means
 	 * "not sampled", so omission suffices for unsampled spans). */
 	if (otlp_span_is_sampled(span)) {
-		st = otlp_pb_tag(out, OTLP_SPAN_FIELDS[15].number,
+		st = otlp_pb_tag(out,
+				 OTLP_SPAN_FIELDS[OTLP_SPAN_FI_FLAGS].number,
 				 OTLP_PB_WIRE_FIXED32);
 		if (st != OTLP_OK)
 			return st;
