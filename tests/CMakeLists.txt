@@ -49,6 +49,13 @@ if(UNIX)
     set_tests_properties(exporter-retry PROPERTIES LABELS "unit" TIMEOUT 30)
 endif()
 
+# Custom allocator hook test.
+add_executable(otlp_test_allocator test_allocator.c)
+target_link_libraries(otlp_test_allocator PRIVATE otlp_c)
+add_test(NAME allocator
+    COMMAND otlp_test_allocator)
+set_tests_properties(allocator PROPERTIES LABELS "unit")
+
 add_subdirectory(unit)
 
 # Property tests — see property/ for the harness.

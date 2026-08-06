@@ -1,7 +1,7 @@
 # TODO 28 — Allow caller to supply malloc/free
 
-**Status:** Deferred (v1.0+)
-*Closed because:* Custom allocator hook is a v1.0 API stability commitment. Defer until API freezes.
+**Status:** Complete
+*Closed because:* otlp_set_allocator() + otlp_malloc/free/realloc/calloc wrappers implemented. All 64 malloc/free/realloc/calloc calls in src/*.c replaced with otlp_* wrappers. Test verifies custom allocator intercepts calls. Unblocks kernel-module, firmware, and custom-VM embedding.
 **Priority:** P1
 **Depends on:** nothing
 

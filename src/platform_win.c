@@ -8,6 +8,7 @@
  * code path; local dev typically does not.
  */
 #include "platform.h"
+#include "internal_util.h"
 
 #include <otlp-c/status.h>
 
@@ -106,7 +107,7 @@ otlp_socket_connect(otlp_socket_t **out, const char *host, uint16_t port)
 	if (s == INVALID_SOCKET)
 		return OTLP_ERR_CONNECT;
 
-	sock = malloc(sizeof(*sock));
+	sock = otlp_malloc(sizeof(*sock));
 	if (!sock)
 	{
 		closesocket(s);
@@ -219,7 +220,7 @@ otlp_socket_close(otlp_socket_t *s)
 	if (s->s != INVALID_SOCKET)
 		closesocket(s->s);
 	s->s = INVALID_SOCKET;
-	free(s);
+	otlp_free(s);
 }
 
 int

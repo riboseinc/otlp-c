@@ -3,6 +3,7 @@
  * Bump-allocator. See arena.h.
  */
 #include "arena.h"
+#include "internal_util.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +24,7 @@ otlp_arena_free(struct otlp_arena *a)
 	if (!a)
 		return;
 	if (a->owns_buf)
-		free(a->buf);
+		otlp_free(a->buf);
 	a->buf	 = NULL;
 	a->len	 = 0;
 	a->cap	 = 0;
@@ -48,7 +49,7 @@ grow_to(struct otlp_arena *a, size_t need)
 	if (a->cap <= sizeof(a->initial_inline))
 		return OTLP_OK;  /* still inline */
 
-	p = realloc(a->owns_buf ? a->buf : NULL, a->cap);
+	p = otlp_realloc(a->owns_buf ? a->buf : NULL, a->cap);
 	if (!p)
 		return OTLP_ERR_NOMEM;
 	if (!a->owns_buf) {
