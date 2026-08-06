@@ -136,3 +136,27 @@ if(UNIX)
         LABELS "property;unit"
         TIMEOUT 120)
 endif()
+
+# v0.4: OTLP metrics encoder.
+add_executable(otlp_property_metrics test_property_metrics.c)
+target_link_libraries(otlp_property_metrics PRIVATE otlp_c)
+target_include_directories(otlp_property_metrics PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-metrics
+    COMMAND otlp_property_metrics)
+set_tests_properties(property-metrics PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)
+
+# v0.4: OTLP logs encoder.
+add_executable(otlp_property_logs test_property_logs.c)
+target_link_libraries(otlp_property_logs PRIVATE otlp_c)
+target_include_directories(otlp_property_logs PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-logs
+    COMMAND otlp_property_logs)
+set_tests_properties(property-logs PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

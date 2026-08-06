@@ -16,6 +16,8 @@
 #include "span.h"
 #include "tracer.h"
 #include "exporter.h"
+#include "metric.h"
+#include "log.h"
 #include "w3c.h"
 #include "visibility.h"
 

@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#ifndef OTLP_C_METRIC_INTERNAL_H
+#define OTLP_C_METRIC_INTERNAL_H
+
+#include <otlp-c/metric.h>
+#include "span_internal.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+struct otlp_metric {
+	otlp_metric_type_t  type;
+	char		   *name;
+	char		   *unit;
+	char		   *description;
+	uint64_t	    start_time;
+	uint64_t	    time;
+	bool		    has_start;
+	bool		    has_time;
+	struct otlp_attribute attrs[128];
+	size_t		    n_attrs;
+	/* Counter / gauge: */
+	double		    value;
+	/* Histogram: */
+	uint64_t	    count;
+	double		    sum;
+	double		    min;
+	double		    max;
+	bool		    has_minmax;
+	double		   *bounds;	    /* owned, sorted */
+	size_t		    n_bounds;
+	uint64_t	   *bucket_counts;   /* n_bounds+1 entries, owned */
+};
+
+/* Accessors for encoder. */
+const char	       *otlp_metric_get_name(const otlp_metric_t *m);
+const char	       *otlp_metric_get_unit(const otlp_metric_t *m);
+const char	       *otlp_metric_get_description(const otlp_metric_t *m);
+otlp_metric_type_t	otlp_metric_get_type(const otlp_metric_t *m);
+uint64_t		otlp_metric_get_start_time(const otlp_metric_t *m);
+uint64_t		otlp_metric_get_time(const otlp_metric_t *m);
+bool			otlp_metric_has_start(const otlp_metric_t *m);
+bool			otlp_metric_has_time(const otlp_metric_t *m);
+double			otlp_metric_get_value(const otlp_metric_t *m);
+uint64_t		otlp_metric_get_count(const otlp_metric_t *m);
+double			otlp_metric_get_sum(const otlp_metric_t *m);
+double			otlp_metric_get_min(const otlp_metric_t *m);
+double			otlp_metric_get_max(const otlp_metric_t *m);
+bool			otlp_metric_has_minmax(const otlp_metric_t *m);
+const double	       *otlp_metric_get_bounds(const otlp_metric_t *m, size_t *n);
+const uint64_t	       *otlp_metric_get_buckets(const otlp_metric_t *m);
+const struct otlp_attribute *otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n);
+
+#endif
