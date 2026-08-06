@@ -52,65 +52,83 @@
  *
  * Always emit the oneof tag for the active variant, even when the
  * value is the type's zero (false, 0, 0.0, ""). The oneof indicator
- * is what tells the consumer which variant was chosen. Protobuf
- * "skip defaults" applies to ordinary fields, not to oneof selectors.
+ * is what tells the consumer which variant was chosen.
+ *
+ * The field number + wire type come from OTLP_AV_FIELDS[a->type]
+ * (table lookup — no switch). The value emission is delegated to a
+ * per-type encoder function via attr_encoders[]. Adding a new
+ * attribute type (e.g. ArrayValue) is one enum value + one table
+ * entry + one encode function — no switch to modify. OCP.
  */
+
+typedef otlp_status_t (*otlp_attr_encode_fn)(
+    struct otlp_pb_buf *, const struct otlp_attribute *);
+
+static otlp_status_t
+encode_attr_string(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	const char *s = a->v.string_val ? a->v.string_val : "";
+
+	return otlp_pb_string(buf, s);
+}
+
+static otlp_status_t
+encode_attr_bool(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	return otlp_pb_varint(buf, a->v.bool_val ? 1ULL : 0ULL);
+}
+
+static otlp_status_t
+encode_attr_int64(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	return otlp_pb_varint(buf, (uint64_t)a->v.int64_val);
+}
+
+static otlp_status_t
+encode_attr_double(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	uint64_t bits;
+
+	memcpy(&bits, &a->v.double_val, sizeof(bits));
+	return otlp_pb_fixed64(buf, bits);
+}
+
+static otlp_status_t
+encode_attr_bytes(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	const uint8_t *p   = a->v.bytes_val.data;
+	size_t	      len = a->v.bytes_val.len;
+
+	return otlp_pb_bytes(buf, p ? p : (const uint8_t *)"", len);
+}
+
+/* Dispatch table: indexed by enum otlp_attr_type, which now matches
+ * OTLP_AV_FI_* indices. NULL entries = unimplemented variants. */
+static const otlp_attr_encode_fn attr_encoders[] = {
+	[OTLP_ATTR_STRING] = encode_attr_string,
+	[OTLP_ATTR_BOOL]   = encode_attr_bool,
+	[OTLP_ATTR_INT64]  = encode_attr_int64,
+	[OTLP_ATTR_DOUBLE] = encode_attr_double,
+	/* [4] = ARRAY_VALUE — deferred */
+	/* [5] = KVLIST_VALUE — deferred */
+	[OTLP_ATTR_BYTES]  = encode_attr_bytes,
+};
 
 static otlp_status_t
 encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 {
-	otlp_status_t st;
+	const struct otlp_field_spec *f;
+	otlp_status_t		       st;
 
-	switch (a->type)
-	{
-		case OTLP_ATTR_STRING:
-		{
-			const char *s = a->v.string_val ? a->v.string_val : "";
-			st = otlp_pb_tag(
-				buf, AV_F_STRING, OTLP_PB_WIRE_LEN);
-			if (st != OTLP_OK)
-				return st;
-			return otlp_pb_string(buf, s);
-		}
-		case OTLP_ATTR_BOOL:
-		{
-			st = otlp_pb_tag(
-				buf, AV_F_BOOL, OTLP_PB_WIRE_VARINT);
-			if (st != OTLP_OK)
-				return st;
-			return otlp_pb_varint(buf, a->v.bool_val ? 1ULL : 0ULL);
-		}
-		case OTLP_ATTR_INT64:
-		{
-			st = otlp_pb_tag(
-				buf, AV_F_INT64, OTLP_PB_WIRE_VARINT);
-			if (st != OTLP_OK)
-				return st;
-			return otlp_pb_varint(buf, (uint64_t) a->v.int64_val);
-		}
-		case OTLP_ATTR_DOUBLE:
-		{
-			uint64_t bits;
+	if ((unsigned)a->type >= OTLP_AV_FI_COUNT ||
+	    !attr_encoders[a->type])
+		return OTLP_ERR_INVALID_ARGUMENT;
 
-			memcpy(&bits, &a->v.double_val, sizeof(bits));
-			st = otlp_pb_tag(
-				buf, AV_F_DOUBLE, OTLP_PB_WIRE_FIXED64);
-			if (st != OTLP_OK)
-				return st;
-			return otlp_pb_fixed64(buf, bits);
-		}
-		case OTLP_ATTR_BYTES:
-		{
-			const uint8_t *p = a->v.bytes_val.data;
-			size_t len = a->v.bytes_val.len;
-			st = otlp_pb_tag(buf, AV_F_BYTES, OTLP_PB_WIRE_LEN);
-			if (st != OTLP_OK)
-				return st;
-			return otlp_pb_bytes(
-				buf, p ? p : (const uint8_t *) "", len);
-		}
-	}
-	return OTLP_ERR_INVALID_ARGUMENT;
+	f = &OTLP_AV_FIELDS[a->type];
+	st = otlp_pb_tag(buf, f->number, f->wire_type);
+	if (st != OTLP_OK)
+		return st;
+	return attr_encoders[a->type](buf, a);
 }
 
 /* ── KeyValue (public, for tests) ─────────────────────────────── */
