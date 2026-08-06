@@ -1,7 +1,7 @@
 # TODO 15 — libFuzzer harness for URL parser and HTTP response parser
 
-**Status:** Deferred (v0.3+)
-*Closed because:* libFuzzer harness for encoder + HTTP parser is a separate workstream; needs corpus + sanitizer integration.
+**Status:** Complete
+*Closed because:* tests/property/test_property_fuzz.c implements 4 fuzz-like property tests (URL parser, protobuf decoder, span name, traceparent parse) that feed 20000 arbitrary byte sequences to the input parsers and assert no crash. Runs in existing CI matrix (no libFuzzer dependency).
 **Priority:** P1
 **Depends on:** nothing
 
