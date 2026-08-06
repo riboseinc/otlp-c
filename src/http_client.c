@@ -22,6 +22,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "http_client.h"
+#include "internal_util.h"
 #include "platform.h"
 
 #include <ctype.h>
@@ -185,7 +186,7 @@ build_request(struct otlp_http_request *r,
 	if (total < body_len) /* overflow check */
 		return OTLP_ERR_OVERFLOW;
 
-	r->req_buf = malloc(total);
+	r->req_buf = otlp_malloc(total);
 	if (!r->req_buf)
 		return OTLP_ERR_NOMEM;
 	memcpy(r->req_buf, head, (size_t) n);
@@ -211,7 +212,7 @@ otlp_http_request_start(otlp_http_request_t **out,
 	if (body_len > 0 && !body)
 		return OTLP_ERR_NULL;
 
-	r = calloc(1, sizeof(*r));
+	r = otlp_calloc(1, sizeof(*r));
 	if (!r)
 		return OTLP_ERR_NOMEM;
 	r->state = OTLP_HTTP_REQ_CONNECTING;
@@ -240,8 +241,8 @@ otlp_http_request_start(otlp_http_request_t **out,
 fail:
 	if (r->sock)
 		otlp_socket_close(r->sock);
-	free(r->req_buf);
-	free(r);
+	otlp_free(r->req_buf);
+	otlp_free(r);
 	return st;
 }
 
@@ -373,7 +374,7 @@ step_sending(struct otlp_http_request *r)
 		r->state = OTLP_HTTP_REQ_READING;
 		/* Allocate response buffer now. */
 		r->resp_cap = 4096;
-		r->resp_buf = malloc(r->resp_cap);
+		r->resp_buf = otlp_malloc(r->resp_cap);
 		if (!r->resp_buf)
 			return OTLP_ERR_NOMEM;
 		r->resp_len = 0;
@@ -409,7 +410,7 @@ step_reading(struct otlp_http_request *r)
 					return OTLP_ERR_OVERFLOW;
 				new_cap *= 2;
 			}
-			p = realloc(r->resp_buf, new_cap);
+			p = otlp_realloc(r->resp_buf, new_cap);
 			if (!p)
 				return OTLP_ERR_NOMEM;
 			r->resp_buf = p;
@@ -519,7 +520,7 @@ otlp_http_request_free(otlp_http_request_t *r)
 		return;
 	if (r->sock)
 		otlp_socket_close(r->sock);
-	free(r->req_buf);
-	free(r->resp_buf);
-	free(r);
+	otlp_free(r->req_buf);
+	otlp_free(r->resp_buf);
+	otlp_free(r);
 }

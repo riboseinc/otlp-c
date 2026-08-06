@@ -24,6 +24,7 @@
  * pattern with no ABA on a bounded ring.
  */
 #include "mpsc_queue.h"
+#include "internal_util.h"
 
 #include <errno.h>
 #include <stdatomic.h>
@@ -46,7 +47,7 @@ mpsc_queue_init(struct mpsc_queue *q, size_t capacity)
 	if (!q || !is_pow2(capacity))
 		return OTLP_ERR_INVALID_ARGUMENT;
 
-	q->slots = calloc(capacity, sizeof(*q->slots));
+	q->slots = otlp_calloc(capacity, sizeof(*q->slots));
 	if (!q->slots)
 		return OTLP_ERR_NOMEM;
 	q->mask = capacity - 1;
@@ -63,7 +64,7 @@ mpsc_queue_free(struct mpsc_queue *q)
 {
 	if (!q)
 		return;
-	free(q->slots);
+	otlp_free(q->slots);
 	q->slots = NULL;
 	q->mask = 0;
 }

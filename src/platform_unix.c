@@ -13,6 +13,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "platform.h"
+#include "internal_util.h"
 
 #include <otlp-c/status.h>
 
@@ -94,7 +95,7 @@ otlp_socket_connect(otlp_socket_t **out, const char *host, uint16_t port)
 	if (fd < 0)
 		return OTLP_ERR_CONNECT;
 
-	s = malloc(sizeof(*s));
+	s = otlp_malloc(sizeof(*s));
 	if (!s)
 	{
 		close(fd);
@@ -218,7 +219,7 @@ otlp_socket_close(otlp_socket_t *s)
 	if (s->fd >= 0)
 		close(s->fd);
 	s->fd = -1;
-	free(s);
+	otlp_free(s);
 }
 
 int

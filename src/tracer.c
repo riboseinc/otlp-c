@@ -155,7 +155,7 @@ otlp_tracer_create(const char *service_name,
 	uint64_t mono = 0;
 	uint64_t seed;
 
-	t = malloc(sizeof(*t));
+	t = otlp_malloc(sizeof(*t));
 	if (!t)
 		return NULL;
 	memset(t, 0, sizeof(*t));
@@ -165,10 +165,10 @@ otlp_tracer_create(const char *service_name,
 	t->scope_version = otlp_dup_str(scope_version ? scope_version : "");
 	if (!t->service_name || !t->scope_name || !t->scope_version)
 	{
-		free(t->service_name);
-		free(t->scope_name);
-		free(t->scope_version);
-		free(t);
+		otlp_free(t->service_name);
+		otlp_free(t->scope_name);
+		otlp_free(t->scope_version);
+		otlp_free(t);
 		return NULL;
 	}
 
@@ -188,10 +188,10 @@ otlp_tracer_free(otlp_tracer_t *tracer)
 {
 	if (!tracer)
 		return;
-	free(tracer->service_name);
-	free(tracer->scope_name);
-	free(tracer->scope_version);
-	free(tracer);
+	otlp_free(tracer->service_name);
+	otlp_free(tracer->scope_name);
+	otlp_free(tracer->scope_version);
+	otlp_free(tracer);
 }
 
 /* ── Span creation ────────────────────────────────────────────── */

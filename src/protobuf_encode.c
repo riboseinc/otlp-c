@@ -13,6 +13,7 @@
  * leaves the buf unchanged (len advances only after success).
  */
 #include "protobuf_encode.h"
+#include "internal_util.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -49,14 +50,14 @@ buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 	{
 		/* Transitioning from SBO to heap: allocate new buffer
 		 * and copy inline contents. */
-		p = malloc(new_cap);
+		p = otlp_malloc(new_cap);
 		if (!p)
 			return OTLP_ERR_NOMEM;
 		memcpy(p, buf->data, buf->len);
 	}
 	else
 	{
-		p = realloc(buf->data, new_cap);
+		p = otlp_realloc(buf->data, new_cap);
 		if (!p)
 			return OTLP_ERR_NOMEM;
 	}
@@ -100,7 +101,7 @@ otlp_pb_buf_init(struct otlp_pb_buf *buf, size_t initial_cap)
 	if (initial_cap > OTLP_PB_SBO_SIZE)
 	{
 		/* Caller asked for more than SBO can hold — malloc. */
-		buf->data = malloc(initial_cap);
+		buf->data = otlp_malloc(initial_cap);
 		if (!buf->data)
 		{
 			buf->data	    = buf->sbo;
@@ -119,7 +120,7 @@ otlp_pb_buf_free(struct otlp_pb_buf *buf)
 	if (!buf)
 		return;
 	if (buf->owns_heap)
-		free(buf->data);
+		otlp_free(buf->data);
 	buf->data	    = NULL;
 	buf->len	    = 0;
 	buf->cap	    = 0;

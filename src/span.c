@@ -81,16 +81,16 @@ attr_release(struct otlp_attribute *a)
 {
 	if (!a)
 		return;
-	free(a->key);
+	otlp_free(a->key);
 	a->key = NULL;
 	switch (a->type)
 	{
 		case OTLP_ATTR_STRING:
-			free(a->v.string_val);
+			otlp_free(a->v.string_val);
 			a->v.string_val = NULL;
 			break;
 		case OTLP_ATTR_BYTES:
-			free(a->v.bytes_val.data);
+			otlp_free(a->v.bytes_val.data);
 			a->v.bytes_val.data = NULL;
 			a->v.bytes_val.len = 0;
 			break;
@@ -120,7 +120,7 @@ otlp_span_create(const char *name)
 	otlp_span_t *span;
 	char *name_copy;
 
-	span = malloc(sizeof(*span));
+	span = otlp_malloc(sizeof(*span));
 	if (!span)
 		return NULL;
 	memset(span, 0, sizeof(*span));
@@ -128,7 +128,7 @@ otlp_span_create(const char *name)
 	name_copy = otlp_dup_str(name ? name : "");
 	if (!name_copy)
 	{
-		free(span);
+		otlp_free(span);
 		return NULL;
 	}
 	span->name = name_copy;
@@ -143,10 +143,10 @@ otlp_span_free(otlp_span_t *span)
 {
 	if (!span)
 		return;
-	free(span->name);
-	free(span->status_message);
+	otlp_free(span->name);
+	otlp_free(span->status_message);
 	span_release_attrs(span);
-	free(span);
+	otlp_free(span);
 }
 
 /* ── Identity ─────────────────────────────────────────────────── */
@@ -252,7 +252,7 @@ otlp_span_set_name(otlp_span_t *span, const char *name)
 	new_name = otlp_dup_str(name ? name : "");
 	if (!new_name)
 		return OTLP_ERR_NOMEM;
-	free(span->name);
+	otlp_free(span->name);
 	span->name = new_name;
 	return OTLP_OK;
 }
@@ -274,7 +274,7 @@ otlp_span_set_attribute_string(otlp_span_t *span,
 	val_copy = otlp_dup_str(value ? value : "");
 	if (!val_copy)
 	{
-		free(a->key);
+		otlp_free(a->key);
 		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
@@ -347,7 +347,7 @@ otlp_span_set_attribute_bytes(otlp_span_t *span,
 	bytes_copy = otlp_dup_bytes(bytes, len);
 	if (len > 0 && !bytes_copy)
 	{
-		free(a->key);
+		otlp_free(a->key);
 		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
@@ -375,7 +375,7 @@ otlp_span_set_status(otlp_span_t *span,
 		if (!msg_copy)
 			return OTLP_ERR_NOMEM;
 	}
-	free(span->status_message);
+	otlp_free(span->status_message);
 	span->status_message = msg_copy;
 	span->status_code = code;
 	return OTLP_OK;

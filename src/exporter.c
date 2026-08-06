@@ -165,7 +165,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	o = *opts_in;
 	normalize_opts(&o);
 
-	e = calloc(1, sizeof(*e));
+	e = otlp_calloc(1, sizeof(*e));
 	if (!e)
 		return NULL;
 
@@ -184,7 +184,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->backoff_max_ms = o.backoff_max_ms;
 
 	e->pending_cap = e->batch_size * 2;
-	e->pending = malloc(e->pending_cap * sizeof(*e->pending));
+	e->pending = otlp_malloc(e->pending_cap * sizeof(*e->pending));
 	if (!e->pending)
 		goto fail;
 
@@ -196,10 +196,10 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	return e;
 
 fail:
-	free(e->user_agent);
-	free(e->service_name);
-	free(e->pending);
-	free(e);
+	otlp_free(e->user_agent);
+	otlp_free(e->service_name);
+	otlp_free(e->pending);
+	otlp_free(e);
 	return NULL;
 }
 
@@ -219,10 +219,10 @@ otlp_exporter_free(otlp_exporter_t *e)
 	if (e->in_flight)
 		otlp_http_request_free(e->in_flight);
 	mpsc_queue_free(&e->queue);
-	free(e->pending);
-	free(e->user_agent);
-	free(e->service_name);
-	free(e);
+	otlp_free(e->pending);
+	otlp_free(e->user_agent);
+	otlp_free(e->service_name);
+	otlp_free(e);
 }
 
 /* ── emit (any thread) ────────────────────────────────────────── */
