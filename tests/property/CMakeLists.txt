@@ -108,3 +108,16 @@ add_test(NAME property-w3c
 set_tests_properties(property-w3c PROPERTIES
 	LABELS "property;unit"
 	TIMEOUT 60)
+
+# Fuzz-like property tests: arbitrary byte sequences → parsers.
+# Checks for crashes only (no semantic invariant).
+add_executable(otlp_property_fuzz test_property_fuzz.c)
+target_link_libraries(otlp_property_fuzz PRIVATE otlp_c)
+target_include_directories(otlp_property_fuzz PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-fuzz
+	COMMAND otlp_property_fuzz)
+set_tests_properties(property-fuzz PROPERTIES
+	LABELS "property;unit"
+	TIMEOUT 60)
