@@ -1,7 +1,7 @@
 # TODO 21 — vcpkg registry publication
 
-**Status:** Out of scope (external PR)
-*Closed because:* Requires PR to microsoft/vcpkg; user-driven. The overlay port in this repo is sufficient for v0.x consumers.
+**Status:** Complete (overlay port ready)
+*Closed because:* ports/otlp-c/vcpkg.json + portfile.cmake created. User submits to microsoft/vcpkg for registry inclusion.
 **Priority:** P2
 **Branch:** future (post-v0.2)
 

@@ -313,7 +313,22 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 		SPAN_F_STATUS,
 		otlp_span_get_status_code(span),
 		otlp_span_get_status_message(span));
-	return st;
+	if (st != OTLP_OK)
+		return st;
+
+	/* flags (field 16, fixed32) — W3C trace-flags. Emit when sampled
+	 * so the wire value is 0x01 (the protobuf3 default 0x00 means
+	 * "not sampled", so omission suffices for unsampled spans). */
+	if (otlp_span_is_sampled(span)) {
+		st = otlp_pb_tag(out, OTLP_SPAN_FIELDS[15].number,
+				 OTLP_PB_WIRE_FIXED32);
+		if (st != OTLP_OK)
+			return st;
+		st = otlp_pb_fixed32(out, 0x01);
+		if (st != OTLP_OK)
+			return st;
+	}
+	return OTLP_OK;
 }
 
 /* ── Resource / InstrumentationScope / ScopeSpans / ResourceSpans ─ */

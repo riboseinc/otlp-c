@@ -41,6 +41,7 @@ struct otlp_span
 	size_t n_attrs;
 	otlp_status_code_t status_code;
 	char *status_message; /* owned, may be NULL */
+	bool sampled;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -133,6 +134,7 @@ otlp_span_create(const char *name)
 	span->name = name_copy;
 	span->kind = OTLP_SPAN_KIND_INTERNAL;
 	span->status_code = OTLP_STATUS_CODE_UNSET;
+	span->sampled = true;
 	return span;
 }
 
@@ -379,6 +381,15 @@ otlp_span_set_status(otlp_span_t *span,
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_span_set_sampled(otlp_span_t *span, bool sampled)
+{
+	if (!span)
+		return OTLP_ERR_NULL;
+	span->sampled = sampled;
+	return OTLP_OK;
+}
+
 /* ── Deferred OTLP fields (v0.2+) ─────────────────────────────── */
 
 otlp_status_t
@@ -488,6 +499,12 @@ otlp_span_get_status_message(const otlp_span_t *span)
 	return span ? span->status_message : NULL;
 }
 
+bool
+otlp_span_is_sampled(const otlp_span_t *span)
+{
+	return span ? span->sampled : false;
+}
+
 const struct otlp_attribute *
 otlp_span_get_attrs(const otlp_span_t *span, size_t *n_out)
 {
@@ -529,6 +546,7 @@ otlp_span_clone(const otlp_span_t *src)
 	dst->end_time_unix_nano = src->end_time_unix_nano;
 	dst->kind = src->kind;
 	dst->status_code = src->status_code;
+	dst->sampled = src->sampled;
 	if (src->status_message)
 	{
 		dst->status_message = otlp_dup_str(src->status_message);
