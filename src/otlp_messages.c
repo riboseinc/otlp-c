@@ -114,8 +114,8 @@ static const otlp_attr_encode_fn attr_encoders[] = {
 	[OTLP_ATTR_BYTES]  = encode_attr_bytes,
 };
 
-static otlp_status_t
-encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+otlp_status_t
+otlp_encode_any_value(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 {
 	const struct otlp_field_spec *f;
 	otlp_status_t		       st;
@@ -147,7 +147,7 @@ otlp_encode_key_value(struct otlp_pb_buf *out,
 	st = otlp_pb_buf_init(&val_buf, 0);
 	if (st != OTLP_OK)
 		return st;
-	st = encode_any_value(&val_buf, attr);
+	st = otlp_encode_any_value(&val_buf, attr);
 	if (st != OTLP_OK)
 		goto out;
 
@@ -351,10 +351,10 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 
 /* ── Resource / InstrumentationScope / ScopeSpans / ResourceSpans ─ */
 
-static otlp_status_t
-emit_resource(struct otlp_pb_buf *parent,
-	uint32_t field_num,
-	const char *service_name)
+otlp_status_t
+otlp_emit_resource(struct otlp_pb_buf *parent,
+		   uint32_t		field_num,
+		   const char	       *service_name)
 {
 	struct otlp_pb_buf sub = { 0 };
 	otlp_status_t st;
@@ -392,11 +392,11 @@ out:
 	return st;
 }
 
-static otlp_status_t
-emit_instrumentation_scope(struct otlp_pb_buf *parent,
-	uint32_t field_num,
-	const char *name,
-	const char *version)
+otlp_status_t
+otlp_emit_instrumentation_scope(struct otlp_pb_buf *parent,
+				uint32_t		 field_num,
+				const char		*name,
+				const char		*version)
 {
 	struct otlp_pb_buf sub = { 0 };
 	otlp_status_t st;
@@ -444,7 +444,7 @@ emit_scope_spans(struct otlp_pb_buf *parent,
 	if (st != OTLP_OK)
 		return st;
 
-	st = emit_instrumentation_scope(
+	st = otlp_emit_instrumentation_scope(
 		&sub, SS_F_SCOPE, scope_name, scope_version);
 	if (st != OTLP_OK)
 		goto out;
@@ -489,7 +489,7 @@ emit_resource_spans(struct otlp_pb_buf *parent,
 	if (st != OTLP_OK)
 		return st;
 
-	st = emit_resource(&sub, RS_F_RESOURCE, service_name);
+	st = otlp_emit_resource(&sub, RS_F_RESOURCE, service_name);
 	if (st != OTLP_OK)
 		goto out;
 

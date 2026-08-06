@@ -98,6 +98,10 @@ add_library(otlp_c
     src/exporter_otel.c
     src/http_client.c
     src/otlp_messages.c
+    src/otlp_metrics_encoder.c
+    src/otlp_logs_encoder.c
+    src/metric.c
+    src/log.c
     src/protobuf_encode.c
     src/mpsc_queue.c
     src/platform.c
