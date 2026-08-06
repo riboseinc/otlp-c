@@ -5,32 +5,28 @@
  * Hand-rolled for the four wire types OTLP uses (varint, fixed64,
  * fixed32, length-delimited). No third-party protobuf library.
  *
- * Memory model: otlp_pb_buf owns its heap buffer. _init allocates
- * (or leaves NULL if initial_cap == 0); _free releases. The buf is
- * growable and amortized O(1) per append via doubling. All public
- * functions are atomic on failure: a partial write leaves the buf
- * unchanged from the caller's perspective (len is only advanced
- * after a successful append).
+ * Memory model: otlp_pb_buf uses SBO (small-buffer optimisation).
+ * _init points data at the inline 64-byte buffer — zero malloc for
+ * small messages. _reserve switches to heap (realloc) when the
+ * message exceeds the inline size. _free only frees if heap-owned.
+ * All public functions are atomic on failure: a partial write
+ * leaves the buf unchanged (len advances only after success).
  */
 #include "protobuf_encode.h"
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ── Internal helpers ───────────────────────────────────────────
- *
- * buf_reserve / buf_append are the two DRY primitives every public
- * encoder delegates to. Keeping them here means growth policy, NULL
- * handling, and overflow checks live in exactly one place.
- */
+/* ── Internal helpers ─────────────────────────────────────────── */
 
 /* Ensure buf has room for `additional` more bytes beyond buf->len.
- * Doubling growth; SIZE_MAX/2 cap. */
+ * Starts in SBO (inline 64 bytes); switches to heap on overflow. */
 static otlp_status_t
 buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 {
-	size_t new_cap;
-	size_t need;
+	size_t   new_cap;
+	size_t   need;
 	uint8_t *p;
 
 	if (!buf)
@@ -41,7 +37,7 @@ buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 	if (need <= buf->cap)
 		return OTLP_OK;
 
-	new_cap = buf->cap ? buf->cap : 64;
+	new_cap = buf->cap ? buf->cap : OTLP_PB_SBO_SIZE;
 	while (new_cap < need)
 	{
 		if (new_cap > SIZE_MAX / 2)
@@ -49,16 +45,28 @@ buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 		new_cap *= 2;
 	}
 
-	p = realloc(buf->data, new_cap);
-	if (!p)
-		return OTLP_ERR_NOMEM;
-	buf->data = p;
-	buf->cap = new_cap;
+	if (!buf->owns_heap && buf->cap > 0)
+	{
+		/* Transitioning from SBO to heap: allocate new buffer
+		 * and copy inline contents. */
+		p = malloc(new_cap);
+		if (!p)
+			return OTLP_ERR_NOMEM;
+		memcpy(p, buf->data, buf->len);
+	}
+	else
+	{
+		p = realloc(buf->data, new_cap);
+		if (!p)
+			return OTLP_ERR_NOMEM;
+	}
+	buf->data	    = p;
+	buf->cap	    = new_cap;
+	buf->owns_heap = true;
 	return OTLP_OK;
 }
 
-/* Append `len` bytes from `data`. data may be NULL only when len==0;
- * in that case this is a no-op. */
+/* Append `len` bytes from `data`. data may be NULL only when len==0. */
 static otlp_status_t
 buf_append(struct otlp_pb_buf *buf, const uint8_t *data, size_t len)
 {
@@ -83,15 +91,25 @@ otlp_pb_buf_init(struct otlp_pb_buf *buf, size_t initial_cap)
 {
 	if (!buf)
 		return OTLP_ERR_NULL;
-	buf->data = NULL;
-	buf->len = 0;
-	buf->cap = 0;
-	if (initial_cap == 0)
-		return OTLP_OK;
-	buf->data = malloc(initial_cap);
-	if (!buf->data)
-		return OTLP_ERR_NOMEM;
-	buf->cap = initial_cap;
+	/* SBO: point at the inline buffer by default. */
+	buf->data	    = buf->sbo;
+	buf->len	    = 0;
+	buf->cap	    = OTLP_PB_SBO_SIZE;
+	buf->owns_heap = false;
+
+	if (initial_cap > OTLP_PB_SBO_SIZE)
+	{
+		/* Caller asked for more than SBO can hold — malloc. */
+		buf->data = malloc(initial_cap);
+		if (!buf->data)
+		{
+			buf->data	    = buf->sbo;
+			buf->cap	    = OTLP_PB_SBO_SIZE;
+			return OTLP_ERR_NOMEM;
+		}
+		buf->cap	    = initial_cap;
+		buf->owns_heap = true;
+	}
 	return OTLP_OK;
 }
 
@@ -100,10 +118,12 @@ otlp_pb_buf_free(struct otlp_pb_buf *buf)
 {
 	if (!buf)
 		return;
-	free(buf->data);
-	buf->data = NULL;
-	buf->len = 0;
-	buf->cap = 0;
+	if (buf->owns_heap)
+		free(buf->data);
+	buf->data	    = NULL;
+	buf->len	    = 0;
+	buf->cap	    = 0;
+	buf->owns_heap = false;
 }
 
 void

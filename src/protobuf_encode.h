@@ -16,6 +16,7 @@
 #ifndef OTLP_C_PROTOBUF_ENCODE_H
 #define OTLP_C_PROTOBUF_ENCODE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -26,11 +27,19 @@
 #define OTLP_PB_WIRE_LEN 2
 #define OTLP_PB_WIRE_FIXED32 5
 
-/* Encoder buffer. Grows as fields are appended. */
+/* Encoder buffer. Grows as fields are appended. Uses small-buffer
+ * optimisation (SBO): the first 64 bytes are inline (no malloc).
+ * Most OTLP sub-messages (Status, KeyValue, AnyValue) fit in 64
+ * bytes, so the encoder mallocs zero times per batch for typical
+ * attribute counts. */
+#define OTLP_PB_SBO_SIZE 64
+
 struct otlp_pb_buf {
 	uint8_t *data;
 	size_t   len;
 	size_t   cap;
+	uint8_t  sbo[OTLP_PB_SBO_SIZE];
+	bool     owns_heap;
 };
 
 /* Initialize a buf. Returns OTLP_OK or OTLP_ERR_NOMEM. */

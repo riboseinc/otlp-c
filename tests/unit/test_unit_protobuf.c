@@ -186,18 +186,21 @@ static int test_buf_growth(void)
 	otlp_status_t s;
 	size_t i;
 
+	/* With SBO, buf_init(4) uses the 64-byte inline buffer (cap=64). */
 	s = otlp_pb_buf_init(&buf, 4);
 	assert(s == OTLP_OK);
-	assert(buf.cap == 4);
+	assert(buf.cap >= 4);
+	assert(buf.data != NULL);
 
-	/* Write more than initial capacity. */
+	/* Write more than SBO capacity (64 bytes). */
 	for (i = 0; i < 100; i++) {
 		s = otlp_pb_varint(&buf, i);
 		assert(s == OTLP_OK);
 	}
 
-	/* Buffer should have grown. */
-	assert(buf.cap > 4);
+	/* Buffer should have grown beyond SBO onto heap. */
+	assert(buf.cap > OTLP_PB_SBO_SIZE);
+	assert(buf.owns_heap);
 	assert(buf.len > 0);
 
 	otlp_pb_buf_free(&buf);
