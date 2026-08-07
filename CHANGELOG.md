@@ -4,6 +4,111 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-08-07
+
+The "actually complete the TODOs" release. Closes TODOs 20, 21, 22,
+23, 24, 27, and 42 with full implementations (the prior "Complete"
+markers were based on stubs). Adds two architectural refactors that
+bring the metrics and logs encoders into the same model-driven shape
+as traces.
+
+### Added — Signals
+
+- **OTLP metrics signal** (TODO 20, `include/otlp-c/metric.h`):
+  counter / gauge / histogram types with `record()`, time setters,
+  and attribute setters. Wire encoder produces
+  `ExportMetricsServiceRequest` bytes via the model-driven schema
+  tables.
+- **OTLP logs signal** (TODO 21, `include/otlp-c/log.h`):
+  `LogRecord` with 24-level severity enum, body, trace_id/span_id
+  correlation, attribute setters. Wire encoder produces
+  `ExportLogsServiceRequest` bytes.
+- **Span events + links** (TODO 22): `otlp_span_add_event`,
+  `otlp_span_add_link`, `otlp_span_set_trace_state` are no longer
+  stubs. The encoder emits them at OTLP Span fields 3/11/13.
+  Fixed-cap storage: 64 events, 64 links per span.
+- **SpanContext propagation** (TODO 23, `include/otlp-c/context.h`):
+  value-type `otlp_context_t` + callback-based carrier abstraction
+  (`otlp_carrier_set_fn` / `otlp_carrier_get_fn`) +
+  `otlp_context_from_span` / `_inject` / `_extract`. Transport-
+  agnostic by design.
+- **Sampler interface** (TODO 24, `include/otlp-c/sampler.h`):
+  pluggable vtable (`otlp_sampler_t`) with three built-ins:
+  `always_on`, `always_off`, `trace_id_ratio_based`. Tracer
+  consults the sampler at `start_span`; NOT_RECORD returns NULL.
+
+### Added — Performance
+
+- **HTTP keep-alive + connection reuse** (TODO 27): exporter
+  caches one TCP connection between batches, eliminating DNS lookup
+  + TCP handshake cost on steady-state emission. New
+  `otlp_http_request_start_with_socket` and
+  `otlp_http_request_detach_socket` APIs. Parser detects explicit
+  `Connection: close` and disables reuse.
+- **Slab allocator** (TODO 42, `include/otlp-c/slab.h`): standalone
+  fixed-slot-size memory pool with malloc fallback. Drop-in for
+  any malloc/free pair. Stats exposed for observability.
+
+### Changed — Architectural
+
+- **Schema-driven metrics/logs encoders** (DRY/OCP): all three
+  signal encoders now reference field numbers via named-enum
+  indices into `otlp_schema.h` tables. Eliminates ~30 local
+  `#define`s. Adding a new message type is one schema entry, not
+  a new `#define`.
+- **Table-driven metric-kind dispatch** (OCP): the encoder's
+  per-metric-type switch is replaced with a `metric_kind_specs[]`
+  dispatch table. Adding a new metric type (e.g.,
+  ExponentialHistogram) is one function + one table entry.
+- **Shared encoder helpers** (DRY): `otlp_encode_any_value`,
+  `otlp_emit_resource`, `otlp_emit_instrumentation_scope` extracted
+  from `otlp_messages.c` as non-static. All three signal encoders
+  compose them — no copy-paste of the resource envelope.
+- **`otlp_span_is_sampled()` now public** (was internal-only).
+  Symmetric with `otlp_span_set_sampled()`.
+
+### Added — Tests
+
+- 6 metrics encoder properties (counter/gauge/histogram field
+  numbers, value round-trip, attribute round-trip).
+- 6 logs encoder properties (severity present/omitted, body
+  round-trip, trace correlation, attributes).
+- 6 events/links/context properties (events round-trip, links
+  round-trip, trace_state field, clone copies extras, context
+  inject/extract, context rejects malformed).
+- 7 sampler properties (always_on/off, ratio extremes, deterministic,
+  distribution, default sampler).
+- 6 slab allocator properties (roundtrip, slot reuse, oversize
+  fallback, overflow fallback, free routing, stats consistency).
+- 3 keepalive properties (disabled on explicit close, eligible by
+  default, reuse round-trip).
+
+Total: 16 property tests, all passing.
+
+### Known limitations
+
+- Tail sampling deferred (the API surface for "decide at end_time"
+  doesn't fit the caller-tick exporter model cleanly).
+- Slab allocator is standalone; integration into `otlp_malloc` /
+  `otlp_free` is a follow-up (needs benchmarking to confirm net
+  win on the realistic emit path).
+- Multi-connection HTTP pool deferred (currently 1 cached socket
+  per exporter).
+- Windows MSVC `<stdatomic.h>` still broken in VS preview; CI uses
+  continue-on-error. Tracked in TODO phase-20.
+- The `property-exporter` test is intermittently flaky under ctest
+  parallel load (timing-sensitive). Passes in isolation. Tracked.
+
+### Compatibility
+
+- Linux x86_64, macOS arm64, macOS x86_64, FreeBSD 14.2.
+- Windows x64 / ARM64: builds, MSVC atomics workaround in place,
+  CI is continue-on-error pending MSVC team fix.
+- C11 compiler required.
+- Static and shared library configurations both supported.
+
+Within the 0.x line, the API may break between minor versions.
+
 ## [0.3.0] - 2026-08-05
 
 ### Added
