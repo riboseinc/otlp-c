@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.8] - 2026-08-07
+
+Code quality cleanup — DRY completion and API surface completeness.
+
+### Fixed — DRY: walker.h fully wired
+
+The shared test walker (`tests/property/walker.h`) was created in
+v0.5.7 but only wired into `test_property_metrics.c`. Two other test
+files (`test_property_logs.c`, `test_property_events_context.c`)
+still had inline copies of `find_at_level` and `descend`. Now all
+three use the shared header. Zero duplication.
+
+### Fixed — API completeness: allocator.h in umbrella
+
+`include/otlp-c/allocator.h` (the custom allocator hook API:
+`otlp_set_allocator`, `otlp_get_allocator`) was missing from the
+umbrella header `otlp.h`. Callers who `#include <otlp-c/otlp.h>`
+now get the allocator API without a separate include.
+
 ## [0.5.7] - 2026-08-07
 
 All 26 tests pass with zero flakes. Zero continue-on-error in CI.

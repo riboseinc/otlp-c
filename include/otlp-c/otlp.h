@@ -13,6 +13,7 @@
 
 #include "version.h"
 #include "status.h"
+#include "allocator.h"
 #include "span.h"
 #include "tracer.h"
 #include "sampler.h"
