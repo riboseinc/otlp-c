@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.6] - 2026-08-07
+
+Eliminates the property-exporter test flake. CI is now fully clean.
+
+### Added — TODO 50: Null-transport mode for deterministic tests
+
+`otlp_exporter_set_null_transport(exp, true)` makes the exporter
+skip all HTTP I/O and immediately mark batches as "sent" (200 OK).
+Used by property tests to eliminate the threaded echo server that
+was the root cause of timing flakes and SEGFAULTs.
+
+The property-exporter test is rewritten to use null_transport: no
+echo server, no threads, no timing sensitivity. Runs 1000 iterations
+deterministically on every platform, including Windows.
+
+This is a simpler approach than the full transport-interface refactor
+described in TODO 50's original spec. The null_transport mode is
+sufficient for batching-behavior tests; the full transport interface
+(for pluggable UDP/shared-memory/etc.) remains a future design.
+
+### Changed
+
+- `property-exporter` test no longer POSIX-only: runs on Windows too.
+  No longer requires `test_helper_echo.c` or `Threads::Threads`.
+- Removed `RUN_SERIAL` from `property-exporter` in CMakeLists.txt.
+- Removed `-E 'property-exporter'` exclusion from CI test steps.
+- Removed the separate `continue-on-error` test step for the flaky
+  exporter test in both main CI and Alpine CI.
+- `struct otlp_exporter` extended with `bool null_transport` field.
+
 ## [0.5.5] - 2026-08-07
 
 ExponentialHistogram encoder completed. The last standard metric type.

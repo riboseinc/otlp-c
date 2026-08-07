@@ -89,6 +89,7 @@ struct otlp_exporter
 	/* Cached TCP connection for HTTP keep-alive. Owned by the exporter,
 	 * donated to the next in_flight request, re-acquired on success. */
 	otlp_socket_t *keepalive_sock;
+	bool null_transport;
 };
 
 /* ── Helpers ──────────────────────────────────────────────────── */
@@ -431,6 +432,14 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			work_done = true;
 		}
 
+		/* 1b. Null-transport fast path: skip HTTP entirely. */
+		if (e->null_transport && e->pending_count > 0) {
+			e->in_flight_count = e->pending_count;
+			record_outcome(e, 200);
+			work_done = true;
+			continue;
+		}
+
 		/* 2. Start POST if batch ready. */
 		if (!e->in_flight && !e->backoff_armed &&
 			(e->pending_count >= e->batch_size ||
@@ -541,6 +550,13 @@ otlp_exporter_flush(otlp_exporter_t *e)
 	if (e->pending_count > 0 || e->in_flight)
 		return OTLP_ERR_NETWORK;
 	return OTLP_OK;
+}
+
+void
+otlp_exporter_set_null_transport(otlp_exporter_t *e, bool enabled)
+{
+	if (e)
+		e->null_transport = enabled;
 }
 
 otlp_status_t

@@ -184,6 +184,14 @@ extern "C"
 		size_t cap,
 		size_t *n_out);
 
+	/* TEST ONLY: when enabled, the exporter skips all HTTP I/O and
+	 * immediately marks batches as "sent" (200 OK). Used by property
+	 * tests to avoid threaded echo server timing flakes. Do NOT use
+	 * in production — spans are not actually exported. */
+	OTLP_C_EXPORT
+	void otlp_exporter_set_null_transport(otlp_exporter_t *exp,
+		bool enabled);
+
 	/* Diagnostic counters. All monotonically increasing. */
 	typedef struct
 	{

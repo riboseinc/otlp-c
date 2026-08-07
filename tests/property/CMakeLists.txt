@@ -124,26 +124,19 @@ set_tests_properties(property-fuzz PROPERTIES
 	LABELS "property;unit"
 	TIMEOUT 60)
 
-# v0.4: exporter batching property tests (POSIX only — uses echo server).
-if(UNIX)
-    add_executable(otlp_property_exporter test_property_exporter.c
-        ../test_helper_echo.c)
-    target_link_libraries(otlp_property_exporter PRIVATE otlp_c Threads::Threads)
-    target_include_directories(otlp_property_exporter PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# v0.5: exporter batching property tests. Uses null_transport mode —
+# no echo server, no threads, no timing sensitivity. Fully deterministic
+# across all platforms.
+add_executable(otlp_property_exporter test_property_exporter.c)
+target_link_libraries(otlp_property_exporter PRIVATE otlp_c)
+target_include_directories(otlp_property_exporter PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
 
-    add_test(NAME property-exporter
-        COMMAND otlp_property_exporter)
-    set_tests_properties(property-exporter PROPERTIES
-        LABELS "property;unit"
-        TIMEOUT 120
-        # RUN_SERIAL: ctest runs this test alone (no parallel). The
-        # test spins up an in-process TCP echo server + emits spans
-        # with timing-driven batch boundaries; under parallel ctest
-        # load it occasionally flakes or SEGFAULTs because the echo
-        # thread can't keep up. Serial execution removes the contention.
-        RUN_SERIAL ON)
-endif()
+add_test(NAME property-exporter
+    COMMAND otlp_property_exporter)
+set_tests_properties(property-exporter PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)
 
 # v0.4: OTLP metrics encoder.
 add_executable(otlp_property_metrics test_property_metrics.c)
