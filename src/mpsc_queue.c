@@ -22,12 +22,16 @@
  *
  * For MPSC this is overkill (works for MPMC) but it's a well-trodden
  * pattern with no ABA on a bounded ring.
+ *
+ * Atomic operations are wrapped through src/atomic_compat.h so the
+ * library compiles on MSVC, whose <stdatomic.h> is unreliable
+ * across VS preview versions.
  */
 #include "mpsc_queue.h"
+#include "atomic_compat.h"
 #include "internal_util.h"
 
 #include <errno.h>
-#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -51,11 +55,11 @@ mpsc_queue_init(struct mpsc_queue *q, size_t capacity)
 	if (!q->slots)
 		return OTLP_ERR_NOMEM;
 	q->mask = capacity - 1;
-	atomic_store_explicit(&q->head, 0, memory_order_relaxed);
-	atomic_store_explicit(&q->tail, 0, memory_order_relaxed);
+	otlp_atomic_store_explicit(&q->head, 0, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_store_explicit(&q->tail, 0, OTLP_MEMORY_ORDER_RELAXED);
 	for (i = 0; i < capacity; i++)
-		atomic_store_explicit(
-			&q->slots[i].seq, i + 1, memory_order_relaxed);
+		otlp_atomic_store_explicit(
+			&q->slots[i].seq, i + 1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
 
@@ -76,69 +80,61 @@ mpsc_queue_push(struct mpsc_queue *q, void *item)
 	struct mpsc_slot *slot;
 	uint64_t seq;
 
-	h = atomic_load_explicit(&q->head, memory_order_relaxed);
+	h = otlp_atomic_load_explicit(&q->head, OTLP_MEMORY_ORDER_RELAXED);
 	for (;;)
 	{
 		slot = &q->slots[h & q->mask];
-		seq = atomic_load_explicit(&slot->seq, memory_order_acquire);
+		seq = otlp_atomic_load_explicit(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
 		const int64_t diff = (int64_t) seq - (int64_t) (h + 1);
 		if (diff == 0)
 		{
-			/* Slot is empty for this turn — try to claim. */
-			if (atomic_compare_exchange_weak_explicit(&q->head,
+			if (otlp_atomic_cas_weak_explicit(&q->head,
 				    &h,
 				    h + 1,
-				    memory_order_relaxed,
-				    memory_order_relaxed))
+				    OTLP_MEMORY_ORDER_RELAXED,
+				    OTLP_MEMORY_ORDER_RELAXED))
 				break;
-			/* CAS failed: h was reloaded by CAS; retry. */
 		}
 		else if (diff < 0)
 		{
-			/* Slot hasn't been released by the consumer yet
-			 * → queue is full from this producer's view. */
 			return OTLP_ERR_BUFFER_FULL;
 		}
 		else
 		{
-			/* Another producer claimed this slot; reload
-			 * head and retry. */
-			h = atomic_load_explicit(
-				&q->head, memory_order_relaxed);
+			h = otlp_atomic_load_explicit(
+				&q->head, OTLP_MEMORY_ORDER_RELAXED);
 		}
 	}
 
-	/* Claimed. Write data, then publish the slot. */
 	slot->data = item;
-	atomic_store_explicit(
-		&slot->seq, h + 1 + q->mask + 1, memory_order_release);
+	otlp_atomic_store_explicit(
+		&slot->seq, h + 1 + q->mask + 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 }
 
 void *
 mpsc_queue_pop(struct mpsc_queue *q)
 {
-	uint64_t t = atomic_load_explicit(&q->tail, memory_order_relaxed);
+	uint64_t t = otlp_atomic_load_explicit(&q->tail, OTLP_MEMORY_ORDER_RELAXED);
 	struct mpsc_slot *slot = &q->slots[t & q->mask];
-	uint64_t seq = atomic_load_explicit(&slot->seq, memory_order_acquire);
+	uint64_t seq = otlp_atomic_load_explicit(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
 	const int64_t diff = (int64_t) seq - (int64_t) (t + 1 + q->mask + 1);
 
 	if (diff != 0)
-		return NULL; /* empty or not yet published */
+		return NULL;
 
 	void *data = slot->data;
-	/* Mark the slot empty for the next turn at this index. */
-	atomic_store_explicit(
-		&slot->seq, t + q->mask + 2, memory_order_release);
-	atomic_store_explicit(&q->tail, t + 1, memory_order_relaxed);
+	otlp_atomic_store_explicit(
+		&slot->seq, t + q->mask + 2, OTLP_MEMORY_ORDER_RELEASE);
+	otlp_atomic_store_explicit(&q->tail, t + 1, OTLP_MEMORY_ORDER_RELAXED);
 	return data;
 }
 
 size_t
 mpsc_queue_size(const struct mpsc_queue *q)
 {
-	uint64_t h = atomic_load_explicit(&q->head, memory_order_relaxed);
-	uint64_t t = atomic_load_explicit(&q->tail, memory_order_relaxed);
+	uint64_t h = otlp_atomic_load_explicit(&q->head, OTLP_MEMORY_ORDER_RELAXED);
+	uint64_t t = otlp_atomic_load_explicit(&q->tail, OTLP_MEMORY_ORDER_RELAXED);
 
 	return h >= t ? (size_t) (h - t) : 0;
 }

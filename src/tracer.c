@@ -16,11 +16,11 @@
  */
 #include <otlp-c/tracer.h>
 
+#include "atomic_compat.h"
 #include "internal_util.h"
 #include "platform.h"
 #include "span_internal.h"
 
-#include <stdatomic.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +38,7 @@ struct otlp_tracer
 	char		       *scope_name;	/* owned */
 	char		       *scope_version;/* owned */
 	otlp_sampler_t       *sampler;	/* not owned; default = always_on */
-	_Atomic uint64_t	prng_state;
+	otlp_atomic_u64	prng_state;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -83,15 +83,15 @@ tracer_prng_next(struct otlp_tracer *t)
 	uint64_t old;
 	uint64_t new;
 
-	old = atomic_load_explicit(&t->prng_state, memory_order_relaxed);
+	old = otlp_atomic_load_explicit(&t->prng_state, OTLP_MEMORY_ORDER_RELAXED);
 	do
 	{
 		new = xorshift64s(old);
-	} while (!atomic_compare_exchange_weak_explicit(&t->prng_state,
+	} while (!otlp_atomic_cas_weak_explicit(&t->prng_state,
 		&old,
 		new,
-		memory_order_relaxed,
-		memory_order_relaxed));
+		OTLP_MEMORY_ORDER_RELAXED,
+		OTLP_MEMORY_ORDER_RELAXED));
 	return new;
 }
 
@@ -180,7 +180,7 @@ otlp_tracer_create(const char *service_name,
 	seed = mono ^ get_thread_id() ^ get_pid();
 	if (seed == 0)
 		seed = 0x9E3779B97F4A7C15ULL;
-	atomic_store_explicit(&t->prng_state, seed, memory_order_relaxed);
+	otlp_atomic_store_explicit(&t->prng_state, seed, OTLP_MEMORY_ORDER_RELAXED);
 	return t;
 }
 

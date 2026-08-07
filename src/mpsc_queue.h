@@ -18,23 +18,24 @@
 
 #include <otlp-c/status.h>
 
-#include <stdatomic.h>
+#include "atomic_compat.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 struct mpsc_slot
 {
-	_Atomic uint64_t seq;
+	otlp_atomic_u64 seq;
 	void *data;
 };
 
 struct mpsc_queue
 {
 	struct mpsc_slot *slots;
-	size_t mask; /* capacity - 1; capacity must be pow2 */
-	_Atomic uint64_t head; /* producer-side index */
-	_Atomic uint64_t tail; /* consumer-side index */
+	size_t mask;	       /* capacity - 1; capacity must be pow2 */
+	otlp_atomic_u64 head;  /* producer-side index */
+	otlp_atomic_u64 tail;  /* consumer-side index */
 };
 
 /* Initialise q with `capacity` slots. Capacity must be a power of
