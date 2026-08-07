@@ -29,6 +29,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "log.h"
+#include "metric.h"
 #include "span.h"
 #include "status.h"
 #include "visibility.h"
@@ -201,6 +203,24 @@ extern "C"
 		otlp_exporter_t *exp,
 		otlp_null_transport_status_fn fn,
 		void *ctx);
+
+	/* Synchronously encode and POST a single metric to the OTLP
+	 * collector at /v1/metrics. Blocks the calling thread until
+	 * the HTTP request completes (or fails). The metric is NOT
+	 * enqueued — this is a one-shot synchronous export.
+	 *
+	 * For high-volume metric streams, prefer batching. This API
+	 * is for low-frequency metric export (e.g., gauges sampled
+	 * periodically, counters flushed at shutdown). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_flush_metric(otlp_exporter_t *exp,
+		const otlp_metric_t *metric);
+
+	/* Synchronously encode and POST a single log record to the OTLP
+	 * collector at /v1/logs. Same semantics as flush_metric. */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_flush_log(otlp_exporter_t *exp,
+		const otlp_log_record_t *log);
 
 	/* Diagnostic counters. All monotonically increasing. */
 	typedef struct

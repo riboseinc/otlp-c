@@ -27,6 +27,7 @@
 #include "http_client.h"
 #include "internal_util.h"
 #include "mpsc_queue.h"
+#include "otlp_messages.h"
 #include "platform.h"
 #include "span_internal.h"
 
@@ -34,6 +35,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -574,6 +576,103 @@ otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *e,
 		e->null_transport_status_fn  = fn;
 		e->null_transport_status_ctx = ctx;
 	}
+}
+
+/* ── Synchronous metric / log flush ───────────────────────────── */
+
+static otlp_status_t
+flush_sync(struct otlp_exporter *e,
+	   const char		       *path,
+	   const uint8_t	       *body,
+	   size_t			body_len)
+{
+	struct otlp_http_url url;
+	otlp_http_request_t      *req = NULL;
+	otlp_status_t		st;
+	int			i;
+
+	if (!e || !path || (!body && body_len > 0))
+		return OTLP_ERR_NULL;
+	if (e->null_transport)
+		return OTLP_OK;
+	url = e->url;
+	snprintf(url.path, sizeof(url.path), "%s", path);
+	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len);
+	if (st != OTLP_OK)
+		return st;
+	for (i = 0; i < 30000; i++) {
+		st = otlp_http_request_step(req);
+		otlp_http_req_state_t s = otlp_http_request_state(req);
+
+		if (s == OTLP_HTTP_REQ_DONE) {
+			int http = otlp_http_request_http_status(req);
+
+			otlp_http_request_free(req);
+			if (http >= 200 && http < 300)
+				return OTLP_OK;
+			return OTLP_ERR_NETWORK;
+		}
+		if (s == OTLP_HTTP_REQ_FAILED) {
+			otlp_http_request_free(req);
+			return OTLP_ERR_NETWORK;
+		}
+		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK) {
+			otlp_http_request_free(req);
+			return st;
+		}
+#if defined(_WIN32)
+		Sleep(1);
+#else
+		{
+			struct timespec ts = { 0, 1000 * 1000 };
+			nanosleep(&ts, NULL);
+		}
+#endif
+	}
+	otlp_http_request_free(req);
+	return OTLP_ERR_TIMEOUT;
+}
+
+otlp_status_t
+otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
+{
+	struct otlp_pb_buf body = { 0 };
+	otlp_status_t     st;
+	const otlp_metric_t *arr[1];
+
+	if (!e || !m)
+		return OTLP_ERR_NULL;
+	st = otlp_pb_buf_init(&body, 0);
+	if (st != OTLP_OK)
+		return st;
+	arr[0] = m;
+	st = otlp_encode_export_metrics_service_request(
+		&body, e->service_name, NULL, NULL, arr, 1);
+	if (st == OTLP_OK)
+		st = flush_sync(e, "/v1/metrics", body.data, body.len);
+	otlp_pb_buf_free(&body);
+	return st;
+}
+
+otlp_status_t
+otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
+{
+	struct otlp_pb_buf body = { 0 };
+	otlp_status_t     st;
+	const otlp_log_record_t *arr[1];
+
+	if (!e || !lr)
+		return OTLP_ERR_NULL;
+	st = otlp_pb_buf_init(&body, 0);
+	if (st != OTLP_OK)
+		return st;
+	arr[0] = lr;
+	st = otlp_encode_export_logs_service_request(
+		&body, e->service_name, NULL, NULL, arr, 1);
+	if (st == OTLP_OK)
+		st = flush_sync(e, "/v1/logs", body.data, body.len);
+	otlp_pb_buf_free(&body);
+	return st;
 }
 
 otlp_status_t
