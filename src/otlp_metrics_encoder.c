@@ -55,6 +55,24 @@
 #define HDP_F_EXPLICIT_BOUNDS  OTLP_HDP_FIELDS[OTLP_HDP_FI_EXPLICIT_BOUNDS].number
 #define HDP_F_MIN	       OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].number
 #define HDP_F_MAX	       OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number
+#define EHDP_F_ATTRIBUTES      OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ATTRIBUTES].number
+#define EHDP_F_START_TIME      OTLP_EHDP_FIELDS[OTLP_EHDP_FI_START_TIME].number
+#define EHDP_F_TIME	       OTLP_EHDP_FIELDS[OTLP_EHDP_FI_TIME].number
+#define EHDP_F_COUNT	       OTLP_EHDP_FIELDS[OTLP_EHDP_FI_COUNT].number
+#define EHDP_F_SUM	       OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SUM].number
+#define EHDP_F_SCALE	       OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].number
+#define EHDP_F_ZERO_COUNT      OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ZERO_COUNT].number
+#define EHDP_F_POSITIVE        OTLP_EHDP_FIELDS[OTLP_EHDP_FI_POSITIVE].number
+#define EHDP_F_NEGATIVE        OTLP_EHDP_FIELDS[OTLP_EHDP_FI_NEGATIVE].number
+#define EHB_F_OFFSET	       OTLP_EHB_FIELDS[OTLP_EHB_FI_OFFSET].number
+#define EHB_F_BUCKET_COUNTS    OTLP_EHB_FIELDS[OTLP_EHB_FI_BUCKET_COUNTS].number
+
+/* Zigzag encoding for proto sint32 (scale, offset). */
+static uint32_t
+zigzag32(int32_t v)
+{
+	return ((uint32_t)v << 1) ^ (uint32_t)(v >> 31);
+}
 
 static otlp_status_t
 emit_packed_field(struct otlp_pb_buf *parent, uint32_t field_num,
@@ -236,6 +254,135 @@ out:
 	return st;
 }
 
+/* ── ExponentialHistogramDataPoint ────────────────────────────── */
+
+static otlp_status_t
+emit_exp_histogram_buckets(struct otlp_pb_buf *parent, uint32_t field_num,
+			   int32_t offset, const uint64_t *counts, size_t n)
+{
+	struct otlp_pb_buf sub = { 0 };
+	otlp_status_t	    st;
+
+	if (n == 0)
+		return OTLP_OK;
+	st = otlp_pb_buf_init(&sub, 0);
+	if (st != OTLP_OK)
+		return st;
+	/* offset: sint32 → zigzag → varint */
+	st = otlp_pb_field_varint(&sub, EHB_F_OFFSET, zigzag32(offset));
+	if (st != OTLP_OK)
+		goto out;
+	/* bucket_counts: packed repeated fixed64 */
+	{
+		struct otlp_pb_buf packed = { 0 };
+		size_t	       i;
+
+		st = otlp_pb_buf_init(&packed, 0);
+		if (st != OTLP_OK)
+			goto out;
+		for (i = 0; i < n; i++) {
+			st = otlp_pb_fixed64(&packed, counts[i]);
+			if (st != OTLP_OK) {
+				otlp_pb_buf_free(&packed);
+				goto out;
+			}
+		}
+		st = emit_packed_field(&sub, EHB_F_BUCKET_COUNTS,
+				       packed.data, packed.len);
+		otlp_pb_buf_free(&packed);
+	}
+	if (st == OTLP_OK)
+		st = otlp_pb_field_message(parent, field_num, sub.data, sub.len);
+out:
+	otlp_pb_buf_free(&sub);
+	return st;
+}
+
+static otlp_status_t
+emit_exp_histogram_data_point(struct otlp_pb_buf *parent, uint32_t field_num,
+			      const otlp_metric_t *m)
+{
+	struct otlp_pb_buf sub = { 0 };
+	otlp_status_t	    st;
+	size_t		    n;
+	const struct otlp_attribute *attrs = otlp_metric_get_attrs(m, &n);
+
+	st = otlp_pb_buf_init(&sub, 0);
+	if (st != OTLP_OK)
+		return st;
+
+	st = otlp_emit_attributes(&sub, EHDP_F_ATTRIBUTES, attrs, n);
+	if (st != OTLP_OK)
+		goto out;
+
+	if (otlp_metric_has_start(m)) {
+		st = otlp_pb_field_fixed64(&sub, EHDP_F_START_TIME,
+					   otlp_metric_get_start_time(m));
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (otlp_metric_has_time(m)) {
+		st = otlp_pb_field_fixed64(&sub, EHDP_F_TIME,
+					   otlp_metric_get_time(m));
+		if (st != OTLP_OK)
+			goto out;
+	}
+	st = otlp_pb_field_fixed64(&sub, EHDP_F_COUNT,
+				   otlp_metric_get_count(m));
+	if (st != OTLP_OK)
+		goto out;
+	{
+		uint64_t bits;
+		double   v = otlp_metric_get_sum(m);
+
+		memcpy(&bits, &v, sizeof(bits));
+		st = otlp_pb_tag(&sub, EHDP_F_SUM, OTLP_PB_WIRE_FIXED64);
+		if (st == OTLP_OK)
+			st = otlp_pb_fixed64(&sub, bits);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (otlp_metric_has_exp_scale(m)) {
+		st = otlp_pb_field_varint(&sub, EHDP_F_SCALE,
+					  zigzag32(otlp_metric_get_exp_scale(m)));
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (otlp_metric_get_exp_zero_count(m) > 0) {
+		st = otlp_pb_field_varint(&sub, EHDP_F_ZERO_COUNT,
+					  otlp_metric_get_exp_zero_count(m));
+		if (st != OTLP_OK)
+			goto out;
+	}
+	{
+		size_t	       pos_n = 0;
+		const uint64_t *pos   = otlp_metric_get_exp_pos_counts(m, &pos_n);
+
+		if (pos && pos_n > 0) {
+			st = emit_exp_histogram_buckets(&sub, EHDP_F_POSITIVE,
+				otlp_metric_get_exp_pos_offset(m), pos, pos_n);
+			if (st != OTLP_OK)
+				goto out;
+		}
+	}
+	{
+		size_t	       neg_n = 0;
+		const uint64_t *neg   = otlp_metric_get_exp_neg_counts(m, &neg_n);
+
+		if (neg && neg_n > 0) {
+			st = emit_exp_histogram_buckets(&sub, EHDP_F_NEGATIVE,
+				otlp_metric_get_exp_neg_offset(m), neg, neg_n);
+			if (st != OTLP_OK)
+				goto out;
+		}
+	}
+	st = otlp_pb_field_message(parent, field_num, sub.data, sub.len);
+
+out:
+	otlp_pb_buf_free(&sub);
+	return st;
+}
+
 /* ── Per-metric-type dispatch (table-driven, OCP) ────────────────
  *
  * Each metric type registers:
@@ -254,9 +401,12 @@ struct metric_kind_spec {
 };
 
 static const struct metric_kind_spec metric_kind_specs[] = {
-	[OTLP_METRIC_COUNTER]   = { OTLP_METRIC_FI_SUM,       emit_number_data_point   },
-	[OTLP_METRIC_GAUGE]	    = { OTLP_METRIC_FI_GAUGE,     emit_number_data_point   },
-	[OTLP_METRIC_HISTOGRAM] = { OTLP_METRIC_FI_HISTOGRAM, emit_histogram_data_point},
+	[OTLP_METRIC_COUNTER]	 = { OTLP_METRIC_FI_SUM,	  emit_number_data_point   },
+	[OTLP_METRIC_GAUGE]	 = { OTLP_METRIC_FI_GAUGE,  emit_number_data_point   },
+	[OTLP_METRIC_HISTOGRAM] = { OTLP_METRIC_FI_HISTOGRAM,
+				    emit_histogram_data_point },
+	[OTLP_METRIC_EXP_HISTOGRAM] = { OTLP_METRIC_FI_EXP_HISTOGRAM,
+					emit_exp_histogram_data_point },
 };
 
 /* Per-kind extra fields emitted inside the oneof wrapper, after the
@@ -273,6 +423,11 @@ emit_kind_extra_fields(struct otlp_pb_buf *wrapper,
 			return OTLP_ERR_NOMEM;
 		return otlp_pb_field_varint(wrapper, SUM_F_IS_MONOTONIC, 1);
 	case OTLP_METRIC_HISTOGRAM:
+		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
+					   OTLP_AGG_TEMP_CUMULATIVE);
+	case OTLP_METRIC_EXP_HISTOGRAM:
+		/* ExponentialHistogram's aggregation_temporality is also
+		 * at field 2, same position as Histogram. */
 		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
 					   OTLP_AGG_TEMP_CUMULATIVE);
 	default:

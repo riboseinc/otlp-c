@@ -1,6 +1,6 @@
 # TODO 47 — Event + Link attributes API
 
-**Status:** Spec only — implementation deferred (v0.6+)
+**Status:** Complete (v0.5.4)
 **Priority:** P2
 **Depends on:** nothing
 

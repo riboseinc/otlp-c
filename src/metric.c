@@ -63,7 +63,7 @@ otlp_metric_create(otlp_metric_type_t type, const char *name,
 {
 	struct otlp_metric *m;
 
-	if (type < OTLP_METRIC_COUNTER || type > OTLP_METRIC_HISTOGRAM)
+	if (type < OTLP_METRIC_COUNTER || type > OTLP_METRIC_EXP_HISTOGRAM)
 		return NULL;
 	m = otlp_calloc(1, sizeof(*m));
 	if (!m)
@@ -104,6 +104,8 @@ otlp_metric_free(otlp_metric_t *m)
 	otlp_free(m->description);
 	otlp_free(m->bounds);
 	otlp_free(m->bucket_counts);
+	otlp_free(m->exp_pos_counts);
+	otlp_free(m->exp_neg_counts);
 	metric_release_attrs(m);
 	otlp_free(m);
 }
@@ -147,6 +149,12 @@ otlp_metric_record(otlp_metric_t *m, double value)
 		}
 		break;
 	}
+	case OTLP_METRIC_EXP_HISTOGRAM:
+		m->count++;
+		m->sum += value;
+		if (value == 0.0)
+			m->exp_zero_count++;
+		break;
 	default:
 		return OTLP_ERR_INVALID_ARGUMENT;
 	}
@@ -265,6 +273,14 @@ otlp_metric_get_buckets(const otlp_metric_t *m)
 {
 	return m ? m->bucket_counts : NULL;
 }
+
+int32_t otlp_metric_get_exp_scale(const otlp_metric_t *m) { return m ? m->exp_scale : 0; }
+uint64_t otlp_metric_get_exp_zero_count(const otlp_metric_t *m) { return m ? m->exp_zero_count : 0; }
+int32_t otlp_metric_get_exp_pos_offset(const otlp_metric_t *m) { return m ? m->exp_pos_offset : 0; }
+const uint64_t *otlp_metric_get_exp_pos_counts(const otlp_metric_t *m, size_t *n) { if (n) *n = m ? m->exp_pos_n : 0; return m ? m->exp_pos_counts : NULL; }
+int32_t otlp_metric_get_exp_neg_offset(const otlp_metric_t *m) { return m ? m->exp_neg_offset : 0; }
+const uint64_t *otlp_metric_get_exp_neg_counts(const otlp_metric_t *m, size_t *n) { if (n) *n = m ? m->exp_neg_n : 0; return m ? m->exp_neg_counts : NULL; }
+bool otlp_metric_has_exp_scale(const otlp_metric_t *m) { return m ? m->has_exp_scale : false; }
 
 const struct otlp_attribute *
 otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n)

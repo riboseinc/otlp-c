@@ -30,6 +30,16 @@ struct otlp_metric {
 	double		   *bounds;	    /* owned, sorted */
 	size_t		    n_bounds;
 	uint64_t	   *bucket_counts;   /* n_bounds+1 entries, owned */
+	/* ExponentialHistogram: */
+	int32_t		    exp_scale;
+	uint64_t	    exp_zero_count;
+	int32_t		    exp_pos_offset;
+	uint64_t	   *exp_pos_counts;   /* owned */
+	size_t		    exp_pos_n;
+	int32_t		    exp_neg_offset;
+	uint64_t	   *exp_neg_counts;   /* owned */
+	size_t		    exp_neg_n;
+	bool		    has_exp_scale;
 };
 
 /* Accessors for encoder. */
@@ -49,6 +59,13 @@ double			otlp_metric_get_max(const otlp_metric_t *m);
 bool			otlp_metric_has_minmax(const otlp_metric_t *m);
 const double	       *otlp_metric_get_bounds(const otlp_metric_t *m, size_t *n);
 const uint64_t	       *otlp_metric_get_buckets(const otlp_metric_t *m);
+int32_t			otlp_metric_get_exp_scale(const otlp_metric_t *m);
+uint64_t		otlp_metric_get_exp_zero_count(const otlp_metric_t *m);
+int32_t			otlp_metric_get_exp_pos_offset(const otlp_metric_t *m);
+const uint64_t	       *otlp_metric_get_exp_pos_counts(const otlp_metric_t *m, size_t *n);
+int32_t			otlp_metric_get_exp_neg_offset(const otlp_metric_t *m);
+const uint64_t	       *otlp_metric_get_exp_neg_counts(const otlp_metric_t *m, size_t *n);
+bool			otlp_metric_has_exp_scale(const otlp_metric_t *m);
 const struct otlp_attribute *otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n);
 
 #endif
