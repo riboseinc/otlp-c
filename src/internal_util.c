@@ -10,6 +10,7 @@
 #include "internal_util.h"
 
 #include <otlp-c/allocator.h>
+#include "span_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -103,4 +104,50 @@ otlp_dup_bytes(const uint8_t *src, size_t len)
 		return NULL;
 	memcpy(out, src, len);
 	return out;
+}
+
+/* ── Recursive attribute free ─────────────────────────────────── */
+
+void
+otlp_attribute_free(struct otlp_attribute *a)
+{
+	size_t i;
+
+	if (!a)
+		return;
+	switch (a->type) {
+	case OTLP_ATTR_ARRAY:
+		if (a->v.array_val) {
+			for (i = 0; i < a->v.array_val->n; i++)
+				otlp_attribute_free(&a->v.array_val->items[i]);
+			otlp_free(a->v.array_val->items);
+			otlp_free(a->v.array_val);
+			a->v.array_val = NULL;
+		}
+		break;
+	case OTLP_ATTR_KVLIST:
+		if (a->v.kvlist_val) {
+			for (i = 0; i < a->v.kvlist_val->n; i++) {
+				otlp_free(a->v.kvlist_val->entries[i].key);
+				otlp_attribute_free(&a->v.kvlist_val->entries[i].value);
+			}
+			otlp_free(a->v.kvlist_val->entries);
+			otlp_free(a->v.kvlist_val);
+			a->v.kvlist_val = NULL;
+		}
+		break;
+	case OTLP_ATTR_STRING:
+		otlp_free(a->v.string_val);
+		a->v.string_val = NULL;
+		break;
+	case OTLP_ATTR_BYTES:
+		otlp_free(a->v.bytes_val.data);
+		a->v.bytes_val.data = NULL;
+		a->v.bytes_val.len = 0;
+		break;
+	default:
+		break;
+	}
+	otlp_free(a->key);
+	a->key = NULL;
 }

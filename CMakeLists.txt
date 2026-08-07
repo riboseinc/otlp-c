@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(otlp-c
-    VERSION 0.5.2
+    VERSION 0.5.3
     DESCRIPTION "Pure-C OTLP/HTTP client for OpenTelemetry"
     HOMEPAGE_URL "https://github.com/riboseinc/otlp-c"
     LANGUAGES C
@@ -157,6 +157,13 @@ if(OTLP_C_BUILD_BENCH)
 endif()
 
 # Install
+# Pin LIBDIR to "lib" before GNUInstallDirs so the cmake config files
+# land at a single deterministic path on every platform
+# (<prefix>/lib/cmake/otlp-c/). Without this, GNUInstallDirs on
+# Windows MSVC chooses "lib/x64" or similar arch-suffixed paths,
+# and find_package(otlp-c CONFIG) from a consumer CMakeLists can't
+# locate the config without extra hints.
+set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "" FORCE)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 

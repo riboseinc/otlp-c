@@ -24,22 +24,39 @@
  * otlp_schema.h (OTLP_AV_FI_*). This alignment lets the encoder
  * look up the field spec via OTLP_AV_FIELDS[attr->type] without
  * a switch — OCP: adding a new type is a table entry, not a new
- * case statement. Gaps (ARRAY_VALUE=4, KVLIST_VALUE=5) are
- * reserved for future attribute variants. */
+ * case statement. */
 enum otlp_attr_type
 {
 	OTLP_ATTR_STRING	    = 0, /* OTLP_AV_FI_STRING  (field 1) */
 	OTLP_ATTR_BOOL		    = 1, /* OTLP_AV_FI_BOOL    (field 2) */
 	OTLP_ATTR_INT64	    = 2, /* OTLP_AV_FI_INT64   (field 3) */
 	OTLP_ATTR_DOUBLE	    = 3, /* OTLP_AV_FI_DOUBLE  (field 4) */
-	/* 4 = OTLP_AV_FI_ARRAY_VALUE (deferred) */
-	/* 5 = OTLP_AV_FI_KVLIST_VALUE (deferred) */
+	OTLP_ATTR_ARRAY	    = 4, /* OTLP_AV_FI_ARRAY_VALUE (field 5) */
+	OTLP_ATTR_KVLIST	    = 5, /* OTLP_AV_FI_KVLIST_VALUE (field 6) */
 	OTLP_ATTR_BYTES	    = 6, /* OTLP_AV_FI_BYTES   (field 7) */
 };
 
+/* ArrayValue: a list of AnyValue. Each item is an otlp_attribute
+ * (key is unused / NULL inside an array — keys only exist on
+ * KeyValue). Recursive: an array element can itself be array/kvlist.
+ *
+ * KeyValueList: a list of (key, AnyValue) pairs.
+ *
+ * Lifetime: array_val / kvlist_val are owned by the containing
+ * attribute; freeing the attribute frees the whole tree via
+ * otlp_attribute_free. */
+
+/* Forward declarations: otlp_attribute contains pointers to array
+ * and kvlist; array and kvlist contain otlp_attribute by value.
+ * Define otlp_attribute first (with pointer members to incomplete
+ * forward-declared types), then the contained types. */
+struct otlp_attr_array;
+struct otlp_attr_kvlist;
+
 struct otlp_attribute
 {
-	char *key; /* owned, NULL-terminated */
+	char *key; /* owned, NULL-terminated; NULL when this attribute
+		    * is an AnyValue inside an ArrayValue */
 	enum otlp_attr_type type;
 	union
 	{
@@ -52,8 +69,33 @@ struct otlp_attribute
 			uint8_t *data; /* owned */
 			size_t len;
 		} bytes_val;
+		struct otlp_attr_array  *array_val;  /* owned */
+		struct otlp_attr_kvlist *kvlist_val; /* owned */
 	} v;
 };
+
+struct otlp_attr_array
+{
+	struct otlp_attribute *items;  /* owned, count = n */
+	size_t		       n;
+};
+
+struct otlp_attr_kvlist_entry
+{
+	char		       *key;   /* owned */
+	struct otlp_attribute value;
+};
+
+struct otlp_attr_kvlist
+{
+	struct otlp_attr_kvlist_entry *entries;  /* owned, count = n */
+	size_t				 n;
+};
+
+/* Recursively free an attribute's owned memory (key, value, and
+ * any nested array/kvlist children). The attribute struct itself
+ * is NOT freed (it may be embedded in an array). Safe with NULL. */
+void otlp_attribute_free(struct otlp_attribute *a);
 
 /* Span.Event — opentelemetry-proto Span.Event. v0.5 supports
  * name + time only; attributes are deferred (the API stubs accept

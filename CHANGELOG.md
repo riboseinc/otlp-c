@@ -4,6 +4,53 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-08-07
+
+Architectural completion + install-path fix.
+
+### Added — AnyValue variants (OCP gap closed)
+
+- `OTLP_ATTR_ARRAY` and `OTLP_ATTR_KVLIST` AnyValue variants
+  added to the attribute type enum and union (`src/span_internal.h`).
+  The AnyValue oneof dispatch table in `otlp_messages.c` is now
+  fully populated — all seven proto variants have encoder functions.
+  Schema tables for `ArrayValue{1}` and `KeyValueList{1}` added to
+  `otlp_schema.h`. Recursive: array items can themselves be
+  array/kvlist.
+- `otlp_attribute_free(struct otlp_attribute *)`: recursive free
+  that handles owned strings, bytes, and nested arrays/kvlists.
+  In `internal_util.c`.
+
+### Fixed
+
+- **Windows CMake `find_package` install-path**: pinned
+  `CMAKE_INSTALL_LIBDIR` to `"lib"` before `include(GNUInstallDirs)`
+  so the cmake config files land at `<prefix>/lib/cmake/otlp-c/`
+  on every platform. Previously, GNUInstallDirs on Windows MSVC
+  chose `"lib/x64"` or similar arch-suffixed paths, breaking the
+  consumer `find_package(otlp-c CONFIG)` call.
+- Removed `continue-on-error` for the Windows CMake find_package
+  CI entry — the install path is now deterministic.
+
+### Specs
+
+Five new TODO files documenting deferred architectural work, each
+with full design notes (not just goals):
+
+- `TODO.complete/46-exponential-histogram.md` — the last standard
+  metric type. Schema entries + dispatch table slot reserved.
+- `TODO.complete/47-event-link-attributes.md` — builder-pattern API
+  for events + links with attributes.
+- `TODO.complete/48-tracestate-in-context.md` — `otlp_context_t`
+  carrying up to 32 vendor tracestate entries.
+- `TODO.complete/49-slab-integration.md` — wire slab into global
+  allocator via `otlp_install_slab_allocator`.
+- `TODO.complete/50-deterministic-test-transport.md` — mock HTTP
+  transport interface to fix property-exporter flake.
+
+These are spec-only for v0.5.x. Each has acceptance criteria so
+the implementation work is well-scoped.
+
 ## [0.5.2] - 2026-08-07
 
 CI / runner hygiene release. No code changes; same library as 0.5.1.
