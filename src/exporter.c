@@ -437,7 +437,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 				(e->first_pending_set &&
 					now_mono_ms() - e->first_pending_mono >=
 						e->batch_ms) ||
-				(atomic_load_explicit(&e->shutdown_requested,
+				(otlp_atomic_load_int(&e->shutdown_requested,
 					 OTLP_MEMORY_ORDER_RELAXED) &&
 					e->pending_count > 0)))
 		{
@@ -504,9 +504,13 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		 * the deadline instead of returning immediately. */
 		if (!work_done && e->backoff_armed && !e->in_flight)
 		{
+#if defined(_WIN32)
+			Sleep(1); /* 1ms */
+#else
 			struct timespec ts = { 0, 1 * 1000 * 1000 /* 1ms */ };
 			nanosleep(&ts, NULL);
-			work_done = true;  /* keep the loop alive */
+#endif
+			work_done = true;
 		}
 
 		if (!work_done)
@@ -577,19 +581,19 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 {
 	if (!e || !out)
 		return OTLP_ERR_NULL;
-	out->emitted = atomic_load_explicit(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted = otlp_atomic_load_u64(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
 	out->dropped_full =
-		atomic_load_explicit(&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
 	out->dropped_err =
-		atomic_load_explicit(&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->sent = atomic_load_explicit(&e->sent, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->sent = otlp_atomic_load_u64(&e->sent, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_2xx =
-		atomic_load_explicit(&e->http_2xx, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->http_2xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_4xx =
-		atomic_load_explicit(&e->http_4xx, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->http_4xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_5xx =
-		atomic_load_explicit(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->network_err =
-		atomic_load_explicit(&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_load_u64(&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
