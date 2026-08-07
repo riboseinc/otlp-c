@@ -40,15 +40,14 @@ if(UNIX)
         COMMAND otlp_test_concurrency_stress)
     set_tests_properties(concurrency-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
 
-    # Phase 12 finish: exporter retry + permanent-failure paths.
-    add_executable(otlp_test_exporter_retry
-        test_exporter_retry.c test_helper_echo.c)
-    target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c Threads::Threads)
+    # Exporter retry test: uses null_transport mode — no echo server,
+    # no threads, no timing sensitivity. Runs on all platforms.
+    add_executable(otlp_test_exporter_retry test_exporter_retry.c)
+    target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c)
     add_test(NAME exporter-retry
         COMMAND otlp_test_exporter_retry)
     set_tests_properties(exporter-retry PROPERTIES
-        LABELS "unit" TIMEOUT 30
-        RUN_SERIAL ON)
+        LABELS "unit" TIMEOUT 30)
 endif()
 
 # Custom allocator hook test.
