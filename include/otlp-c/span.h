@@ -166,27 +166,27 @@ otlp_status_t otlp_span_set_status(otlp_span_t *span,
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_sampled(otlp_span_t *span, bool sampled);
 
-/* ── Deferred OTLP fields (v0.2+) ───────────────────────────────
+/* ── Events / Links / TraceState ────────────────────────────────
  *
- * The following setters cover OTLP span fields that v0.1.x emits as
- * empty (status OK + zero count). They are stubbed returning
- * OTLP_ERR_NOT_IMPLEMENTED so the API surface documents what's
- * missing. Tracked in TODO.complete/phase-13-spec-deferred-stubs.md.
- */
+ * Span.Event, Span.Link, and trace_state complete the OTLP Span
+ * message. Events carry a name + timestamp (attributes deferred to
+ * a future API extension). Links reference another trace/span pair
+ * (trace_state, attributes, flags deferred). trace_state propagates
+ * vendor-specific trace context (W3C tracestate header).
+ *
+ * Fixed-cap storage: max 64 events, 64 links per span. Overflow
+ * returns OTLP_ERR_OVERFLOW. */
 
-/* Append a Span.Event (OTLP field 11, repeated). v0.1.x: NOT_IMPLEMENTED. */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_add_event(otlp_span_t *span,
 				  const char *name,
 				  uint64_t time_unix_nano);
 
-/* Append a Span.Link (OTLP field 13, repeated). v0.1.x: NOT_IMPLEMENTED. */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_add_link(otlp_span_t *span,
 				 const uint8_t *trace_id,
 				 const uint8_t *span_id);
 
-/* Set the W3C tracestate header (OTLP field 3). v0.1.x: NOT_IMPLEMENTED. */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_trace_state(otlp_span_t *span,
 					const char *trace_state);

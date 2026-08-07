@@ -24,6 +24,8 @@
 #include <string.h>
 
 #define OTLP_SPAN_MAX_ATTRIBUTES 128
+#define OTLP_SPAN_MAX_EVENTS	  64
+#define OTLP_SPAN_MAX_LINKS	  64
 
 struct otlp_span
 {
@@ -42,6 +44,11 @@ struct otlp_span
 	otlp_status_code_t status_code;
 	char *status_message; /* owned, may be NULL */
 	bool sampled;
+	char *trace_state;		       /* owned, may be NULL */
+	struct otlp_event events[OTLP_SPAN_MAX_EVENTS];
+	size_t n_events;
+	struct otlp_link links[OTLP_SPAN_MAX_LINKS];
+	size_t n_links;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -141,10 +148,15 @@ otlp_span_create(const char *name)
 void
 otlp_span_free(otlp_span_t *span)
 {
+	size_t i;
+
 	if (!span)
 		return;
 	otlp_free(span->name);
 	otlp_free(span->status_message);
+	otlp_free(span->trace_state);
+	for (i = 0; i < span->n_events; i++)
+		otlp_free(span->events[i].name);
 	span_release_attrs(span);
 	otlp_free(span);
 }
@@ -390,39 +402,64 @@ otlp_span_set_sampled(otlp_span_t *span, bool sampled)
 	return OTLP_OK;
 }
 
-/* ── Deferred OTLP fields (v0.2+) ─────────────────────────────── */
+/* ── Deferred OTLP fields ─────────────────────────────────────── */
 
 otlp_status_t
 otlp_span_add_event(otlp_span_t *span,
-	const char *name,
-	uint64_t time_unix_nano)
+		    const char *name,
+		    uint64_t time_unix_nano)
 {
-	(void)name;
-	(void)time_unix_nano;
+	char *name_copy;
+
 	if (!span)
 		return OTLP_ERR_NULL;
-	return OTLP_ERR_NOT_IMPLEMENTED;
+	if (!name)
+		return OTLP_ERR_NULL;
+	if (span->n_events >= OTLP_SPAN_MAX_EVENTS)
+		return OTLP_ERR_OVERFLOW;
+	name_copy = otlp_dup_str(name);
+	if (!name_copy)
+		return OTLP_ERR_NOMEM;
+	span->events[span->n_events].name = name_copy;
+	span->events[span->n_events].time_unix_nano = time_unix_nano;
+	span->n_events++;
+	return OTLP_OK;
 }
 
 otlp_status_t
 otlp_span_add_link(otlp_span_t *span,
-	const uint8_t *trace_id,
-	const uint8_t *span_id)
+		   const uint8_t *trace_id,
+		   const uint8_t *span_id)
 {
-	(void)trace_id;
-	(void)span_id;
 	if (!span)
 		return OTLP_ERR_NULL;
-	return OTLP_ERR_NOT_IMPLEMENTED;
+	if (!trace_id || !span_id)
+		return OTLP_ERR_NULL;
+	if (span->n_links >= OTLP_SPAN_MAX_LINKS)
+		return OTLP_ERR_OVERFLOW;
+	memcpy(span->links[span->n_links].trace_id,
+	       trace_id, OTLP_TRACE_ID_LEN);
+	memcpy(span->links[span->n_links].span_id,
+	       span_id, OTLP_SPAN_ID_LEN);
+	span->n_links++;
+	return OTLP_OK;
 }
 
 otlp_status_t
 otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 {
-	(void)trace_state;
+	char *copy = NULL;
+
 	if (!span)
 		return OTLP_ERR_NULL;
-	return OTLP_ERR_NOT_IMPLEMENTED;
+	if (trace_state) {
+		copy = otlp_dup_str(trace_state);
+		if (!copy)
+			return OTLP_ERR_NOMEM;
+	}
+	otlp_free(span->trace_state);
+	span->trace_state = copy;
+	return OTLP_OK;
 }
 
 /* ── Internal accessors (see span_internal.h) ─────────────────── */
@@ -505,6 +542,38 @@ otlp_span_is_sampled(const otlp_span_t *span)
 	return span ? span->sampled : false;
 }
 
+const struct otlp_event *
+otlp_span_get_events(const otlp_span_t *span, size_t *n_out)
+{
+	if (!span) {
+		if (n_out)
+			*n_out = 0;
+		return NULL;
+	}
+	if (n_out)
+		*n_out = span->n_events;
+	return span->events;
+}
+
+const struct otlp_link *
+otlp_span_get_links(const otlp_span_t *span, size_t *n_out)
+{
+	if (!span) {
+		if (n_out)
+			*n_out = 0;
+		return NULL;
+	}
+	if (n_out)
+		*n_out = span->n_links;
+	return span->links;
+}
+
+const char *
+otlp_span_get_trace_state(const otlp_span_t *span)
+{
+	return span ? span->trace_state : NULL;
+}
+
 const struct otlp_attribute *
 otlp_span_get_attrs(const otlp_span_t *span, size_t *n_out)
 {
@@ -524,7 +593,9 @@ otlp_span_clone(const otlp_span_t *src)
 {
 	otlp_span_t *dst;
 	const struct otlp_attribute *attrs;
-	size_t n_attrs;
+	const struct otlp_event *events;
+	const struct otlp_link *links;
+	size_t n_attrs, n_events, n_links;
 	size_t i;
 
 	if (!src)
@@ -551,6 +622,15 @@ otlp_span_clone(const otlp_span_t *src)
 	{
 		dst->status_message = otlp_dup_str(src->status_message);
 		if (!dst->status_message)
+		{
+			otlp_span_free(dst);
+			return NULL;
+		}
+	}
+	if (src->trace_state)
+	{
+		dst->trace_state = otlp_dup_str(src->trace_state);
+		if (!dst->trace_state)
 		{
 			otlp_span_free(dst);
 			return NULL;
@@ -590,6 +670,32 @@ otlp_span_clone(const otlp_span_t *src)
 					attrs[i].v.bytes_val.len);
 				break;
 		}
+		if (st != OTLP_OK)
+		{
+			otlp_span_free(dst);
+			return NULL;
+		}
+	}
+
+	events = otlp_span_get_events(src, &n_events);
+	for (i = 0; i < n_events; i++)
+	{
+		otlp_status_t st = otlp_span_add_event(dst,
+						       events[i].name,
+						       events[i].time_unix_nano);
+		if (st != OTLP_OK)
+		{
+			otlp_span_free(dst);
+			return NULL;
+		}
+	}
+
+	links = otlp_span_get_links(src, &n_links);
+	for (i = 0; i < n_links; i++)
+	{
+		otlp_status_t st = otlp_span_add_link(dst,
+						      links[i].trace_id,
+						      links[i].span_id);
 		if (st != OTLP_OK)
 		{
 			otlp_span_free(dst);

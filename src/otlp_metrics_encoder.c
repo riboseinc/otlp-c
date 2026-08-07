@@ -2,37 +2,20 @@
 /*
  * OTLP Metrics encoder. Produces ExportMetricsServiceRequest wire bytes.
  *
+ * All field numbers come from src/otlp_schema.h (single source of
+ * truth). The encoder is table-driven for the per-metric-type
+ * dispatch (counter / gauge / histogram): adding a new metric type
+ * (e.g., ExponentialHistogram) means adding one schema table entry,
+ * one encoder function, and one dispatch-table slot — no switch to
+ * modify. OCP.
+ *
  * Reuses shared helpers from otlp_messages.c (otlp_emit_resource,
  * otlp_emit_instrumentation_scope, otlp_encode_key_value) so the
- * resource/scope envelope is identical to traces. Only the per-signal
- * body (Metric / DataPoint) is metrics-specific.
- *
- * Schema (opentelemetry-proto):
- *   ExportMetricsServiceRequest { repeated ResourceMetrics resource_metrics = 1; }
- *   ResourceMetrics { Resource resource = 1; repeated ScopeMetrics scope_metrics = 2; }
- *   ScopeMetrics { InstrumentationScope scope = 1; repeated Metric metrics = 2; }
- *   Metric { string name = 1; string description = 2; string unit = 3;
- *            oneof data { Gauge gauge = 5; Sum sum = 7; Histogram histogram = 9; ... } }
- *   Sum    { repeated NumberDataPoint data_points = 1;
- *            AggregationTemporality aggregation_temporality = 2; bool is_monotonic = 3; }
- *   Gauge  { repeated NumberDataPoint data_points = 1; }
- *   Histogram { repeated HistogramDataPoint data_points = 1;
- *               AggregationTemporality aggregation_temporality = 2; }
- *   NumberDataPoint { repeated KeyValue attributes = 1;
- *                     fixed64 start_time_unix_nano = 2;
- *                     fixed64 time_unix_nano = 3;
- *                     oneof value { double as_double = 4; sfixed64 as_int = 6; ... } }
- *   HistogramDataPoint { repeated KeyValue attributes = 1;
- *                        fixed64 start_time_unix_nano = 2;
- *                        fixed64 time_unix_nano = 3;
- *                        fixed64 count = 4;
- *                        double sum = 5;
- *                        repeated fixed64 bucket_counts = 6;     // packed
- *                        repeated double explicit_bounds = 7;    // packed
- *                        ... min/max = 9/10; }
+ * resource/scope envelope is identical across signals. DRY.
  */
 #include "metric_internal.h"
 #include "otlp_messages.h"
+#include "otlp_schema.h"
 #include "platform.h"
 #include "protobuf_encode.h"
 
@@ -41,46 +24,37 @@
 #include <stdint.h>
 #include <string.h>
 
-#define EMSR_F_RESOURCE_METRICS 1
-#define RM_F_RESOURCE		 1
-#define RM_F_SCOPE_METRICS	 2
-#define SM_F_SCOPE		 1
-#define SM_F_METRICS		 2
-#define METRIC_F_NAME		 1
-#define METRIC_F_DESCRIPTION	 2
-#define METRIC_F_UNIT		 3
-#define METRIC_F_GAUGE		 5
-#define METRIC_F_SUM		 7
-#define METRIC_F_HISTOGRAM	 9
-#define SUM_F_DATA_POINTS	 1
-#define SUM_F_AGG_TEMP		 2
-#define SUM_F_IS_MONOTONIC	 3
-#define GAUGE_F_DATA_POINTS	 1
-#define HIST_F_DATA_POINTS	 1
-#define HIST_F_AGG_TEMP		 2
-#define NDP_F_ATTRIBUTES	 1
-#define NDP_F_START_TIME	 2
-#define NDP_F_TIME		 3
-#define NDP_F_AS_DOUBLE		 4
-#define HDP_F_ATTRIBUTES	 1
-#define HDP_F_START_TIME	 2
-#define HDP_F_TIME		 3
-#define HDP_F_COUNT		 4
-#define HDP_F_SUM		 5
-#define HDP_F_BUCKET_COUNTS	 6
-#define HDP_F_EXPLICIT_BOUNDS	 7
-#define HDP_F_MIN		 9
-#define HDP_F_MAX	 10
-
-/* Append a packed repeated field (tag + len + payload) to `parent`. */
-static otlp_status_t
-emit_packed_field(struct otlp_pb_buf *parent, uint32_t field_num,
-		  const uint8_t *payload, size_t payload_len)
-{
-	if (payload_len == 0)
-		return OTLP_OK;
-	return otlp_pb_field_bytes(parent, field_num, payload, payload_len);
-}
+/* Field-number accessors — single source of truth is otlp_schema.h. */
+#define EMSR_F_RESOURCE_METRICS OTLP_EMSR_FIELDS[OTLP_EMSR_FI_RESOURCE_METRICS].number
+#define RM_F_RESOURCE	       OTLP_RM_FIELDS[OTLP_RM_FI_RESOURCE].number
+#define RM_F_SCOPE_METRICS     OTLP_RM_FIELDS[OTLP_RM_FI_SCOPE_METRICS].number
+#define SM_F_SCOPE	       OTLP_SM_FIELDS[OTLP_SM_FI_SCOPE].number
+#define SM_F_METRICS	       OTLP_SM_FIELDS[OTLP_SM_FI_METRICS].number
+#define METRIC_F_NAME	       OTLP_METRIC_FIELDS[OTLP_METRIC_FI_NAME].number
+#define METRIC_F_DESCRIPTION    OTLP_METRIC_FIELDS[OTLP_METRIC_FI_DESCRIPTION].number
+#define METRIC_F_UNIT	       OTLP_METRIC_FIELDS[OTLP_METRIC_FI_UNIT].number
+#define METRIC_F_GAUGE	       OTLP_METRIC_FIELDS[OTLP_METRIC_FI_GAUGE].number
+#define METRIC_F_SUM	       OTLP_METRIC_FIELDS[OTLP_METRIC_FI_SUM].number
+#define METRIC_F_HISTOGRAM      OTLP_METRIC_FIELDS[OTLP_METRIC_FI_HISTOGRAM].number
+#define SUM_F_DATA_POINTS       OTLP_SUM_FIELDS[OTLP_SUM_FI_DATA_POINTS].number
+#define SUM_F_AGG_TEMP	       OTLP_SUM_FIELDS[OTLP_SUM_FI_AGG_TEMP].number
+#define SUM_F_IS_MONOTONIC      OTLP_SUM_FIELDS[OTLP_SUM_FI_IS_MONOTONIC].number
+#define GAUGE_F_DATA_POINTS     OTLP_GAUGE_FIELDS[OTLP_GAUGE_FI_DATA_POINTS].number
+#define HIST_F_DATA_POINTS      OTLP_HIST_FIELDS[OTLP_HIST_FI_DATA_POINTS].number
+#define HIST_F_AGG_TEMP	       OTLP_HIST_FIELDS[OTLP_HIST_FI_AGG_TEMP].number
+#define NDP_F_ATTRIBUTES       OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number
+#define NDP_F_START_TIME       OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number
+#define NDP_F_TIME	       OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number
+#define NDP_F_AS_DOUBLE        OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].number
+#define HDP_F_ATTRIBUTES       OTLP_HDP_FIELDS[OTLP_HDP_FI_ATTRIBUTES].number
+#define HDP_F_START_TIME       OTLP_HDP_FIELDS[OTLP_HDP_FI_START_TIME].number
+#define HDP_F_TIME	       OTLP_HDP_FIELDS[OTLP_HDP_FI_TIME].number
+#define HDP_F_COUNT	       OTLP_HDP_FIELDS[OTLP_HDP_FI_COUNT].number
+#define HDP_F_SUM	       OTLP_HDP_FIELDS[OTLP_HDP_FI_SUM].number
+#define HDP_F_BUCKET_COUNTS    OTLP_HDP_FIELDS[OTLP_HDP_FI_BUCKET_COUNTS].number
+#define HDP_F_EXPLICIT_BOUNDS  OTLP_HDP_FIELDS[OTLP_HDP_FI_EXPLICIT_BOUNDS].number
+#define HDP_F_MIN	       OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].number
+#define HDP_F_MAX	       OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number
 
 static otlp_status_t
 emit_attributes(struct otlp_pb_buf *sub, uint32_t field_num,
@@ -103,6 +77,16 @@ emit_attributes(struct otlp_pb_buf *sub, uint32_t field_num,
 			return st;
 	}
 	return OTLP_OK;
+}
+
+/* Append a packed repeated field (tag + len + payload). */
+static otlp_status_t
+emit_packed_field(struct otlp_pb_buf *parent, uint32_t field_num,
+		  const uint8_t *payload, size_t payload_len)
+{
+	if (payload_len == 0)
+		return OTLP_OK;
+	return otlp_pb_field_bytes(parent, field_num, payload, payload_len);
 }
 
 static otlp_status_t
@@ -185,13 +169,11 @@ emit_histogram_data_point(struct otlp_pb_buf *parent, uint32_t field_num,
 			goto out;
 	}
 
-	/* count (fixed64, always emit). */
 	st = otlp_pb_field_fixed64(&sub, HDP_F_COUNT,
 				   otlp_metric_get_count(m));
 	if (st != OTLP_OK)
 		goto out;
 
-	/* sum (double, fixed64, always emit). */
 	{
 		uint64_t bits;
 		double   v = otlp_metric_get_sum(m);
@@ -278,12 +260,57 @@ out:
 	return st;
 }
 
+/* ── Per-metric-type dispatch (table-driven, OCP) ────────────────
+ *
+ * Each metric type registers:
+ *   - the Metric oneof field number it emits as (e.g., Sum=7)
+ *   - the encoder function for the data point body
+ *
+ * Adding a new metric type is a table entry, not a switch mod.
+ */
+
+typedef otlp_status_t (*metric_data_point_fn)(
+    struct otlp_pb_buf *parent, uint32_t field_num, const otlp_metric_t *m);
+
+struct metric_kind_spec {
+	unsigned		  oneof_field_index;
+	metric_data_point_fn  data_point_encode;
+};
+
+static const struct metric_kind_spec metric_kind_specs[] = {
+	[OTLP_METRIC_COUNTER]   = { OTLP_METRIC_FI_SUM,       emit_number_data_point   },
+	[OTLP_METRIC_GAUGE]	    = { OTLP_METRIC_FI_GAUGE,     emit_number_data_point   },
+	[OTLP_METRIC_HISTOGRAM] = { OTLP_METRIC_FI_HISTOGRAM, emit_histogram_data_point},
+};
+
+/* Per-kind extra fields emitted inside the oneof wrapper, after the
+ * data points. Counter requires agg_temp + is_monotonic; Histogram
+ * requires agg_temp; Gauge has none. */
+static otlp_status_t
+emit_kind_extra_fields(struct otlp_pb_buf *wrapper,
+		       otlp_metric_type_t kind)
+{
+	switch (kind) {
+	case OTLP_METRIC_COUNTER:
+		if (otlp_pb_field_varint(wrapper, SUM_F_AGG_TEMP,
+					 OTLP_AGG_TEMP_CUMULATIVE) != OTLP_OK)
+			return OTLP_ERR_NOMEM;
+		return otlp_pb_field_varint(wrapper, SUM_F_IS_MONOTONIC, 1);
+	case OTLP_METRIC_HISTOGRAM:
+		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
+					   OTLP_AGG_TEMP_CUMULATIVE);
+	default:
+		return OTLP_OK;
+	}
+}
+
 static otlp_status_t
 emit_metric(struct otlp_pb_buf *parent, uint32_t field_num,
 	    const otlp_metric_t *m)
 {
 	struct otlp_pb_buf sub = { 0 };
 	otlp_status_t	    st;
+	otlp_metric_type_t  kind = otlp_metric_get_type(m);
 
 	st = otlp_pb_buf_init(&sub, 0);
 	if (st != OTLP_OK)
@@ -308,62 +335,25 @@ emit_metric(struct otlp_pb_buf *parent, uint32_t field_num,
 			goto out;
 	}
 
-	switch (otlp_metric_get_type(m)) {
-	case OTLP_METRIC_COUNTER: {
-		struct otlp_pb_buf sum_msg = { 0 };
+	/* Table-driven dispatch on metric kind. */
+	if ((unsigned)kind < sizeof(metric_kind_specs) / sizeof(metric_kind_specs[0]) &&
+	    metric_kind_specs[kind].data_point_encode) {
+		const struct metric_kind_spec *spec = &metric_kind_specs[kind];
+		uint32_t oneof_field = OTLP_METRIC_FIELDS[spec->oneof_field_index].number;
+		struct otlp_pb_buf wrapper = { 0 };
 
-		st = otlp_pb_buf_init(&sum_msg, 0);
+		st = otlp_pb_buf_init(&wrapper, 0);
 		if (st != OTLP_OK)
 			goto out;
-		st = emit_number_data_point(&sum_msg, SUM_F_DATA_POINTS, m);
+		st = spec->data_point_encode(&wrapper, 1, m);
 		if (st == OTLP_OK)
-			st = otlp_pb_field_varint(&sum_msg, SUM_F_AGG_TEMP,
-						  OTLP_AGG_TEMP_CUMULATIVE);
+			st = emit_kind_extra_fields(&wrapper, kind);
 		if (st == OTLP_OK)
-			st = otlp_pb_field_varint(&sum_msg, SUM_F_IS_MONOTONIC, 1);
-		if (st == OTLP_OK)
-			st = otlp_pb_field_message(&sub, METRIC_F_SUM,
-						   sum_msg.data, sum_msg.len);
-		otlp_pb_buf_free(&sum_msg);
+			st = otlp_pb_field_message(&sub, oneof_field,
+						   wrapper.data, wrapper.len);
+		otlp_pb_buf_free(&wrapper);
 		if (st != OTLP_OK)
 			goto out;
-		break;
-	}
-	case OTLP_METRIC_GAUGE: {
-		struct otlp_pb_buf gauge_msg = { 0 };
-
-		st = otlp_pb_buf_init(&gauge_msg, 0);
-		if (st != OTLP_OK)
-			goto out;
-		st = emit_number_data_point(&gauge_msg, GAUGE_F_DATA_POINTS, m);
-		if (st == OTLP_OK)
-			st = otlp_pb_field_message(&sub, METRIC_F_GAUGE,
-						   gauge_msg.data, gauge_msg.len);
-		otlp_pb_buf_free(&gauge_msg);
-		if (st != OTLP_OK)
-			goto out;
-		break;
-	}
-	case OTLP_METRIC_HISTOGRAM: {
-		struct otlp_pb_buf hist_msg = { 0 };
-
-		st = otlp_pb_buf_init(&hist_msg, 0);
-		if (st != OTLP_OK)
-			goto out;
-		st = emit_histogram_data_point(&hist_msg, HIST_F_DATA_POINTS, m);
-		if (st == OTLP_OK)
-			st = otlp_pb_field_varint(&hist_msg, HIST_F_AGG_TEMP,
-						  OTLP_AGG_TEMP_CUMULATIVE);
-		if (st == OTLP_OK)
-			st = otlp_pb_field_message(&sub, METRIC_F_HISTOGRAM,
-						   hist_msg.data, hist_msg.len);
-		otlp_pb_buf_free(&hist_msg);
-		if (st != OTLP_OK)
-			goto out;
-		break;
-	}
-	default:
-		break;
 	}
 
 	st = otlp_pb_field_message(parent, field_num, sub.data, sub.len);

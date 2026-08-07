@@ -20,8 +20,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Attribute types map 1:1 to the OTLP AnyValue oneof variants we
- * support in v0.1.0. ArrayValue and KeyValueList are post-1.0. */
 /* Attribute types map 1:1 to the AnyValue oneof field indices in
  * otlp_schema.h (OTLP_AV_FI_*). This alignment lets the encoder
  * look up the field spec via OTLP_AV_FIELDS[attr->type] without
@@ -55,6 +53,24 @@ struct otlp_attribute
 			size_t len;
 		} bytes_val;
 	} v;
+};
+
+/* Span.Event — opentelemetry-proto Span.Event. v0.5 supports
+ * name + time only; attributes are deferred (the API stubs accept
+ * no attributes either). */
+struct otlp_event
+{
+	char	   *name;		/* owned */
+	uint64_t    time_unix_nano;
+};
+
+/* Span.Link — opentelemetry-proto Span.Link. v0.5 supports
+ * trace_id + span_id only; trace_state, attributes, and flags are
+ * deferred (the API stubs accept only the IDs). */
+struct otlp_link
+{
+	uint8_t trace_id[OTLP_TRACE_ID_LEN];
+	uint8_t span_id[OTLP_SPAN_ID_LEN];
 };
 
 /* ── Read-only accessors for the encoder ────────────────────────
@@ -95,6 +111,14 @@ bool otlp_span_is_sampled(const otlp_span_t *span);
  * count to *n_out. The array is owned by the span. */
 const struct otlp_attribute *
 otlp_span_get_attrs(const otlp_span_t *span, size_t *n_out);
+
+/* Events / links / trace_state accessors (v0.5+). */
+const struct otlp_event *
+otlp_span_get_events(const otlp_span_t *span, size_t *n_out);
+const struct otlp_link *
+otlp_span_get_links(const otlp_span_t *span, size_t *n_out);
+const char *
+otlp_span_get_trace_state(const otlp_span_t *span);
 
 /* Deep-clone a span. Returns NULL on allocation failure. The caller
  * owns the result. Used by the exporter's emit() to honor the

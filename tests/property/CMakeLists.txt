@@ -160,3 +160,15 @@ add_test(NAME property-logs
 set_tests_properties(property-logs PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5: span events / links / trace_state + SpanContext propagation.
+add_executable(otlp_property_events_context test_property_events_context.c)
+target_link_libraries(otlp_property_events_context PRIVATE otlp_c)
+target_include_directories(otlp_property_events_context PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-events-context
+    COMMAND otlp_property_events_context)
+set_tests_properties(property-events-context PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

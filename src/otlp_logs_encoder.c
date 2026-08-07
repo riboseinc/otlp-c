@@ -2,28 +2,15 @@
 /*
  * OTLP Logs encoder. Produces ExportLogsServiceRequest wire bytes.
  *
- * Reuses shared helpers from otlp_messages.c (otlp_emit_resource,
- * otlp_emit_instrumentation_scope, otlp_encode_any_value) so the
- * resource/scope envelope is identical to traces. Only the per-signal
- * body (LogRecord) is logs-specific.
- *
- * Schema (opentelemetry-proto):
- *   ExportLogsServiceRequest { repeated ResourceLogs resource_logs = 1; }
- *   ResourceLogs { Resource resource = 1; repeated ScopeLogs scope_logs = 2; }
- *   ScopeLogs { InstrumentationScope scope = 1; repeated LogRecord log_records = 2; }
- *   LogRecord { fixed64 time_unix_nano = 1;
- *               SeverityNumber severity_number = 2;
- *               string severity_text = 3;
- *               AnyValue body = 5;
- *               repeated KeyValue attributes = 6;
- *               ... fixed64 trace_id = 9; fixed64 span_id = 10; }
- *
- *   SeverityNumber is a varint enum (severity_number field 2).
- *   trace_id / span_id are bytes (length-delimited), field numbers 9/10.
- *   body is an AnyValue sub-message (field 5).
+ * All field numbers come from src/otlp_schema.h (single source of
+ * truth). Reuses shared helpers from otlp_messages.c (otlp_emit_resource,
+ * otlp_emit_instrumentation_scope, otlp_encode_any_value,
+ * otlp_encode_key_value) so the resource/scope envelope is identical
+ * across signals. DRY.
  */
 #include "log_internal.h"
 #include "otlp_messages.h"
+#include "otlp_schema.h"
 #include "protobuf_encode.h"
 
 #include <stdbool.h>
@@ -31,18 +18,18 @@
 #include <stdint.h>
 #include <string.h>
 
-#define ELSR_F_RESOURCE_LOGS	1
-#define RL_F_RESOURCE		1
-#define RL_F_SCOPE_LOGS		2
-#define SL_F_SCOPE		1
-#define SL_F_LOG_RECORDS	2
-#define LOG_F_TIME		1
-#define LOG_F_SEVERITY_NUMBER	2
-#define LOG_F_SEVERITY_TEXT	3
-#define LOG_F_BODY		5
-#define LOG_F_ATTRIBUTES	6
-#define LOG_F_TRACE_ID		9
-#define LOG_F_SPAN_ID		10
+#define ELSR_F_RESOURCE_LOGS	OTLP_ELSR_FIELDS[OTLP_ELSR_FI_RESOURCE_LOGS].number
+#define RL_F_RESOURCE		OTLP_RL_FIELDS[OTLP_RL_FI_RESOURCE].number
+#define RL_F_SCOPE_LOGS		OTLP_RL_FIELDS[OTLP_RL_FI_SCOPE_LOGS].number
+#define SL_F_SCOPE		OTLP_SL_FIELDS[OTLP_SL_FI_SCOPE].number
+#define SL_F_LOG_RECORDS	OTLP_SL_FIELDS[OTLP_SL_FI_LOG_RECORDS].number
+#define LOG_F_TIME		OTLP_LOG_FIELDS[OTLP_LOG_FI_TIME].number
+#define LOG_F_SEVERITY_NUMBER	OTLP_LOG_FIELDS[OTLP_LOG_FI_SEVERITY_NUMBER].number
+#define LOG_F_SEVERITY_TEXT	OTLP_LOG_FIELDS[OTLP_LOG_FI_SEVERITY_TEXT].number
+#define LOG_F_BODY		OTLP_LOG_FIELDS[OTLP_LOG_FI_BODY].number
+#define LOG_F_ATTRIBUTES	OTLP_LOG_FIELDS[OTLP_LOG_FI_ATTRIBUTES].number
+#define LOG_F_TRACE_ID		OTLP_LOG_FIELDS[OTLP_LOG_FI_TRACE_ID].number
+#define LOG_F_SPAN_ID		OTLP_LOG_FIELDS[OTLP_LOG_FI_SPAN_ID].number
 
 static otlp_status_t
 emit_attributes(struct otlp_pb_buf *sub, uint32_t field_num,
