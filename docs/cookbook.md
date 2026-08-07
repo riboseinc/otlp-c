@@ -209,3 +209,102 @@ if (stats.dropped_full > 0) {
 The design is explicit: at small queue sizes, the library prefers
 dropping over blocking. This matches the OpenTelemetry "drop
 on overflow" semantic.
+
+## 6. Emitting metrics
+
+```c
+/* Counter */
+otlp_metric_t *m = otlp_metric_create(
+    OTLP_METRIC_COUNTER, "http_requests_total", "1",
+    "Total HTTP requests", NULL, 0);
+otlp_metric_record(m, 1.0);
+otlp_metric_mark_time(m);
+otlp_metric_set_attribute_string(m, "method", "GET");
+otlp_exporter_flush_metric(exp, m);
+otlp_metric_free(m);
+
+/* Histogram with explicit buckets */
+double bounds[] = {0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0};
+otlp_metric_t *h = otlp_metric_create(
+    OTLP_METRIC_HISTOGRAM, "http_duration_seconds", "s",
+    "Request duration", bounds, 7);
+otlp_metric_record(h, 0.042);
+otlp_metric_mark_time(h);
+otlp_exporter_flush_metric(exp, h);
+otlp_metric_free(h);
+```
+
+## 7. Emitting structured logs
+
+```c
+otlp_log_record_t *lr = otlp_log_record_create(
+    OTLP_SEVERITY_ERROR, "database connection failed");
+otlp_log_record_mark_timestamp(lr);
+otlp_log_record_set_attribute_string(lr, "db.host", "prod-db-1");
+otlp_log_record_set_attribute_int(lr, "retry_count", 3);
+
+/* Correlate with a trace */
+otlp_log_record_set_trace_id(lr, span_trace_id);
+otlp_log_record_set_span_id(lr, span_span_id);
+
+otlp_exporter_flush_log(exp, lr);
+otlp_log_record_free(lr);
+```
+
+## 8. Propagating trace context across processes
+
+```c
+/* Sending side: inject context into HTTP headers */
+static otlp_status_t
+set_header(void *ctx, const char *key, const char *val)
+{
+    struct http_headers *h = ctx;
+    return http_headers_set(h, key, val);
+}
+
+otlp_context_t ctx = otlp_context_from_span(span);
+otlp_context_inject(ctx, set_header, &request_headers);
+
+/* Receiving side: extract context from incoming headers */
+static const char *
+get_header(void *ctx, const char *key)
+{
+    struct http_headers *h = ctx;
+    return http_headers_get(h, key);
+}
+
+otlp_context_t parent = otlp_context_extract(
+    get_header, &incoming_headers);
+if (parent.has_context) {
+    /* Start child span inheriting the trace */
+    child = otlp_tracer_start_child_span(tracer, "handle-request", ...);
+}
+```
+
+## 9. Custom sampling
+
+```c
+/* 50% deterministic sampling (same trace_id always yields same decision) */
+otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.5);
+otlp_tracer_set_sampler(tracer, s);
+
+/* Always-off (drop everything — useful for feature-flagging) */
+otlp_tracer_set_sampler(tracer, otlp_sampler_always_off());
+```
+
+## 10. Custom allocator / slab
+
+```c
+/* Install a slab for hot-path small allocations */
+otlp_install_slab_allocator(128, 256);
+/* ... all subsequent otlp_malloc calls route through the slab ... */
+otlp_uninstall_slab_allocator();
+
+/* Or a fully custom allocator */
+otlp_allocator_t my_alloc = {
+    .alloc = my_pool_alloc,
+    .realloc = my_pool_realloc,
+    .free = my_pool_free,
+};
+otlp_set_allocator(&my_alloc);
+```

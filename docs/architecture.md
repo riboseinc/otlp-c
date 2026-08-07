@@ -5,13 +5,16 @@ non-trivial.
 
 ## The one-paragraph model
 
-Caller code builds spans via the public API (`include/otlp-c/`).
-Each span carries a name, timestamps, attributes, status, and
-optional events/links. The exporter batches spans by size and
-time, then encodes each batch as a Protobuf
-`ExportTraceServiceRequest` and POSTs it to an OTLP collector
-over HTTP/1.1. Retry with exponential backoff handles transient
-failures.
+Caller code builds telemetry via the public API (`include/otlp-c/`).
+Three signals are supported: traces (spans with attributes, events,
+links), metrics (counter, gauge, histogram, exponential histogram),
+and logs (structured records with trace correlation). The exporter
+batches traces by size and time via a lock-free MPSC queue, encodes
+each batch as protobuf wire bytes via schema-driven tables, and
+POSTs to an OTLP collector over non-blocking HTTP/1.1. Metrics and
+logs are flushed synchronously. A pluggable sampler decides at
+span-creation time whether to record. W3C Trace Context
+propagation is transport-agnostic via callback-based carriers.
 
 ## Layered view
 
@@ -28,6 +31,13 @@ failures.
 │   span.h         otlp_span_t construction + lifetime          │
 │   tracer.h       otlp_tracer_t — owns span creation           │
 │   exporter.h     otlp_exporter_t — batches + flushes          │
+│   metric.h       otlp_metric_t — counter/gauge/histogram      │
+│   log.h          otlp_log_record_t — structured logs          │
+│   sampler.h      otlp_sampler_t — pluggable sampling          │
+│   context.h      otlp_context_t — W3C trace propagation        │
+│   w3c.h          traceparent header format/parse              │
+│   slab.h         otlp_slab_t — fixed-slot memory pool         │
+│   allocator.h    otlp_set_allocator — custom alloc hook      │
 │   status.h       error codes                                  │
 │   version.h      version constants                            │
 └──────────────────────────────────────────────────────────────┘
@@ -39,31 +49,65 @@ failures.
 │                                                               │
 │   ┌────────────────┐    ┌────────────────┐                    │
 │   │ span.c         │    │ tracer.c       │                    │
-│   │ Span lifetime, │    │ Tracer owns    │                    │
-│   │ attributes,    │    │ span context.  │                    │
-│   │ events, status │    │                │                    │
+│   │ Span lifecycle,│    │ PRNG, sampler  │                    │
+│   │ attrs, events, │    │ consultation,  │                    │
+│   │ links, status  │    │ ID generation  │                    │
+│   └────────────────┘    └────────────────┘                    │
+│                                                               │
+│   ┌────────────────┐    ┌────────────────┐                    │
+│   │ metric.c       │    │ log.c          │                    │
+│   │ Metric lifecycle│   │ Log lifecycle  │                    │
+│   └────────────────┘    └────────────────┘                    │
+│                                                               │
+│   ┌────────────────┐    ┌────────────────┐                    │
+│   │ sampler.c      │    │ context.c      │                    │
+│   │ Built-in       │    │ Inject/extract │                    │
+│   │ samplers       │    │ via carriers   │                    │
 │   └────────────────┘    └────────────────┘                    │
 │                                                               │
 │   ┌────────────────────────────────────────────────┐          │
 │   │ exporter.c                                     │          │
-│   │ Batch buffer, retry policy, background flush.  │          │
+│   │ Lock-free MPSC, batch, retry, null-transport.  │          │
+│   │ Traces: async emit + tick.                     │          │
+│   │ Metrics/Logs: sync flush.                      │          │
 │   └────────────────────────────────────────────────┘          │
 │                            │                                  │
 │                            │ encode + send                    │
-│                            ▼                                  │
-│   ┌────────────────┐    ┌────────────────┐                    │
-│   │ exporter_otel.c│───▶│ http_client.c  │                    │
-│   │ OTLP/HTTP      │    │ HTTP/1.1 over  │                    │
-│   │ encoder + POST │    │ raw socket.    │                    │
-│   └────────────────┘    └────────────────┘                    │
-│          │                                  │                 │
-│          ▼                                  ▼                 │
-│   ┌──────────────────┐              ┌──────────────────┐      │
-│   │ protobuf_encode.c│              │ platform.c       │      │
-│   │ Hand-rolled      │              │ Sockets, time,   │      │
-│   │ wire encoder.    │              │ mutex (POSIX +   │      │
-│   │                  │              │ Win32).          │      │
-│   └──────────────────┘              └──────────────────┘      │
+│          ┌─────────────────┼─────────────────┐                │
+│          ▼                 ▼                 ▼                │
+│   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         │
+│   │otlp_messages.│ │otlp_metrics_ │ │otlp_logs_    │         │
+│   │c             │ │encoder.c     │ │encoder.c     │         │
+│   │Traces encoder│ │Metrics encoder│ │Logs encoder │         │
+│   │+ shared      │ │              │ │              │         │
+│   │helpers       │ │              │ │              │         │
+│   └──────────────┘ └──────────────┘ └──────────────┘         │
+│          │                                              │     │
+│          ▼                                              │     │
+│   ┌──────────────────┐         ┌──────────────────┐       │
+│   │ protobuf_encode.c│         │ http_client.c    │       │
+│   │ Wire encoder +   │         │ HTTP/1.1 state   │       │
+│   │ SBO buffer.      │         │ machine + keep-  │       │
+│   │                  │         │ alive.           │       │
+│   └──────────────────┘         └──────────────────┘       │
+│          │                                  │              │
+│   ┌──────────────────┐              ┌──────────────────┐   │
+│   │ otlp_schema.h    │              │ platform.c       │   │
+│   │ Model-driven     │              │ platform_unix.c  │   │
+│   │ field tables.    │              │ platform_win.c   │   │
+│   └──────────────────┘              └──────────────────┘   │
+│                                                              │
+│   ┌──────────────────┐              ┌──────────────────┐   │
+│   │ slab.c           │              │ mpsc_queue.c     │   │
+│   │ Slab allocator + │              │ Lock-free MPSC   │   │
+│   │ global hook.     │              │ ring (Vyukov).   │   │
+│   └──────────────────┘              └──────────────────┘   │
+│                                                              │
+│   ┌──────────────────┐                                     │
+│   │ atomic_compat.h  │                                     │
+│   │ GCC/Clang: stdatomic│                                 │
+│   │ MSVC: intrinsics  │                                   │
+│   └──────────────────┘                                     │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -77,102 +121,96 @@ failures.
 
 | Module | Owns | Doesn't own |
 |---|---|---|
-| `span.c` | Span construction, attributes, status, events | Tracer state, transport |
-| `tracer.c` | Tracer state, span ID generation, parent linking | Span contents |
-| `exporter.c` | Batch buffer, flush scheduling, retry policy | Encoding, transport |
-| `exporter_otel.c` | OTLP/HTTP request encoding, response handling | Buffer management |
-| `protobuf_encode.c` | Protobuf wire encoding (varint, length-delimited, fixed) | OTLP schema, transport |
-| `http_client.c` | HTTP/1.1 request/response, connection handling | OTLP semantics |
-| `platform.c` | Cross-platform wrappers (sockets, time, mutex) | Public API |
-| `otlp_messages.h` | C struct definitions matching the OTLP .proto | Encoder logic |
+| `span.c` | Span lifecycle, attributes, events, links, clone | Tracer state, transport |
+| `tracer.c` | Tracer state, PRNG, ID generation, sampler consultation | Span contents |
+| `metric.c` | Metric lifecycle, record() bucketing | Wire encoding |
+| `log.c` | Log record lifecycle | Wire encoding |
+| `sampler.c` | Built-in samplers (always_on/off/ratio) | Tracer integration |
+| `context.c` | Context inject/extract via carriers | HTTP headers |
+| `exporter.c` | MPSC queue, batch, retry, null-transport, metric/log flush | Encoding details |
+| `exporter_otel.c` | Span batch → HTTP request builder | Queue, retry |
+| `otlp_messages.c` | Traces encoder + shared helpers (any_value, resource, scope, attributes) | Metric/log encoding |
+| `otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) | Traces/logs encoding |
+| `otlp_logs_encoder.c` | Logs encoder | Traces/metrics encoding |
+| `otlp_schema.h` | Model-driven field tables (single source of truth) | Encoder logic |
+| `protobuf_encode.c` | Protobuf wire encoding + SBO buffer | OTLP schema, transport |
+| `http_client.c` | HTTP/1.1 state machine + keep-alive | OTLP semantics |
+| `platform.c` / `_unix.c` / `_win.c` | Clocks, non-blocking sockets | Public API |
+| `mpsc_queue.c` | Lock-free MPSC ring buffer | Exporter logic |
+| `atomic_compat.h` | Atomic operations (GCC/Clang pass-through, MSVC intrinsics) | Lock-free algorithms |
+| `slab.c` | Slab allocator + global allocator integration | Memory layout of types |
+| `w3c.c` | Traceparent header format/parse | Context propagation |
+| `internal_util.c` | Malloc wrappers, string/bytes duplication, attribute free | Domain logic |
 
-Adding a feature: pick the right module; don't spread it across files. Adding a new signal (metrics, logs): add a sibling to `exporter_otel.c` (e.g. `exporter_otel_metrics.c`) and a sibling message struct file.
+## Design patterns
+
+### Model-driven encoding (OCP/DRY)
+
+All OTLP field numbers and wire types come from `src/otlp_schema.h`
+tables with named enum indices. Encoders reference these tables via
+accessor macros:
+
+```c
+#define SPAN_F_NAME OTLP_SPAN_FIELDS[OTLP_SPAN_FI_NAME].number
+```
+
+Adding a new field to a message: one schema entry + one emit call.
+No other file changes. Adding a new AnyValue variant: one encoder
+function + one `attr_encoders[]` table entry.
+
+### Table-driven metric dispatch (OCP)
+
+Metric kind → encoder dispatch via `metric_kind_specs[]` table:
+```c
+static const struct metric_kind_spec metric_kind_specs[] = {
+    [OTLP_METRIC_COUNTER]   = { OTLP_METRIC_FI_SUM,        emit_number_data_point },
+    [OTLP_METRIC_GAUGE]     = { OTLP_METRIC_FI_GAUGE,      emit_number_data_point },
+    [OTLP_METRIC_HISTOGRAM] = { OTLP_METRIC_FI_HISTOGRAM,  emit_histogram_data_point },
+    [OTLP_METRIC_EXP_HISTOGRAM] = { OTLP_METRIC_FI_EXP_HISTOGRAM,
+                                    emit_exp_histogram_data_point },
+};
+```
+
+Adding a metric type: one function + one table entry. No switch
+to modify.
+
+### Caller-driven I/O (no library threads)
+
+The library never calls `pthread_create` or `_beginthreadex`.
+The caller drives I/O by calling `otlp_exporter_tick()` from a
+thread it controls. Cross-thread data flow uses atomics only
+(via `atomic_compat.h`), no mutexes.
+
+### Lock-free MPSC queue
+
+Vyukov-style bounded ring with per-slot sequence numbers on C11
+atomics (or MSVC intrinsics via `atomic_compat.h`). Multi-producer
+safe; single-consumer (the tick caller).
 
 ## Invariants
 
 1. **Opaque types**. Every public type is `typedef struct foo foo;`
-   in the header with the struct definition in the `.c` file. Callers
-   never reach into struct fields.
-2. **Zero non-libc deps**. No third-party headers in `#include`. No
-   third-party link deps at runtime.
-3. **No C++**. C99 (C11 only where `<stdatomic.h>` is needed).
-4. **Error code on every public function**. Functions that can fail
-   return `otlp_status_t`. Functions that can't (e.g. getters on a
-   non-NULL span) return the value directly.
-5. **Thread-safety at the exporter only**. The exporter holds a
-   mutex around batch emission. Span construction is single-threaded
-   by design.
-6. **No malloc in hot paths unless necessary**. The batch buffer is
-   preallocated; span construction uses a per-span arena (future).
-
-## Public API conventions
-
-### Naming
-
-- Types: `otlp_<noun>_t` (`otlp_span_t`, `otlp_exporter_t`).
-- Functions: `otlp_<noun>_<verb>` (`otlp_span_create`, `otlp_exporter_emit`).
-- Macros and constants: `OTLP_<NAME>` (`OTLP_OK`, `OTLP_VERSION_MAJOR`).
-- Enums: `otlp_<noun>_tag` for the type, `OTLP_<NOUN>_<KIND>` for the values.
-
-### Ownership
-
-- `_create` returns a heap pointer; caller owns it.
-- `_free` releases the pointer.
-- Anything else does not transfer ownership.
-
-### Error handling
-
-- Return `otlp_status_t` from every fallible function.
-- `OTLP_OK` is `0`. Errors are negative.
-- Document the error codes each function can return.
-
-### Threads
-
-- `_create`, `_free`: caller's responsibility to serialize.
-- `_emit`, `_flush`, `_shutdown`: thread-safe (exporter holds a mutex).
-- Span mutation (`set_attribute`, etc.): single-threaded per span.
-
-## Build-time decisions
-
-### Static vs shared
-
-Default: static. `BUILD_SHARED_LIBS=ON` builds shared.
-
-The static library is ~50 KB on Linux/x86-64. The shared library
-is ~80 KB (exports + position-independent code).
-
-### Symbols
-
-Public symbols are exported with platform-appropriate visibility
-attributes (`__attribute__((visibility("default")))` on Linux/ELF,
-`__declspec(dllexport)` on Windows). Internal symbols are hidden.
-
-### Position independence
-
-Always compiled PIC so the static library can be linked into a
-shared library.
+   in the header with the struct definition in the `.c` file.
+2. **Zero non-libc deps**. No third-party headers or link deps.
+3. **No C++**. C99 style; C11 for `<stdatomic.h>`.
+4. **Error code on every fallible function**. Returns `otlp_status_t`.
+5. **Lock-free**. No mutexes. Cross-thread via atomics + MPSC queue.
+6. **No library threads**. Caller drives I/O via `tick()`.
 
 ## Testing strategy
 
-- **Unit tests** (`tests/unit/`): per-module function tests. Fast.
-- **Property tests** (`tests/property/`): QuickCheck-style. Run
-  10K iterations per property. See `tests/property/property_harness.h`.
-- **Integration tests** (`tests/integration/`): end-to-end against
-  a local `otelcol` Docker container. Needs Docker.
-- **Smoke tests** (`tests/smoke/`): minimal "library loads and runs"
-  per platform.
-
-## Performance budget
-
-Single-digit microseconds to construct and free a span. <1 ms to
-encode and POST a 512-span batch (excluding network). <5% wall-
-clock overhead on a typical instrumented target.
-
-These are the budgets that drive the design. The roadmap's perf-
-regression test will enforce them.
+- **27 property tests** (`tests/property/`): QuickCheck-style, deterministic
+  (null_transport mode). Covers varint, encoder, messages, URL parser,
+  span lifecycle, attribute round-trip, W3C, metrics, logs,
+  events/links/context, sampler, slab, keepalive, exporter batching,
+  flush.
+- **Unit tests** (`tests/`): smoke, HTTP echo, exporter echo, retry.
+- **Integration test** (`tests/integration/`): end-to-end against otelcol + Jaeger.
+- **Concurrency stress** (`tests/test_concurrency_stress.c`): 8 threads × 200 spans.
 
 ## See also
 
 - [CLAUDE.md](../CLAUDE.md) — conventions and invariants.
 - [docs/otlp-spec.md](otlp-spec.md) — the protocol reference.
 - [docs/roadmap.md](roadmap.md) — phase-by-phase implementation plan.
+- [docs/quickstart.md](quickstart.md) — getting started with all signals.
