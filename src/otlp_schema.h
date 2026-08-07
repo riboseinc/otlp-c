@@ -417,6 +417,48 @@ static const struct otlp_field_spec OTLP_HDP_FIELDS[] = {
 	[OTLP_HDP_FI_MAX]		    = {"max", 10, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
 
+/* ── ExponentialHistogramDataPoint ────────────────────────────── */
+
+enum {
+	OTLP_EHDP_FI_ATTRIBUTES,
+	OTLP_EHDP_FI_START_TIME,
+	OTLP_EHDP_FI_TIME,
+	OTLP_EHDP_FI_COUNT,
+	OTLP_EHDP_FI_SUM,
+	OTLP_EHDP_FI_SCALE,
+	OTLP_EHDP_FI_ZERO_COUNT,
+	OTLP_EHDP_FI_POSITIVE,
+	OTLP_EHDP_FI_NEGATIVE,
+	OTLP_EHDP_FI_FLAGS,
+	OTLP_EHDP_FI_NFIELDS,
+};
+
+static const struct otlp_field_spec OTLP_EHDP_FIELDS[] = {
+	[OTLP_EHDP_FI_ATTRIBUTES]   = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_EHDP_FI_START_TIME]   = {"start_time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_TIME]	    = {"time_unix_nano", 3, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_COUNT]	    = {"count", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_EHDP_FI_SUM]	    = {"sum", 5, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_SCALE]	    = {"scale", 6, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_ZERO_COUNT]   = {"zero_count", 7, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_POSITIVE]	    = {"positive", 8, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_NEGATIVE]	    = {"negative", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHDP_FI_FLAGS]	    = {"flags", 10, OTLP_PB_WIRE_FIXED32, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── ExponentialHistogramBuckets ──────────────────────────────── */
+
+enum {
+	OTLP_EHB_FI_OFFSET,
+	OTLP_EHB_FI_BUCKET_COUNTS,
+	OTLP_EHB_FI_NFIELDS,
+};
+
+static const struct otlp_field_spec OTLP_EHB_FIELDS[] = {
+	[OTLP_EHB_FI_OFFSET]	    = {"offset", 1, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EHB_FI_BUCKET_COUNTS] = {"bucket_counts", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
 /* ════════════════════════════════════════════════════════════════
  * Logs signal — opentelemetry-proto logs/v1
  * ════════════════════════════════════════════════════════════════ */

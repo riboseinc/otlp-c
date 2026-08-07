@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.5] - 2026-08-07
+
+ExponentialHistogram encoder completed. The last standard metric type.
+
+### Added — TODO 46: ExponentialHistogram (full)
+
+- `OTLP_METRIC_EXP_HISTOGRAM` type: `record()` increments count +
+  sum + zero_count.
+- Encoder: `emit_exp_histogram_data_point` emits attributes,
+  start_time, time, count, sum, scale (zigzag sint32), zero_count,
+  positive/negative `ExponentialHistogramBuckets` (offset zigzag
+  + packed bucket_counts), via the table-driven dispatch.
+- Schema tables: `OTLP_EHDP_FIELDS[]` (10 fields),
+  `OTLP_EHB_FIELDS[]` (2 fields).
+- Zigzag encoding for `sint32` scale and offset (proto wire
+  compatibility).
+- Dispatch table entry in `metric_kind_specs[]`.
+- `struct otlp_metric` extended with `exp_scale`,
+  `exp_zero_count`, `exp_pos_offset`, `exp_pos_counts`,
+  `exp_neg_offset`, `exp_neg_counts` + accessors.
+
+### Fixed — TODO status text
+
+TODOs 47, 48, 49 updated from "Spec only" to "Complete (v0.5.4)"
+— they were shipped in v0.5.4 but the status text was stale.
+
 ## [0.5.4] - 2026-08-07
 
 Architectural completion — four deferred TODOs implemented.

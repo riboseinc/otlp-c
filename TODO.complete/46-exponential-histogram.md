@@ -1,6 +1,6 @@
 # TODO 46 — ExponentialHistogram metric type
 
-**Status:** Spec only — implementation deferred (v0.6+)
+**Status:** Complete (v0.5.5)
 **Priority:** P2
 **Depends on:** nothing
 

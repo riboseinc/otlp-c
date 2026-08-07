@@ -1,6 +1,6 @@
 # TODO 49 — Slab integration into global allocator
 
-**Status:** Spec only — implementation deferred (v0.6+)
+**Status:** Complete (v0.5.4)
 **Priority:** P3
 **Depends on:** nothing (TODO 42 ships standalone slab)
 
