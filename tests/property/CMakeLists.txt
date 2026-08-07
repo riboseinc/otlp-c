@@ -172,3 +172,15 @@ add_test(NAME property-events-context
 set_tests_properties(property-events-context PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5: sampler interface.
+add_executable(otlp_property_sampler test_property_sampler.c)
+target_link_libraries(otlp_property_sampler PRIVATE otlp_c)
+target_include_directories(otlp_property_sampler PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-sampler
+    COMMAND otlp_property_sampler)
+set_tests_properties(property-sampler PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

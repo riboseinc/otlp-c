@@ -34,10 +34,11 @@
 
 struct otlp_tracer
 {
-	char *service_name; /* owned */
-	char *scope_name; /* owned */
-	char *scope_version; /* owned */
-	_Atomic uint64_t prng_state;
+	char		       *service_name; /* owned */
+	char		       *scope_name;	/* owned */
+	char		       *scope_version;/* owned */
+	otlp_sampler_t       *sampler;	/* not owned; default = always_on */
+	_Atomic uint64_t	prng_state;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -194,12 +195,20 @@ otlp_tracer_free(otlp_tracer_t *tracer)
 	otlp_free(tracer);
 }
 
+void
+otlp_tracer_set_sampler(otlp_tracer_t *tracer, otlp_sampler_t *sampler)
+{
+	if (!tracer)
+		return;
+	tracer->sampler = sampler ? sampler : otlp_sampler_always_on();
+}
+
 /* ── Span creation ────────────────────────────────────────────── */
 
 static otlp_span_t *
 start_span_internal(struct otlp_tracer *t,
-	const char *name,
-	const otlp_span_t *parent)
+		    const char *name,
+		    const otlp_span_t *parent)
 {
 	otlp_span_t *span;
 
@@ -212,29 +221,44 @@ start_span_internal(struct otlp_tracer *t,
 
 	if (parent)
 	{
-		/* Child: inherit trace ID, set parent link. */
 		const uint8_t *p_trace = otlp_span_get_trace_id(parent);
 		const uint8_t *p_span = otlp_span_get_span_id(parent);
 
 		memcpy((uint8_t *) otlp_span_get_trace_id(span),
 			p_trace,
 			OTLP_TRACE_ID_LEN);
-		/* Cast away const for the internal write; the public
-		 * setter would also work but does bounds-checking we
-		 * don't need here. */
 		otlp_span_set_parent_span_id(span, p_span);
 	}
 	else
 	{
-		/* Root: fresh trace ID. */
 		fill_random_bytes(t,
 			(uint8_t *) otlp_span_get_trace_id(span),
 			OTLP_TRACE_ID_LEN);
 	}
 
-	/* Always: fresh span ID. */
 	fill_random_bytes(
 		t, (uint8_t *) otlp_span_get_span_id(span), OTLP_SPAN_ID_LEN);
+
+	/* Consult the sampler with the freshly-generated trace_id. */
+	{
+		otlp_sampler_t      *sampler = t->sampler;
+		otlp_sampling_result_t result;
+
+		if (!sampler)
+			sampler = otlp_sampler_always_on();
+		result = sampler->should_sample(sampler,
+						otlp_span_get_trace_id(span),
+						name,
+						otlp_span_get_kind(span));
+		if (result.decision == OTLP_SAMPLING_DECISION_NOT_RECORD)
+		{
+			otlp_span_free(span);
+			return NULL;
+		}
+		otlp_span_set_sampled(span,
+				      result.decision ==
+					      OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED);
+	}
 
 	otlp_span_mark_start(span);
 	return span;

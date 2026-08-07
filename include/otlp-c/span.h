@@ -166,6 +166,10 @@ otlp_status_t otlp_span_set_status(otlp_span_t *span,
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_sampled(otlp_span_t *span, bool sampled);
 
+/* Read the sampled flag. Default: true. */
+OTLP_C_EXPORT
+bool otlp_span_is_sampled(const otlp_span_t *span);
+
 /* ── Events / Links / TraceState ────────────────────────────────
  *
  * Span.Event, Span.Link, and trace_state complete the OTLP Span

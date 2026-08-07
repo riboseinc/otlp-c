@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "sampler.h"
 #include "span.h"
 #include "status.h"
 #include "visibility.h"
@@ -48,6 +49,18 @@ otlp_tracer_t *otlp_tracer_create(const char *service_name,
 
 OTLP_C_EXPORT
 void otlp_tracer_free(otlp_tracer_t *tracer);
+
+/* Set the tracer's sampler. The tracer consults the sampler at
+ * start_span time. NOT_RECORD means start_span returns NULL.
+ * RECORD_AND_SAMPLED (default) sets the span's sampled flag.
+ * RECORD clears it.
+ *
+ * The tracer does NOT take ownership of `sampler` if a previous
+ * sampler was set; the caller must free the previous one first.
+ * Pass NULL to revert to the default (always_on). */
+OTLP_C_EXPORT
+void otlp_tracer_set_sampler(otlp_tracer_t *tracer,
+			     otlp_sampler_t *sampler);
 
 /* Start a span. The tracer:
  *   - generates a random trace ID and span ID
