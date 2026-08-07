@@ -4,6 +4,61 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-08-07
+
+Bug-fix release. Restores Windows MSVC support broken by the
+preview VS 18 toolchain's `<stdatomic.h>` rejecting the
+`_HAS_C11_ATOMICS=1` macro override.
+
+### Added
+
+- `src/atomic_compat.h`: thin abstraction over the small subset
+  of C11 `<stdatomic.h>` the library uses (atomic_load / store /
+  compare_exchange / fetch_add on uint64_t and int). Pass-through
+  to `<stdatomic.h>` on GCC/Clang; MSVC intrinsics
+  (`_InterlockedCompareExchange64`, `_InterlockedExchange64`,
+  `_InterlockedExchangeAdd`) on Windows.
+
+### Fixed
+
+- **Windows MSVC build**: was failing with `fatal error C1189:
+  "C atomic support is not enabled"` because VS 2022's vcruntime
+  checks for actual compiler atomics support, not just the macro
+  override. The `atomic_compat.h` shim removes the `<stdatomic.h>`
+  dependency entirely on MSVC.
+- `nanosleep` was POSIX-only; replaced with `Sleep(1)` on Windows
+  in the exporter's tick loop.
+- `mpsc_queue_size` had a const-correctness issue with the new
+  atomic wrapper; cast away const (the load is conceptually
+  read-only).
+- Removed `continue-on-error` for Windows x64 MSVC in CI — the
+  build is now genuinely green.
+
+### Changed
+
+- `mpsc_queue.c`, `tracer.c`, `exporter.c` refactored to use
+  `otlp_atomic_*` wrappers instead of `<stdatomic.h>` directly.
+- `_Atomic uint64_t` / `_Atomic int` field types replaced with
+  `otlp_atomic_u64` / `otlp_atomic_int`.
+- `atomic_compat.h` is the single source of truth for atomic
+  operations. Adding new atomic types is a one-function-per-type
+  extension (no switch, no #ifdefs at call sites). OCP.
+
+### CI
+
+- MSVC dev environment pinned to VS 2022 stable
+  (`ilammy/msvc-dev-cmd@v1` `vsversion: 2022`) in both `ci.yml`
+  and `release.yml`. Avoids the VS 18 preview toolchain entirely.
+- `test_property_mpsc` gated to POSIX (uses pthreads directly;
+  the queue itself is portable).
+
+### Known limitations
+
+- Windows ARM64 still `continue-on-error` — runner is slow, build
+  succeeds when it gets a runner.
+- `property-exporter` test still flakes on Linux under ctest
+  parallel load. Pre-existing, documented.
+
 ## [0.5.0] - 2026-08-07
 
 The "actually complete the TODOs" release. Closes TODOs 20, 21, 22,

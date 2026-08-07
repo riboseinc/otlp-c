@@ -15,8 +15,8 @@
 
 #define OTLP_C_VERSION_MAJOR 0
 #define OTLP_C_VERSION_MINOR 5
-#define OTLP_C_VERSION_PATCH 0
-#define OTLP_C_VERSION_STRING "0.5.0"
+#define OTLP_C_VERSION_PATCH 1
+#define OTLP_C_VERSION_STRING "0.5.1"
 
 #define OTLP_C_VERSION                                                            \
 	(((uint32_t)OTLP_C_VERSION_MAJOR << 24) |                                 \
