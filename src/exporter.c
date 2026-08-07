@@ -90,6 +90,8 @@ struct otlp_exporter
 	 * donated to the next in_flight request, re-acquired on success. */
 	otlp_socket_t *keepalive_sock;
 	bool null_transport;
+	otlp_null_transport_status_fn null_transport_status_fn;
+	void *null_transport_status_ctx;
 };
 
 /* ── Helpers ──────────────────────────────────────────────────── */
@@ -434,8 +436,12 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 
 		/* 1b. Null-transport fast path: skip HTTP entirely. */
 		if (e->null_transport && e->pending_count > 0) {
+			int http_status = 200;
+			if (e->null_transport_status_fn)
+				http_status = e->null_transport_status_fn(
+				    e->null_transport_status_ctx);
 			e->in_flight_count = e->pending_count;
-			record_outcome(e, 200);
+			record_outcome(e, http_status);
 			work_done = true;
 			continue;
 		}
@@ -557,6 +563,17 @@ otlp_exporter_set_null_transport(otlp_exporter_t *e, bool enabled)
 {
 	if (e)
 		e->null_transport = enabled;
+}
+
+void
+otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *e,
+					   otlp_null_transport_status_fn fn,
+					   void *ctx)
+{
+	if (e) {
+		e->null_transport_status_fn  = fn;
+		e->null_transport_status_ctx = ctx;
+	}
 }
 
 otlp_status_t

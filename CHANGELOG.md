@@ -4,6 +4,38 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.7] - 2026-08-07
+
+All 26 tests pass with zero flakes. Zero continue-on-error in CI.
+
+### Added — Null-transport status callback
+
+`otlp_exporter_set_null_transport_status_fn(exp, fn, ctx)` lets tests
+control the HTTP status code returned by each null-transport "send".
+Default is 200. The callback is called per batch, receiving opaque
+`ctx`. Enables deterministic retry/failure testing without threads.
+
+### Changed — exporter-retry test rewritten
+
+The retry test was the last test using the threaded echo server +
+`RUN_SERIAL`. Rewritten to use null_transport with a status callback
+that returns 500 on first call, 200 after (case 1: retry success)
+and 404 always (case 2: permanent failure). No echo server, no
+threads, no POSIX guard. Runs on all platforms including Windows.
+
+### Fixed — Windows CMake find_package
+
+Replaced `${{ github.workspace }}` (Windows backslashes mangled by
+bash) with `$GITHUB_WORKSPACE` (forward slashes, bash-compatible) in
+the CI consumer test. Removed `continue-on-error` for the Windows
+CMake find_package entry.
+
+### Added — DRY test walker
+
+Extracted `walker_find_at_level` + `walker_descend` from 4 duplicated
+copies across test files into a shared `tests/property/walker.h`.
+Reduces test boilerplate.
+
 ## [0.5.6] - 2026-08-07
 
 Eliminates the property-exporter test flake. CI is now fully clean.

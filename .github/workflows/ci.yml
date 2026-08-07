@@ -141,9 +141,10 @@ jobs:
     # Linux + macOS find_package works (LIBDIR pinned to "lib" so
     # config lands at <prefix>/lib/cmake/otlp-c/). Windows has a
     # bash-on-Windows path mangling issue in the consumer-test step
-    # (CMAKE_PREFIX_PATH backslashes get mangled). Tracked in
-    # TODO.complete/50-deterministic-test-transport.md.
-    continue-on-error: ${{ matrix.os == 'windows-2022' }}
+    # CMAKE_INSTALL_LIBDIR pinned to "lib" so install path is
+    # deterministic on all platforms. Uses $GITHUB_WORKSPACE env var
+    # (forward slashes) instead of ${{ github.workspace }} (Windows
+    # backslashes mangled by bash).
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
@@ -155,7 +156,7 @@ jobs:
       - name: Build and install otlp-c
         shell: bash
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install"
           cmake --build build --config Release
           cmake --install build --config Release
       - name: Test find_package consumer
@@ -176,6 +177,6 @@ jobs:
           enable_testing()
           add_test(NAME consumer_test COMMAND consumer)
           EOF
-          cmake -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install" -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           ctest --test-dir build --build-config Release --output-on-failure

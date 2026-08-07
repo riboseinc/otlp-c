@@ -185,12 +185,22 @@ extern "C"
 		size_t *n_out);
 
 	/* TEST ONLY: when enabled, the exporter skips all HTTP I/O and
-	 * immediately marks batches as "sent" (200 OK). Used by property
-	 * tests to avoid threaded echo server timing flakes. Do NOT use
-	 * in production — spans are not actually exported. */
+	 * marks batches as sent. Used by property tests to avoid threaded
+	 * echo server timing flakes. Do NOT use in production. */
 	OTLP_C_EXPORT
 	void otlp_exporter_set_null_transport(otlp_exporter_t *exp,
 		bool enabled);
+
+	/* TEST ONLY: set a callback that determines the HTTP status code
+	 * returned by each null-transport "send". Default is 200. The
+	 * callback receives `ctx` and returns an HTTP status code (e.g.
+	 * 500 to trigger retry behavior, then 200 for success). */
+	typedef int (*otlp_null_transport_status_fn)(void *ctx);
+	OTLP_C_EXPORT
+	void otlp_exporter_set_null_transport_status_fn(
+		otlp_exporter_t *exp,
+		otlp_null_transport_status_fn fn,
+		void *ctx);
 
 	/* Diagnostic counters. All monotonically increasing. */
 	typedef struct
