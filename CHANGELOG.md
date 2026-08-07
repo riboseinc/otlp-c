@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.10] - 2026-08-07
+
+Property test coverage for flush + docs for all signals.
+
+### Added — Flush property tests
+
+`test_property_flush.c` (3 properties):
+- `prop_flush_metric_null_transport` — counter flush returns OK.
+- `prop_flush_log_null_transport` — log flush returns OK.
+- `prop_flush_metric_variants` — all 4 metric types (counter, gauge,
+  histogram, exp-histogram) flush without error.
+
+Tests use null_transport mode — no echo server, deterministic.
+
+### Changed — Quickstart docs
+
+`docs/quickstart.md` now includes code samples for metrics, logs,
+context propagation, sampling, and custom allocator — in addition
+to the existing traces example. Reflects the full v0.5.x API.
+
 ## [0.5.9] - 2026-08-07
 
 Exporter now exports all three signals. Examples show full API.

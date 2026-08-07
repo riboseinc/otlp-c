@@ -213,3 +213,15 @@ if(UNIX)
         TIMEOUT 60
         RUN_SERIAL ON)
 endif()
+
+# v0.5: metric/log flush property tests.
+add_executable(otlp_property_flush test_property_flush.c)
+target_link_libraries(otlp_property_flush PRIVATE otlp_c)
+target_include_directories(otlp_property_flush PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-flush
+    COMMAND otlp_property_flush)
+set_tests_properties(property-flush PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)
