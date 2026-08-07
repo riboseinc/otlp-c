@@ -56,6 +56,8 @@ being solid.
 | 22 | Span events + links wire encoding | Done | #24 |
 | 23 | SpanContext propagation (inject/extract) | Done | #24 |
 | 24 | Head sampler interface (always_on/off/ratio) | Done | #24 |
+| 27 | HTTP keep-alive + connection reuse | Done | #25 |
+| 42 | Slab allocator (standalone) | Done | #25 |
 
 ## Deferred (post-1.0)
 
@@ -66,8 +68,6 @@ the v1.0 critical path. Reasons vary (see each file).
 |---|---|---|
 | 25 | TLS support | Sidecar model — otelcol terminates TLS. v1.x WONTFIX. |
 | 26 | OTLP gRPC transport | Sidecar model — HTTP/1.1 is sufficient. v1.x WONTFIX. |
-| 27 | HTTP connection pooling | Sidecar handles pooling. v1.0+. |
-| 42 | Slab allocator | Performance optimization. v0.3+. |
 
 ## Out of scope (this repo)
 

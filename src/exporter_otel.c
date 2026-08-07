@@ -20,6 +20,7 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	const char *service_name,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
+	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out)
 {
 	struct otlp_pb_buf body = { 0 };
@@ -39,7 +40,12 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 		return st;
 	}
 
-	st = otlp_http_request_start(out, url, user_agent, body.data, body.len);
+	if (reuse_socket)
+		st = otlp_http_request_start_with_socket(
+			out, url, user_agent, body.data, body.len, reuse_socket);
+	else
+		st = otlp_http_request_start(
+			out, url, user_agent, body.data, body.len);
 	otlp_pb_buf_free(&body);
 	return st;
 }

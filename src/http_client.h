@@ -16,6 +16,8 @@
 
 #include <otlp-c/status.h>
 
+#include "platform.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -63,6 +65,33 @@ otlp_http_request_start(otlp_http_request_t **out,
 	const char *user_agent,
 	const uint8_t *body,
 	size_t body_len);
+
+/* Same as _start, but reuses a previously-connected socket instead
+ * of opening a new TCP connection. The request takes ownership of
+ * `donated_socket`; it will be closed by _free unless retrieved via
+ * _detach_socket.
+ *
+ * Caller is responsible for ensuring the socket is connected to
+ * url->host:url->port. Mismatched host:port is undefined behavior.
+ *
+ * The request enters SENDING state directly (no CONNECTING phase). */
+otlp_status_t
+otlp_http_request_start_with_socket(otlp_http_request_t **out,
+	const struct otlp_http_url *url,
+	const char *user_agent,
+	const uint8_t *body,
+	size_t body_len,
+	otlp_socket_t	       *donated_socket);
+
+/* Detach the underlying socket from a completed (DONE state) request.
+ * The request no longer owns the socket; the caller must close it
+ * (or donate it to another request via _start_with_socket).
+ *
+ * Returns NULL if the request is not in DONE state, or if the
+ * response indicated `Connection: close`. In those cases the socket
+ * has already been closed by _free. */
+otlp_socket_t *
+otlp_http_request_detach_socket(otlp_http_request_t *req);
 
 /* Advance the state machine by one non-blocking iteration.
  * Returns:

@@ -91,6 +91,7 @@ find_package(Threads REQUIRED)
 add_library(otlp_c
     src/common.c
     src/internal_util.c
+    src/slab.c
     src/context.c
     src/sampler.c
     src/span.c

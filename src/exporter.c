@@ -82,10 +82,13 @@ struct otlp_exporter
 	uint64_t first_pending_mono;
 
 	otlp_http_request_t *in_flight;
-	size_t in_flight_count; /* spans in in_flight batch */
+	size_t in_flight_count; /* spans in in-flight batch */
 	uint32_t attempt;
 	uint64_t backoff_deadline_mono;
 	bool backoff_armed;
+	/* Cached TCP connection for HTTP keep-alive. Owned by the exporter,
+	 * donated to the next in_flight request, re-acquired on success. */
+	otlp_socket_t *keepalive_sock;
 };
 
 /* ── Helpers ──────────────────────────────────────────────────── */
@@ -230,6 +233,9 @@ otlp_exporter_free(otlp_exporter_t *e)
 	/* Free in-flight request. */
 	if (e->in_flight)
 		otlp_http_request_free(e->in_flight);
+	/* Close any cached keep-alive socket. */
+	if (e->keepalive_sock)
+		otlp_socket_close(e->keepalive_sock);
 	mpsc_queue_free(&e->queue);
 	otlp_free(e->pending);
 	otlp_free(e->user_agent);
@@ -301,9 +307,18 @@ try_start_post(struct otlp_exporter *e)
 		e->service_name,
 		(const otlp_span_t *const *) e->pending,
 		e->pending_count,
+		e->keepalive_sock,
 		&e->in_flight);
 	if (st != OTLP_OK)
+	{
+		/* Build failed. The donated socket (if any) was closed by
+		 * the build path. Drop our reference so we reconnect next
+		 * time. */
+		e->keepalive_sock = NULL;
 		return st;
+	}
+	/* The request now owns the donated socket (if any). */
+	e->keepalive_sock = NULL;
 	e->in_flight_count = e->pending_count;
 	/* IMPORTANT: do NOT free the pending batch here. It must stay
 	 * alive until the in-flight request completes successfully or
@@ -445,10 +460,29 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					? otlp_http_request_http_status(
 						  e->in_flight)
 					: 0;
+				/* On DONE, try to keep the socket alive for
+				 * reuse on the next POST. _detach returns NULL
+				 * if the response was Connection: close or the
+				 * request wasn't in DONE state — in those cases
+				 * _free will close it. */
+				if (s == OTLP_HTTP_REQ_DONE)
+					e->keepalive_sock =
+						otlp_http_request_detach_socket(
+							e->in_flight);
 				record_outcome(e, status);
 				otlp_http_request_free(e->in_flight);
 				e->in_flight = NULL;
 				e->in_flight_count = 0;
+				/* If a network/server error happened and we
+				 * captured a socket, drop it (it may be in a
+				 * half-closed or inconsistent state). */
+				if (status != 0 &&
+				    (status < 200 || status >= 300) &&
+				    e->keepalive_sock)
+				{
+					otlp_socket_close(e->keepalive_sock);
+					e->keepalive_sock = NULL;
+				}
 			}
 			work_done = true;
 			(void) st;
