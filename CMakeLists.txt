@@ -84,6 +84,10 @@ if(MSVC)
 endif()
 
 # Threads
+# Tests link Threads::Threads directly for pthread (test_helper_echo.c,
+# test_property_mpsc.c). The library itself uses pthread_self() for
+# PRNG seed entropy on POSIX only — that's in libc on modern systems,
+# no -lpthread link needed for the library itself.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
@@ -135,8 +139,6 @@ target_compile_definitions(otlp_c PRIVATE OTLP_C_BUILDING=1)
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(otlp_c PUBLIC OTLP_C_SHARED_LIB=1)
 endif()
-
-target_link_libraries(otlp_c PUBLIC Threads::Threads)
 
 # Tests
 if(OTLP_C_BUILD_TESTS)
