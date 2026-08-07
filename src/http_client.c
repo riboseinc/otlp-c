@@ -2,21 +2,22 @@
 /*
  * HTTP/1.1 POST state machine. See src/http_client.h for the API.
  *
- * Wire format produced (POST, plain HTTP, Connection: close):
+ * Wire format produced (POST, plain HTTP, Connection: keep-alive):
  *
  *   POST <path> HTTP/1.1\r\n
  *   Host: <host>\r\n
  *   User-Agent: <ua>\r\n
  *   Content-Type: application/x-protobuf\r\n
  *   Content-Length: <n>\r\n
- *   Connection: close\r\n
+ *   Connection: keep-alive\r\n
  *   \r\n
  *   <body>
  *
  * Response parsing: minimal. We scan for "HTTP/1.1 NNN" status line
  * and a Content-Length header; the body is everything after \r\n\r\n
- * up to either Content-Length bytes or EOF. No chunked encoding
- * (collector responses are short, Connection: close).
+ * up to Content-Length bytes. If the response includes
+ * `Connection: close`, the socket is closed at _free; otherwise
+ * (HTTP/1.1 default) the socket is reusable via _detach_socket.
  */
 /* _POSIX_C_SOURCE for strncasecmp under glibc with -std=c11. */
 #define _POSIX_C_SOURCE 200809L
@@ -152,6 +153,7 @@ struct otlp_http_request
 	int http_status;
 	const uint8_t *body_ptr; /* into resp_buf */
 	size_t body_len;
+	bool keepalive_eligible; /* set by response parser */
 };
 
 static otlp_status_t
@@ -173,7 +175,7 @@ build_request(struct otlp_http_request *r,
 		"User-Agent: %s\r\n"
 		"Content-Type: application/x-protobuf\r\n"
 		"Content-Length: %zu\r\n"
-		"Connection: close\r\n"
+		"Connection: keep-alive\r\n"
 		"\r\n",
 		url->path,
 		url->host,
@@ -195,6 +197,47 @@ build_request(struct otlp_http_request *r,
 	r->req_len = total;
 	r->req_sent = 0;
 	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_http_request_start_with_socket(otlp_http_request_t **out,
+	const struct otlp_http_url *url,
+	const char *user_agent,
+	const uint8_t *body,
+	size_t body_len,
+	struct otlp_socket   *donated_socket)
+{
+	struct otlp_http_request *r;
+	otlp_status_t st;
+
+	if (!out || !url)
+		return OTLP_ERR_NULL;
+	if (body_len > 0 && !body)
+		return OTLP_ERR_NULL;
+	if (!donated_socket)
+		return OTLP_ERR_NULL;
+
+	r = otlp_calloc(1, sizeof(*r));
+	if (!r)
+		return OTLP_ERR_NOMEM;
+
+	/* Donated socket: skip CONNECTING, go straight to SENDING. */
+	r->state = OTLP_HTTP_REQ_SENDING;
+	r->sock  = donated_socket;
+
+	st = build_request(r, url, user_agent, body, body_len);
+	if (st != OTLP_OK)
+		goto fail;
+
+	*out = r;
+	return OTLP_OK;
+
+fail:
+	if (r->sock)
+		otlp_socket_close(r->sock);
+	otlp_free(r->req_buf);
+	otlp_free(r);
+	return st;
 }
 
 otlp_status_t
@@ -246,6 +289,18 @@ fail:
 	return st;
 }
 
+struct otlp_socket *
+otlp_http_request_detach_socket(otlp_http_request_t *r)
+{
+	struct otlp_socket *sock;
+
+	if (!r || r->state != OTLP_HTTP_REQ_DONE || !r->keepalive_eligible)
+		return NULL;
+	sock   = r->sock;
+	r->sock = NULL;
+	return sock;
+}
+
 /* ── Response parser ──────────────────────────────────────────── */
 
 static int
@@ -278,6 +333,7 @@ try_parse_response(struct otlp_http_request *r)
 	size_t body_off;
 	const char *cl;
 	const char *p;
+	const char *conn;
 	long content_length = -1;
 
 	hdr_end_off = find_substring(r->resp_buf, r->resp_len, "\r\n\r\n", 4);
@@ -323,6 +379,23 @@ try_parse_response(struct otlp_http_request *r)
 		}
 	}
 
+	/* Scan Connection header (case-insensitive). HTTP/1.1 default
+	 * is keep-alive; "Connection: close" disables reuse. */
+	r->keepalive_eligible = true;
+	for (conn = (const char *) r->resp_buf; conn < body_start - 2; conn++)
+	{
+		if (otlp_strncasecmp(conn, "Connection:", 11) == 0)
+		{
+			const char *v = conn + 11;
+
+			while (v < body_start && *v == ' ')
+				v++;
+			if (otlp_strncasecmp(v, "close", 5) == 0)
+				r->keepalive_eligible = false;
+			break;
+		}
+	}
+
 	if (content_length >= 0)
 	{
 		/* Need exactly content_length bytes after \r\n\r\n. */
@@ -337,6 +410,9 @@ try_parse_response(struct otlp_http_request *r)
 		 * read loop detects EOF and calls us here one last time. */
 		r->body_ptr = (const uint8_t *) body_start;
 		r->body_len = r->resp_len - body_off;
+		/* Server sent no Content-Length and no Connection: close →
+		 * framing is ambiguous. Disable keep-alive. */
+		r->keepalive_eligible = false;
 	}
 	return 1;
 }

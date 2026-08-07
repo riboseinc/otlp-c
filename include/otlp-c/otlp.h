@@ -21,6 +21,7 @@
 #include "log.h"
 #include "w3c.h"
 #include "context.h"
+#include "slab.h"
 #include "visibility.h"
 
 #ifdef __cplusplus

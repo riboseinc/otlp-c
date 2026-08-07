@@ -184,3 +184,30 @@ add_test(NAME property-sampler
 set_tests_properties(property-sampler PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5: slab allocator.
+add_executable(otlp_property_slab test_property_slab.c)
+target_link_libraries(otlp_property_slab PRIVATE otlp_c)
+target_include_directories(otlp_property_slab PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-slab
+    COMMAND otlp_property_slab)
+set_tests_properties(property-slab PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)
+
+# v0.5: HTTP keep-alive pooling (POSIX only — uses echo server).
+if(UNIX)
+    add_executable(otlp_property_keepalive test_property_keepalive.c
+        ../test_helper_echo.c)
+    target_link_libraries(otlp_property_keepalive PRIVATE otlp_c Threads::Threads)
+    target_include_directories(otlp_property_keepalive PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+    add_test(NAME property-keepalive
+        COMMAND otlp_property_keepalive)
+    set_tests_properties(property-keepalive PROPERTIES
+        LABELS "property;unit"
+        TIMEOUT 60)
+endif()
