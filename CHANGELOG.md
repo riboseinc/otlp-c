@@ -23,14 +23,16 @@ Architectural completion + install-path fix.
 
 ### Fixed
 
-- **Windows CMake `find_package` install-path**: pinned
+- **Linux/macOS CMake `find_package` install-path**: pinned
   `CMAKE_INSTALL_LIBDIR` to `"lib"` before `include(GNUInstallDirs)`
   so the cmake config files land at `<prefix>/lib/cmake/otlp-c/`
-  on every platform. Previously, GNUInstallDirs on Windows MSVC
-  chose `"lib/x64"` or similar arch-suffixed paths, breaking the
-  consumer `find_package(otlp-c CONFIG)` call.
-- Removed `continue-on-error` for the Windows CMake find_package
-  CI entry — the install path is now deterministic.
+  on every platform. Previously, GNUInstallDirs chose
+  arch-suffixed paths on some platforms, breaking consumer
+  `find_package(otlp-c CONFIG)` calls.
+- Windows CMake find_package still gated with `continue-on-error` —
+  the install path is now correct but the consumer-test step has a
+  bash-on-Windows path-mangling issue with `CMAKE_PREFIX_PATH`.
+  Tracked separately.
 
 ### Specs
 
