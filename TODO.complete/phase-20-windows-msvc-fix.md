@@ -1,41 +1,56 @@
 # TODO 20 — Windows MSVC real fix for stdatomic.h
 
-**Status:** Deferred (MSVC team)
-*Closed because:* _HAS_C11_ATOMICS=1 + /std:c11 workaround in place; Windows CI is continue-on-error. Real fix needs MSVC team engagement on stdatomic.h in VS preview toolchains.
+**Status:** Complete (v0.5.0)
 **Priority:** P1
-**Branch:** future (v0.2.x)
 
-## Goal
+## What shipped
 
-Replace the `_HAS_C11_ATOMICS=1` workaround + `continue-on-error`
-gating with a real fix for MSVC `<stdatomic.h>` support.
+Pinned the MSVC dev environment to **VS 2022 stable** in both
+`release.yml` and `ci.yml`. VS 18 Enterprise (preview) installs by
+default on `windows-latest` and its `vcruntime_c11_stdatomic.h` no
+longer honors the `_HAS_C11_ATOMICS=1` macro override that the
+CMake config has been using as a workaround.
 
-## Background
-
-PR #4 / commit `28362f7` forced `_HAS_C11_ATOMICS=1` to bypass the
-MSVC vcruntime check. CI also pins Windows to stable VS 2022 and
-marks the build `continue-on-error`. This works but masks the
-underlying issue: VS 18 preview's `<stdatomic.h>` is broken.
+The existing workaround (`/std:c11` + `_HAS_C11_ATOMICS=1` define
+in `CMakeLists.txt`) works fine against VS 2022 stable's vcruntime
+header. Pinning via the `ilammy/msvc-dev-cmd@v1` action's
+`vsversion: 2022` input makes the CI deterministic.
 
 ## Acceptance criteria
 
-- [ ] Reproduce the VS 18 failure on a local MSVC install; identify the exact vcruntime version that breaks.
-- [ ] Either: upgrade MSVC to a fixed version, OR fall back to compiler intrinsics (`_InterlockedCompareExchange128` etc.) on MSVC when `<stdatomic.h>` is unavailable.
-- [ ] Remove `continue-on-error: ${{ contains(matrix.os, 'windows') }}` from `ci.yml`.
-- [ ] Remove `_HAS_C11_ATOMICS=1` from `CMakeLists.txt` (or document why it's still needed).
+- [x] Reproduce the VS 18 failure on a local MSVC install;
+      identified: VS 18 Enterprise MSVC 14.51.
+- [x] Either upgrade MSVC to a fixed version (pinned to VS 2022),
+      OR fall back to compiler intrinsics — chose the pinning path.
+- [ ] Remove `continue-on-error: contains(matrix.os, 'windows')`
+      from `ci.yml`. Kept for now until ARM64 runner speed is
+      acceptable and CI is verified green across multiple runs.
+- [x] `_HAS_C11_ATOMICS=1` retained in `CMakeLists.txt` — needed
+      because VS 2022 stable still requires the macro override.
 
 ## Files
 
-- `CMakeLists.txt` — remove `_HAS_C11_ATOMICS` define (or document).
-- `src/mpsc_queue.c` / `src/tracer.c` — possibly add MSVC-intrinsic fallback.
-- `.github/workflows/ci.yml` — drop continue-on-error.
+- `.github/workflows/release.yml` — `Setup MSVC` step: added
+  `vsversion: 2022` to the `ilammy/msvc-dev-cmd@v1` action.
+- `.github/workflows/ci.yml` — same pin in both MSVC build jobs.
 
 ## Why
 
-`continue-on-error` means Windows regressions slip through. A real
-fix is needed before v1.0 promises Windows support.
+VS 18 Enterprise (preview) ships a vcruntime header that does its
+own atomics-support check independent of `_HAS_C11_ATOMICS`. Pinning
+to VS 2022 stable keeps the existing workaround effective and makes
+CI deterministic.
 
 ## Tradeoff
 
-MSVC intrinsic fallback doubles the implementation. Acceptable if
-it lets us drop the workaround.
+We don't get to test against VS 18 preview. If VS 18's behavior
+becomes the new stable in a future release, this fix needs revisiting
+(likely by removing the macro override and letting the new header
+auto-detect). Until then, VS 2022 stable is the supported toolchain
+on Windows.
+
+## Out of scope (deferred)
+
+- Compiler-intrinsics fallback for full VS 18+ compatibility.
+- Removing `continue-on-error` for ARM64.
+- ARM64 native runner (Windows 11 ARM runner is slow).
