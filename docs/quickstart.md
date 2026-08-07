@@ -103,6 +103,69 @@ cd /path/to/otlp-c/tests/integration && docker compose down
 
 ## What's next
 
+### Metrics
+
+```c
+otlp_metric_t *m = otlp_metric_create(
+    OTLP_METRIC_COUNTER, "requests_total", "1",
+    "Total HTTP requests", NULL, 0);
+otlp_metric_record(m, 1.0);
+otlp_metric_mark_time(m);
+otlp_metric_set_attribute_string(m, "method", "GET");
+otlp_exporter_flush_metric(exp, m);  /* POSTs to /v1/metrics */
+otlp_metric_free(m);
+```
+
+Supported types: `OTLP_METRIC_COUNTER`, `OTLP_METRIC_GAUGE`,
+`OTLP_METRIC_HISTOGRAM`, `OTLP_METRIC_EXP_HISTOGRAM`.
+
+### Logs
+
+```c
+otlp_log_record_t *lr = otlp_log_record_create(
+    OTLP_SEVERITY_ERROR, "database connection failed");
+otlp_log_record_mark_timestamp(lr);
+otlp_log_record_set_attribute_string(lr, "db.host", "prod-db-1");
+otlp_exporter_flush_log(exp, lr);  /* POSTs to /v1/logs */
+otlp_log_record_free(lr);
+```
+
+### Context propagation
+
+```c
+/* Inject trace context into an HTTP request */
+otlp_context_t ctx = otlp_context_from_span(span);
+otlp_context_inject(ctx, my_header_set_fn, &request_headers);
+
+/* Extract on the receiving side */
+otlp_context_t parent = otlp_context_extract(
+    my_header_get_fn, &incoming_headers);
+```
+
+### Sampling
+
+```c
+/* 50% deterministic sampling based on trace_id */
+otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.5);
+otlp_tracer_set_sampler(tracer, s);
+```
+
+### Custom allocator
+
+```c
+otlp_allocator_t my_alloc = {
+    .alloc = my_malloc,
+    .realloc = my_realloc,
+    .free = my_free,
+};
+otlp_set_allocator(&my_alloc);
+
+/* Or install a slab for hot-path small allocations */
+otlp_install_slab_allocator(128, 256);
+```
+
+### Further reading
+
 - [deployment.md](deployment.md) — production sidecar topology,
   TLS termination, Kubernetes DaemonSet patterns.
 - [integration-test.md](integration-test.md) — how the integration
