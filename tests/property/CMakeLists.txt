@@ -136,7 +136,13 @@ if(UNIX)
         COMMAND otlp_property_exporter)
     set_tests_properties(property-exporter PROPERTIES
         LABELS "property;unit"
-        TIMEOUT 120)
+        TIMEOUT 120
+        # RUN_SERIAL: ctest runs this test alone (no parallel). The
+        # test spins up an in-process TCP echo server + emits spans
+        # with timing-driven batch boundaries; under parallel ctest
+        # load it occasionally flakes or SEGFAULTs because the echo
+        # thread can't keep up. Serial execution removes the contention.
+        RUN_SERIAL ON)
 endif()
 
 # v0.4: OTLP metrics encoder.
@@ -211,5 +217,6 @@ if(UNIX)
         COMMAND otlp_property_keepalive)
     set_tests_properties(property-keepalive PROPERTIES
         LABELS "property;unit"
-        TIMEOUT 60)
+        TIMEOUT 60
+        RUN_SERIAL ON)
 endif()
