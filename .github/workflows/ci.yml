@@ -54,11 +54,11 @@ jobs:
             cc: cl
             msvc: true
 
-    # windows-11-arm runner is slow to spin up; MSVC stdatomic.h
-    # support is brittle on preview VS toolchains. Pinning to VS 2022
-    # stable (see Setup MSVC step) — keep continue-on-error for ARM
-    # until verified.
-    continue-on-error: ${{ contains(matrix.os, 'windows') }}
+    # windows-11-arm runner is slow to spin up. MSVC stdatomic.h
+    # is fixed via atomic_compat.h (v0.5.1) — Windows no longer
+    # needs continue-on-error. ARM64 build still gated for runner
+    # speed; revisit when GitHub Actions ARM64 runner is faster.
+    continue-on-error: ${{ contains(matrix.os, 'arm') }}
 
     steps:
       - uses: actions/checkout@v4
