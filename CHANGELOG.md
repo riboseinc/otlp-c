@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.9] - 2026-08-07
+
+Exporter now exports all three signals. Examples show full API.
+
+### Added — TODO 51: Exporter metric/log flush
+
+- `otlp_exporter_flush_metric(exp, metric)` — synchronously encodes
+  and POSTs one metric to `/v1/metrics`.
+- `otlp_exporter_flush_log(exp, log)` — synchronously encodes and
+  POSTs one log record to `/v1/logs`.
+- URL derived from exporter's endpoint by replacing path component.
+- Null-transport mode: returns OK immediately.
+- Uses existing HTTP infrastructure; no new dependencies.
+
+### Changed — Example updated
+
+`examples/minimal.c` now demonstrates the full v0.5.x API: span with
+attributes + events, metric counter, log record, context propagation
+(traceparent), ratio sampler. Runs standalone via null_transport.
+
 ## [0.5.8] - 2026-08-07
 
 Code quality cleanup — DRY completion and API surface completeness.
