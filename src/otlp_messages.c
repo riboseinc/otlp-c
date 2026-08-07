@@ -109,15 +109,78 @@ encode_attr_bytes(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
 	return otlp_pb_bytes(buf, p ? p : (const uint8_t *)"", len);
 }
 
+/* Forward decls: array + kvlist encoders recurse into otlp_encode_any_value. */
+static otlp_status_t
+encode_attr_array(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	/* ArrayValue { repeated AnyValue values = 1; }
+	 * Each item is encoded as a sub-message at field 1. */
+	const struct otlp_attr_array *arr = a->v.array_val;
+	size_t			       i;
+	const uint32_t	       values_field =
+		OTLP_AV_ARRAY_FIELDS[OTLP_AV_ARRAY_FI_VALUES].number;
+
+	if (!arr)
+		return otlp_pb_bytes(buf, (const uint8_t *)"", 0);
+	for (i = 0; i < arr->n; i++) {
+		struct otlp_pb_buf item = { 0 };
+		otlp_status_t	  st;
+
+		st = otlp_pb_buf_init(&item, 0);
+		if (st != OTLP_OK)
+			return st;
+		st = otlp_encode_any_value(&item, &arr->items[i]);
+		if (st == OTLP_OK)
+			st = otlp_pb_field_message(
+				buf, values_field, item.data, item.len);
+		otlp_pb_buf_free(&item);
+		if (st != OTLP_OK)
+			return st;
+	}
+	return OTLP_OK;
+}
+
+static otlp_status_t
+encode_attr_kvlist(struct otlp_pb_buf *buf, const struct otlp_attribute *a)
+{
+	/* KeyValueList { repeated KeyValue values = 1; }
+	 * Each entry is encoded as a KeyValue sub-message at field 1. */
+	const struct otlp_attr_kvlist *kvl = a->v.kvlist_val;
+	size_t				 i;
+	const uint32_t		 values_field =
+		OTLP_KVLIST_FIELDS[OTLP_KVLIST_FI_VALUES].number;
+
+	if (!kvl)
+		return otlp_pb_bytes(buf, (const uint8_t *)"", 0);
+	for (i = 0; i < kvl->n; i++) {
+		struct otlp_pb_buf entry = { 0 };
+		otlp_status_t	  st;
+
+		st = otlp_pb_buf_init(&entry, 0);
+		if (st != OTLP_OK)
+			return st;
+		st = otlp_encode_key_value(
+			&entry, kvl->entries[i].key, &kvl->entries[i].value);
+		if (st == OTLP_OK)
+			st = otlp_pb_field_message(
+				buf, values_field, entry.data, entry.len);
+		otlp_pb_buf_free(&entry);
+		if (st != OTLP_OK)
+			return st;
+	}
+	return OTLP_OK;
+}
+
 /* Dispatch table: indexed by enum otlp_attr_type, which now matches
- * OTLP_AV_FI_* indices. NULL entries = unimplemented variants. */
+ * OTLP_AV_FI_* indices. All seven variants are populated — the
+ * AnyValue oneof is fully covered. OCP. */
 static const otlp_attr_encode_fn attr_encoders[] = {
 	[OTLP_ATTR_STRING] = encode_attr_string,
 	[OTLP_ATTR_BOOL]   = encode_attr_bool,
 	[OTLP_ATTR_INT64]  = encode_attr_int64,
 	[OTLP_ATTR_DOUBLE] = encode_attr_double,
-	/* [4] = ARRAY_VALUE — deferred */
-	/* [5] = KVLIST_VALUE — deferred */
+	[OTLP_ATTR_ARRAY]  = encode_attr_array,
+	[OTLP_ATTR_KVLIST] = encode_attr_kvlist,
 	[OTLP_ATTR_BYTES]  = encode_attr_bytes,
 };
 

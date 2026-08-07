@@ -199,6 +199,28 @@ static const struct otlp_field_spec OTLP_AV_FIELDS[] = {
 	[OTLP_AV_FI_BYTES]	 = {"bytes_value", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
 };
 
+/* ── ArrayValue / KeyValueList (nested AnyValue variants) ─────── */
+
+enum {
+	OTLP_AV_ARRAY_FI_VALUES,
+	OTLP_AV_ARRAY_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_AV_ARRAY_FIELDS[] = {
+	[OTLP_AV_ARRAY_FI_VALUES] = {"values", 1, OTLP_PB_WIRE_LEN,
+				     OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
+enum {
+	OTLP_KVLIST_FI_VALUES,
+	OTLP_KVLIST_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_KVLIST_FIELDS[] = {
+	[OTLP_KVLIST_FI_VALUES] = {"values", 1, OTLP_PB_WIRE_LEN,
+				   OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
 /* ── Span.Event ───────────────────────────────────────────────── */
 
 enum {

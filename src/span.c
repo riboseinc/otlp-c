@@ -669,6 +669,14 @@ otlp_span_clone(const otlp_span_t *src)
 					attrs[i].v.bytes_val.data,
 					attrs[i].v.bytes_val.len);
 				break;
+			case OTLP_ATTR_ARRAY:
+			case OTLP_ATTR_KVLIST:
+				/* No public setter yet (encoder exists via
+				 * otlp_encode_any_value, but the span API
+				 * doesn't expose array/kvlist construction).
+				 * Skip — clone cannot reconstruct these. */
+				st = OTLP_ERR_NOT_IMPLEMENTED;
+				break;
 		}
 		if (st != OTLP_OK)
 		{

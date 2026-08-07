@@ -16,6 +16,7 @@
 #include "property_harness.h"
 #include "decoder.h"
 
+#include "../src/internal_util.h"
 #include "../src/otlp_messages.h"
 #include "../src/protobuf_encode.h"
 #include "../src/span_internal.h"
@@ -333,6 +334,111 @@ out:
 
 /* ── main ─────────────────────────────────────────────────────── */
 
+static int
+prop_encode_anyvalue_array(uint64_t seed)
+{
+	struct otlp_pb_buf buf = { 0 };
+	struct otlp_attribute attr;
+	struct otlp_attr_array *arr;
+	int ok = 0;
+
+	(void) seed;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		return 0;
+
+	arr = otlp_calloc(1, sizeof(*arr));
+	if (!arr)
+		goto out_buf;
+	arr->n = 2;
+	arr->items = otlp_calloc(arr->n, sizeof(*arr->items));
+	if (!arr->items)
+		goto out_arr;
+	arr->items[0].type = OTLP_ATTR_INT64;
+	arr->items[0].v.int64_val = 11;
+	arr->items[1].type = OTLP_ATTR_INT64;
+	arr->items[1].v.int64_val = 22;
+
+	attr.key = NULL;
+	attr.type = OTLP_ATTR_ARRAY;
+	attr.v.array_val = arr;
+
+	if (otlp_encode_any_value(&buf, &attr) != OTLP_OK)
+		goto out_items;
+	/* AnyValue for array should produce tag(5, LEN) + sub-message
+	 * containing 2 AnyValue entries at field 1 (each is tag(3,
+	 * VARINT) + value). Verify the outer tag. */
+	{
+		size_t    pos = 0;
+		uint32_t  fnum;
+		int	    wt;
+
+		if (decode_tag(buf.data, buf.len, &pos, &fnum, &wt) != OTLP_OK)
+			goto out_items;
+		if (fnum != 5 || wt != OTLP_PB_WIRE_LEN)
+			goto out_items;
+		ok = 1;
+	}
+
+out_items:
+	otlp_attribute_free(&attr);
+out_arr:
+	/* otlp_attribute_free already freed arr */
+	(void) arr;
+out_buf:
+	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
+static int
+prop_encode_anyvalue_kvlist(uint64_t seed)
+{
+	struct otlp_pb_buf buf = { 0 };
+	struct otlp_attribute attr;
+	struct otlp_attr_kvlist *kvl;
+	int ok = 0;
+
+	(void) seed;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		return 0;
+
+	kvl = otlp_calloc(1, sizeof(*kvl));
+	if (!kvl)
+		goto out_buf;
+	kvl->n = 1;
+	kvl->entries = otlp_calloc(kvl->n, sizeof(*kvl->entries));
+	if (!kvl->entries)
+		goto out_kvl;
+	kvl->entries[0].key = otlp_dup_str("nested");
+	kvl->entries[0].value.type = OTLP_ATTR_INT64;
+	kvl->entries[0].value.v.int64_val = 7;
+
+	attr.key = NULL;
+	attr.type = OTLP_ATTR_KVLIST;
+	attr.v.kvlist_val = kvl;
+
+	if (otlp_encode_any_value(&buf, &attr) != OTLP_OK)
+		goto out_entries;
+	{
+		size_t    pos = 0;
+		uint32_t  fnum;
+		int	    wt;
+
+		if (decode_tag(buf.data, buf.len, &pos, &fnum, &wt) != OTLP_OK)
+			goto out_entries;
+		if (fnum != 6 || wt != OTLP_PB_WIRE_LEN)
+			goto out_entries;
+		ok = 1;
+	}
+
+out_entries:
+	otlp_attribute_free(&attr);
+out_kvl:
+	(void) kvl;
+out_buf:
+	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -356,6 +462,10 @@ main(void)
 		prop_encode_status_omitted, "prop_encode_status_omitted", 1, 1);
 	failures += property_run(
 		prop_encode_status_present, "prop_encode_status_present", 1, 1);
+	failures += property_run(prop_encode_anyvalue_array,
+		"prop_encode_anyvalue_array", 5, 1);
+	failures += property_run(prop_encode_anyvalue_kvlist,
+		"prop_encode_anyvalue_kvlist", 5, 1);
 
 	if (failures)
 		printf("[property] %d otlp-messages property(ies) failed\n",
