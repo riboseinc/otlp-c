@@ -4,6 +4,18 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.11] - 2026-08-08
+
+README updated to reflect the v0.5.x API surface.
+
+### Changed — README
+
+- Status updated from "0.1.0 (alpha)" to "0.5.10".
+- Description updated to mention all three signals (traces, metrics,
+  logs) instead of just traces.
+- New "Features" section listing all capabilities.
+- Platform support list updated.
+
 ## [0.5.10] - 2026-08-07
 
 Property test coverage for flush + docs for all signals.
