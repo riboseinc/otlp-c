@@ -31,7 +31,7 @@ jobs:
   validate-and-bump:
     name: Validate and bump version
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get_version.outputs.version }}
       release_branch: ${{ steps.create_branch.outputs.branch }}
@@ -101,7 +101,7 @@ jobs:
     name: Create release PR
     if: github.event_name == 'workflow_dispatch'
     needs: validate-and-bump
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -139,7 +139,7 @@ jobs:
 
   tag-and-release:
     name: Tag and create GitHub release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
     outputs:
       version: ${{ steps.get_version.outputs.version }}
@@ -188,19 +188,19 @@ jobs:
       matrix:
         include:
           - name: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-24.04
             archive: tar.gz
           - name: linux-aarch64
             os: ubuntu-24.04-arm
             archive: tar.gz
           - name: macos-x86_64
-            os: macos-13
+            os: macos-15-intel
             archive: tar.gz
           - name: macos-arm64
             os: macos-14
             archive: tar.gz
           - name: windows-x64
-            os: windows-latest
+            os: windows-2022
             archive: zip
             msvc: true
           - name: windows-arm64
@@ -221,7 +221,7 @@ jobs:
         with:
           arch: ${{ contains(matrix.name, 'arm64') && 'arm64' || 'x64' }}
           # Pin to VS 2022 stable. VS 18 Enterprise (preview)
-          # installs on windows-latest by default and its
+          # installs on windows-2022 by default and its
           # vcruntime_c11_stdatomic.h header no longer honors the
           # _HAS_C11_ATOMICS macro override, breaking C11 atomics
           # even with /std:c11. See TODO.complete/phase-20.
@@ -266,7 +266,7 @@ jobs:
   generate-sbom:
     name: Generate SBOM
     needs: tag-and-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
