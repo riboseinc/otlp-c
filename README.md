@@ -7,7 +7,12 @@ A pure-C library for emitting OpenTelemetry telemetry via the OpenTelemetry Prot
 
 ## What this is
 
-`otlp-c` is a pure-C99 client for the OpenTelemetry Protocol. It produces OTLP/HTTP trace payloads (and, in future, metrics and logs), posts them to an OTLP collector (such as [otelcol](https://github.com/open-telemetry/opentelemetry-collector)), and lets any C application emit OTel-compliant telemetry without dragging in a C++ runtime.
+`otlp-c` is a pure-C99 client for the OpenTelemetry Protocol. It
+produces OTLP/HTTP payloads for all three signals — traces, metrics,
+and logs — posts them to an OTLP collector (such as
+[otelcol](https://github.com/open-telemetry/opentelemetry-collector)),
+and lets any C application emit OTel-compliant telemetry without
+dragging in a C++ runtime.
 
 The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp)) is excellent — but it's C++. That closes the door for C-only projects: kernel modules, embedded firmware, language runtimes, libc-preloaded tracing tools, and any project that needs to stay buildable with just a C compiler.
 
@@ -15,11 +20,16 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**0.1.0 (alpha).** Phases 1-7 complete: protobuf encoder, OTLP
-message encoders, HTTP/1.1 non-blocking client, span/tracer,
-caller-tick exporter with lock-free MPSC, integration test against
-otelcol + Jaeger. See [CHANGELOG.md](CHANGELOG.md) and
-[TODO.complete/](TODO.complete/) for phase-by-phase status.
+**0.5.10.** Full OTLP/HTTP client for all three signals (traces,
+metrics, logs). Features: hand-rolled protobuf encoder with
+schema-driven field tables, lock-free MPSC queue + caller-tick
+exporter, non-blocking HTTP/1.1 client with keep-alive, W3C Trace
+Context propagation, sampler interface (always_on / always_off /
+trace_id_ratio_based), slab allocator, span events/links/trace_state,
+context propagation with tracestate, and more.
+
+Supported platforms: Linux x86_64/ARM64, macOS Intel/ARM64,
+Windows x64/ARM64, FreeBSD, Alpine (musl).
 
 The API surface is unstable until 1.0.0. Within the 0.x line, minor
 versions may break the API (documented in CHANGELOG).
@@ -45,6 +55,29 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
 - **Libc-preloaded tracers** (e.g. [retrace](https://github.com/riboseinc/retrace)) — must stay buildable with a C compiler only.
 - **Static binaries** — no C++ standard library to link.
 - **Security-critical code** — minimal attack surface; no protobuf runtime, no async runtime, no template metaprogramming.
+
+## Features
+
+- **Traces**: spans with attributes, events, links, trace_state,
+  status, sampling. Async emit + caller-tick batching with
+  exponential backoff retry.
+- **Metrics**: counter, gauge, histogram, exponential histogram.
+  Synchronous flush to `/v1/metrics`.
+- **Logs**: structured log records with severity, body, trace
+  correlation. Synchronous flush to `/v1/logs`.
+- **Context propagation**: W3C Trace Context (traceparent +
+  tracestate) via callback-based carrier abstraction.
+- **Sampler**: pluggable vtable with always_on, always_off, and
+  deterministic trace_id_ratio_based built-ins.
+- **Slab allocator**: fixed-slot memory pool with malloc fallback.
+  Installable as the process-wide allocator.
+- **Zero dependencies**: no protobuf-c, no libcurl, no OpenSSL,
+  no C++ runtime. Hand-rolled protobuf encoder + HTTP/1.1 client.
+- **No library threads**: caller-driven I/O. The library never
+  calls `pthread_create` or takes a mutex. Embeddable in kernel
+  modules, firmware, language VMs.
+- **Cross-platform**: Linux, macOS, Windows, FreeBSD, Alpine.
+  C11 compiler required (`<stdatomic.h>`).
 
 ## Build
 
