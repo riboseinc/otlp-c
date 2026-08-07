@@ -313,6 +313,7 @@ enum {
 	OTLP_METRIC_FI_GAUGE,
 	OTLP_METRIC_FI_SUM,
 	OTLP_METRIC_FI_HISTOGRAM,
+	OTLP_METRIC_FI_EXP_HISTOGRAM,
 	OTLP_METRIC_FI_COUNT,
 };
 
@@ -326,6 +327,7 @@ static const struct otlp_field_spec OTLP_METRIC_FIELDS[] = {
 	[OTLP_METRIC_FI_SUM]	    = {"sum", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	/* [8] reserved in proto */
 	[OTLP_METRIC_FI_HISTOGRAM]  = {"histogram", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_METRIC_FI_EXP_HISTOGRAM] = {"exponential_histogram", 10, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
 
 /* ── Sum ──────────────────────────────────────────────────────── */

@@ -12,6 +12,7 @@
 #include "prng.h"
 #include "property_harness.h"
 
+#include "../src/internal_util.h"
 #include <otlp-c/slab.h>
 
 #include <stdbool.h>
@@ -184,6 +185,40 @@ prop_slab_stats_consistent(uint64_t seed)
 	return st.in_use == 0 && st.alloc_count == 50 && st.free_count == 50;
 }
 
+static int
+prop_slab_install_global_allocator(uint64_t seed)
+{
+	otlp_slab_stats_t st;
+	void	     *small = NULL;
+	void	     *big   = NULL;
+	int	      ok    = 0;
+
+	(void) seed;
+	/* Install slab: slot_size=64, capacity=8. */
+	if (otlp_install_slab_allocator(64, 8) != OTLP_OK)
+		return 0;
+	/* Small alloc should hit the slab; big alloc should fall through. */
+	small = otlp_malloc(32);
+	big   = otlp_malloc(256);
+	if (!small || !big)
+		goto out;
+	memset(small, 0xAB, 32);
+	memset(big, 0xCD, 256);
+	otlp_free(small);
+	small = NULL;
+	otlp_free(big);
+	big = NULL;
+	ok = 1;
+out:
+	if (small)
+		otlp_free(small);
+	if (big)
+		otlp_free(big);
+	otlp_uninstall_slab_allocator();
+	(void) st;
+	return ok;
+}
+
 int
 main(void)
 {
@@ -194,13 +229,14 @@ main(void)
 	failures += property_run(prop_slab_slot_reuse,
 				 "prop_slab_slot_reuse", 5, 1);
 	failures += property_run(prop_slab_oversize_fallback,
-				 "prop_slab_oversize_fallback", 5, 1);
-	failures += property_run(prop_slab_overflow_fallback,
+				 "prop_slab_oversize_fallback", 5, 1);	failures += property_run(prop_slab_overflow_fallback,
 				 "prop_slab_overflow_fallback", 5, 1);
 	failures += property_run(prop_slab_free_routes_correctly,
 				 "prop_slab_free_routes_correctly", 50, 1);
 	failures += property_run(prop_slab_stats_consistent,
 				 "prop_slab_stats_consistent", 50, 1);
+	failures += property_run(prop_slab_install_global_allocator,
+				 "prop_slab_install_global_allocator", 5, 1);
 
 	if (failures)
 		printf("[property] %d slab property(ies) failed\n", failures);

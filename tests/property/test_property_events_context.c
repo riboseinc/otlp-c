@@ -469,6 +469,50 @@ prop_context_extract_rejects_malformed(uint64_t seed)
 	return 1;
 }
 
+static int
+prop_context_tracestate_roundtrip(uint64_t seed)
+{
+	struct prng	      p;
+	otlp_span_t	  *span;
+	struct test_carrier   carrier = { 0 };
+	otlp_context_t	      ctx_in, ctx_out;
+	uint8_t	      trace_id[16];
+	uint8_t	      span_id[8];
+	const char	      *ts = "vendor1=abc123,vendor2=def456";
+	int		      ok = 0;
+	size_t		      i;
+
+	prng_seed(&p, seed);
+	for (i = 0; i < 16; i++)
+		trace_id[i] = (uint8_t) prng_u32(&p, 256);
+	for (i = 0; i < 8; i++)
+		span_id[i] = (uint8_t) prng_u32(&p, 256);
+	trace_id[0] |= 1;
+	span_id[0]  |= 1;
+
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+	otlp_span_set_trace_id(span, trace_id);
+	otlp_span_set_span_id(span, span_id);
+
+	ctx_in = otlp_context_from_span(span);
+	if (!ctx_in.has_context)
+		goto out;
+	snprintf(ctx_in.tracestate, sizeof(ctx_in.tracestate), "%s", ts);
+
+	if (otlp_context_inject(ctx_in, carrier_set, &carrier) != OTLP_OK)
+		goto out;
+	ctx_out = otlp_context_extract(carrier_get, &carrier);
+	if (!ctx_out.has_context)
+		goto out;
+	ok = (strcmp(ctx_out.tracestate, ts) == 0);
+
+out:
+	otlp_span_free(span);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -486,6 +530,8 @@ main(void)
 				 "prop_context_inject_extract", 50, 1);
 	failures += property_run(prop_context_extract_rejects_malformed,
 				 "prop_context_extract_rejects_malformed", 1, 1);
+	failures += property_run(prop_context_tracestate_roundtrip,
+				 "prop_context_tracestate_roundtrip", 50, 1);
 
 	if (failures)
 		printf("[property] %d events/links/context property(ies) failed\n",

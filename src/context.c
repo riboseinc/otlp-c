@@ -83,6 +83,15 @@ otlp_context_inject(otlp_context_t     ctx,
 		buf[55] = '\0';
 	}
 
+	/* Also emit tracestate if present (non-empty). */
+	if (ctx.tracestate[0]) {
+		otlp_status_t ts_st;
+
+		ts_st = set(carrier_ctx, OTLP_CONTEXT_TRACESTATE_HEADER,
+			    ctx.tracestate);
+		if (ts_st != OTLP_OK)
+			return ts_st;
+	}
 	return set(carrier_ctx, OTLP_CONTEXT_TRACEPARENT_HEADER, buf);
 }
 
@@ -111,5 +120,19 @@ otlp_context_extract(otlp_carrier_get_fn get,
 	}
 	ctx.sampled     = (flags & 0x01) != 0;
 	ctx.has_context = true;
+
+	/* Also extract tracestate if present. */
+	{
+		const char *ts = get(carrier_ctx, OTLP_CONTEXT_TRACESTATE_HEADER);
+
+		if (ts && ts[0]) {
+			size_t len = strlen(ts);
+
+			if (len >= OTLP_CONTEXT_TRACESTATE_MAX)
+				len = OTLP_CONTEXT_TRACESTATE_MAX - 1;
+			memcpy(ctx.tracestate, ts, len);
+			ctx.tracestate[len] = '\0';
+		}
+	}
 	return ctx;
 }

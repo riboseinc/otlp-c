@@ -31,9 +31,10 @@ extern "C" {
 typedef struct otlp_metric otlp_metric_t;
 
 typedef enum {
-	OTLP_METRIC_COUNTER   = 1,
-	OTLP_METRIC_GAUGE     = 2,
-	OTLP_METRIC_HISTOGRAM = 3,
+	OTLP_METRIC_COUNTER	       = 1,
+	OTLP_METRIC_GAUGE	       = 2,
+	OTLP_METRIC_HISTOGRAM	       = 3,
+	OTLP_METRIC_EXP_HISTOGRAM      = 4,
 } otlp_metric_type_t;
 
 /* Aggregation temporality (OTLP enum values). */
