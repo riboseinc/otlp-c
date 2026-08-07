@@ -31,17 +31,24 @@
 #define IS_F_VERSION		    OTLP_IS_FIELDS[OTLP_IS_FI_VERSION].number
 #define SPAN_F_TRACE_ID	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_TRACE_ID].number
 #define SPAN_F_SPAN_ID	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_SPAN_ID].number
+#define SPAN_F_TRACE_STATE	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_TRACE_STATE].number
 #define SPAN_F_PARENT_SPAN_ID    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_PARENT_SPAN_ID].number
 #define SPAN_F_NAME		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_NAME].number
 #define SPAN_F_KIND		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_KIND].number
 #define SPAN_F_START_TIME	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_START_TIME].number
 #define SPAN_F_END_TIME	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_END_TIME].number
 #define SPAN_F_ATTRIBUTES	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_ATTRIBUTES].number
+#define SPAN_F_EVENTS		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_EVENTS].number
+#define SPAN_F_LINKS		    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_LINKS].number
 #define SPAN_F_STATUS	    OTLP_SPAN_FIELDS[OTLP_SPAN_FI_STATUS].number
 #define STATUS_F_CODE	    OTLP_STATUS_FIELDS[OTLP_STATUS_FI_CODE].number
 #define STATUS_F_MESSAGE	    OTLP_STATUS_FIELDS[OTLP_STATUS_FI_MESSAGE].number
 #define KV_F_KEY		    OTLP_KV_FIELDS[OTLP_KV_FI_KEY].number
 #define KV_F_VALUE		    OTLP_KV_FIELDS[OTLP_KV_FI_VALUE].number
+#define EVENT_F_NAME		    OTLP_EVENT_FIELDS[OTLP_EVENT_FI_NAME].number
+#define EVENT_F_TIME		    OTLP_EVENT_FIELDS[OTLP_EVENT_FI_TIME].number
+#define LINK_F_TRACE_ID	    OTLP_LINK_FIELDS[OTLP_LINK_FI_TRACE_ID].number
+#define LINK_F_SPAN_ID	    OTLP_LINK_FIELDS[OTLP_LINK_FI_SPAN_ID].number
 #define AV_F_STRING		    OTLP_AV_FIELDS[OTLP_AV_FI_STRING].number
 #define AV_F_BOOL		    OTLP_AV_FIELDS[OTLP_AV_FI_BOOL].number
 #define AV_F_INT64		    OTLP_AV_FIELDS[OTLP_AV_FI_INT64].number
@@ -263,6 +270,18 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 			return st;
 	}
 
+	/* trace_state (field 3) — only if non-empty. */
+	{
+		const char *ts = otlp_span_get_trace_state(span);
+
+		if (ts && ts[0])
+		{
+			st = otlp_pb_field_string(out, SPAN_F_TRACE_STATE, ts);
+			if (st != OTLP_OK)
+				return st;
+		}
+	}
+
 	/* name (field 5) — skip if empty. */
 	name = otlp_span_get_name(span);
 	if (name && name[0])
@@ -323,6 +342,65 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 		otlp_pb_buf_free(&kv);
 		if (st != OTLP_OK)
 			return st;
+	}
+
+	/* events (field 11, repeated). Each event emits name + time. */
+	{
+		size_t		     n_events;
+		const struct otlp_event *events = otlp_span_get_events(span, &n_events);
+
+		for (i = 0; i < n_events; i++)
+		{
+			struct otlp_pb_buf ev = { 0 };
+			st = otlp_pb_buf_init(&ev, 0);
+			if (st != OTLP_OK)
+				return st;
+			if (events[i].name && events[i].name[0])
+			{
+				st = otlp_pb_field_string(&ev, EVENT_F_NAME,
+							   events[i].name);
+				if (st != OTLP_OK)
+				{
+					otlp_pb_buf_free(&ev);
+					return st;
+				}
+			}
+			st = otlp_pb_field_fixed64(&ev, EVENT_F_TIME,
+						    events[i].time_unix_nano);
+			if (st == OTLP_OK)
+				st = otlp_pb_field_message(
+					out, SPAN_F_EVENTS, ev.data, ev.len);
+			otlp_pb_buf_free(&ev);
+			if (st != OTLP_OK)
+				return st;
+		}
+	}
+
+	/* links (field 13, repeated). Each link emits trace_id + span_id. */
+	{
+		size_t		    n_links;
+		const struct otlp_link *links = otlp_span_get_links(span, &n_links);
+
+		for (i = 0; i < n_links; i++)
+		{
+			struct otlp_pb_buf lk = { 0 };
+			st = otlp_pb_buf_init(&lk, 0);
+			if (st != OTLP_OK)
+				return st;
+			st = otlp_pb_field_bytes(&lk, LINK_F_TRACE_ID,
+						 links[i].trace_id,
+						 OTLP_TRACE_ID_LEN);
+			if (st == OTLP_OK)
+				st = otlp_pb_field_bytes(&lk, LINK_F_SPAN_ID,
+							 links[i].span_id,
+							 OTLP_SPAN_ID_LEN);
+			if (st == OTLP_OK)
+				st = otlp_pb_field_message(
+					out, SPAN_F_LINKS, lk.data, lk.len);
+			otlp_pb_buf_free(&lk);
+			if (st != OTLP_OK)
+				return st;
+		}
 	}
 
 	/* status (field 15) — omitted for UNSET. */

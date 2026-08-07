@@ -19,6 +19,7 @@
 #include "metric.h"
 #include "log.h"
 #include "w3c.h"
+#include "context.h"
 #include "visibility.h"
 
 #ifdef __cplusplus

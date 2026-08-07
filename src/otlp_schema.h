@@ -199,4 +199,271 @@ static const struct otlp_field_spec OTLP_AV_FIELDS[] = {
 	[OTLP_AV_FI_BYTES]	 = {"bytes_value", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_ALWAYS_EMIT, false},
 };
 
+/* ── Span.Event ───────────────────────────────────────────────── */
+
+enum {
+	OTLP_EVENT_FI_NAME,
+	OTLP_EVENT_FI_TIME,
+	OTLP_EVENT_FI_ATTRIBUTES,
+	OTLP_EVENT_FI_DROPPED_ATTRS,
+	OTLP_EVENT_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_EVENT_FIELDS[] = {
+	[OTLP_EVENT_FI_NAME]	       = {"name", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EVENT_FI_TIME]	       = {"time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EVENT_FI_ATTRIBUTES]     = {"attributes", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_EVENT_FI_DROPPED_ATTRS]  = {"dropped_attributes_count", 4, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── Span.Link ────────────────────────────────────────────────── */
+
+enum {
+	OTLP_LINK_FI_TRACE_ID,
+	OTLP_LINK_FI_SPAN_ID,
+	OTLP_LINK_FI_TRACE_STATE,
+	OTLP_LINK_FI_ATTRIBUTES,
+	OTLP_LINK_FI_DROPPED_ATTRS,
+	OTLP_LINK_FI_FLAGS,
+	OTLP_LINK_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_LINK_FIELDS[] = {
+	[OTLP_LINK_FI_TRACE_ID]	    = {"trace_id", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LINK_FI_SPAN_ID]	    = {"span_id", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LINK_FI_TRACE_STATE]  = {"trace_state", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LINK_FI_ATTRIBUTES]   = {"attributes", 4, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_LINK_FI_DROPPED_ATTRS] = {"dropped_attributes_count", 5, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LINK_FI_FLAGS]	    = {"flags", 6, OTLP_PB_WIRE_FIXED32, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ════════════════════════════════════════════════════════════════
+ * Metrics signal — opentelemetry-proto metrics/v1
+ * ════════════════════════════════════════════════════════════════ */
+
+/* ── ExportMetricsServiceRequest ──────────────────────────────── */
+
+enum {
+	OTLP_EMSR_FI_RESOURCE_METRICS,
+	OTLP_EMSR_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_EMSR_FIELDS[] = {
+	[OTLP_EMSR_FI_RESOURCE_METRICS] = {"resource_metrics", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
+/* ── ResourceMetrics ──────────────────────────────────────────── */
+
+enum {
+	OTLP_RM_FI_RESOURCE,
+	OTLP_RM_FI_SCOPE_METRICS,
+	OTLP_RM_FI_SCHEMA_URL,
+	OTLP_RM_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_RM_FIELDS[] = {
+	[OTLP_RM_FI_RESOURCE]	    = {"resource", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_RM_FI_SCOPE_METRICS]  = {"scope_metrics", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_RM_FI_SCHEMA_URL]	    = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── ScopeMetrics ─────────────────────────────────────────────── */
+
+enum {
+	OTLP_SM_FI_SCOPE,
+	OTLP_SM_FI_METRICS,
+	OTLP_SM_FI_SCHEMA_URL,
+	OTLP_SM_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_SM_FIELDS[] = {
+	[OTLP_SM_FI_SCOPE]	    = {"scope", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SM_FI_METRICS]    = {"metrics", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SM_FI_SCHEMA_URL] = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── Metric (oneof data: Gauge=5, Sum=7, Histogram=9, ...) ────── */
+
+enum {
+	OTLP_METRIC_FI_NAME,
+	OTLP_METRIC_FI_DESCRIPTION,
+	OTLP_METRIC_FI_UNIT,
+	OTLP_METRIC_FI_GAUGE,
+	OTLP_METRIC_FI_SUM,
+	OTLP_METRIC_FI_HISTOGRAM,
+	OTLP_METRIC_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_METRIC_FIELDS[] = {
+	[OTLP_METRIC_FI_NAME]	    = {"name", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_METRIC_FI_DESCRIPTION] = {"description", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_METRIC_FI_UNIT]	    = {"unit", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* [4] reserved in proto */
+	[OTLP_METRIC_FI_GAUGE]	    = {"gauge", 5, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* [6] reserved in proto */
+	[OTLP_METRIC_FI_SUM]	    = {"sum", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* [8] reserved in proto */
+	[OTLP_METRIC_FI_HISTOGRAM]  = {"histogram", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── Sum ──────────────────────────────────────────────────────── */
+
+enum {
+	OTLP_SUM_FI_DATA_POINTS,
+	OTLP_SUM_FI_AGG_TEMP,
+	OTLP_SUM_FI_IS_MONOTONIC,
+	OTLP_SUM_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_SUM_FIELDS[] = {
+	[OTLP_SUM_FI_DATA_POINTS]  = {"data_points", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SUM_FI_AGG_TEMP]	    = {"aggregation_temporality", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SUM_FI_IS_MONOTONIC] = {"is_monotonic", 3, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── Gauge ────────────────────────────────────────────────────── */
+
+enum {
+	OTLP_GAUGE_FI_DATA_POINTS,
+	OTLP_GAUGE_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_GAUGE_FIELDS[] = {
+	[OTLP_GAUGE_FI_DATA_POINTS] = {"data_points", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
+/* ── Histogram ────────────────────────────────────────────────── */
+
+enum {
+	OTLP_HIST_FI_DATA_POINTS,
+	OTLP_HIST_FI_AGG_TEMP,
+	OTLP_HIST_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_HIST_FIELDS[] = {
+	[OTLP_HIST_FI_DATA_POINTS] = {"data_points", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_HIST_FI_AGG_TEMP]    = {"aggregation_temporality", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── NumberDataPoint (oneof value: as_double=4, as_int=6) ─────── */
+
+enum {
+	OTLP_NDP_FI_ATTRIBUTES,
+	OTLP_NDP_FI_START_TIME,
+	OTLP_NDP_FI_TIME,
+	OTLP_NDP_FI_AS_DOUBLE,
+	OTLP_NDP_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_NDP_FIELDS[] = {
+	[OTLP_NDP_FI_ATTRIBUTES] = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_NDP_FI_START_TIME] = {"start_time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_NDP_FI_TIME]	    = {"time_unix_nano", 3, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_NDP_FI_AS_DOUBLE] = {"as_double", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── HistogramDataPoint ─────────────────────────────────────────
+ * Note: the proto field at index 3 is named `count`, which collides
+ * with the conventional `OTLP_*_FI_COUNT` sentinel. The sentinel is
+ * therefore renamed `OTLP_HDP_FI_NFIELDS` for this table only. */
+
+enum {
+	OTLP_HDP_FI_ATTRIBUTES,
+	OTLP_HDP_FI_START_TIME,
+	OTLP_HDP_FI_TIME,
+	OTLP_HDP_FI_COUNT,
+	OTLP_HDP_FI_SUM,
+	OTLP_HDP_FI_BUCKET_COUNTS,
+	OTLP_HDP_FI_EXPLICIT_BOUNDS,
+	OTLP_HDP_FI_MIN,
+	OTLP_HDP_FI_MAX,
+	OTLP_HDP_FI_NFIELDS,
+};
+
+static const struct otlp_field_spec OTLP_HDP_FIELDS[] = {
+	[OTLP_HDP_FI_ATTRIBUTES]	    = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_HDP_FI_START_TIME]	    = {"start_time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_HDP_FI_TIME]		    = {"time_unix_nano", 3, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_HDP_FI_COUNT]		    = {"count", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
+	[OTLP_HDP_FI_SUM]		    = {"sum", 5, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_HDP_FI_BUCKET_COUNTS]	    = {"bucket_counts", 6, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_HDP_FI_EXPLICIT_BOUNDS]	    = {"explicit_bounds", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	/* [8] reserved */
+	[OTLP_HDP_FI_MIN]		    = {"min", 9, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_HDP_FI_MAX]		    = {"max", 10, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ════════════════════════════════════════════════════════════════
+ * Logs signal — opentelemetry-proto logs/v1
+ * ════════════════════════════════════════════════════════════════ */
+
+/* ── ExportLogsServiceRequest ─────────────────────────────────── */
+
+enum {
+	OTLP_ELSR_FI_RESOURCE_LOGS,
+	OTLP_ELSR_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_ELSR_FIELDS[] = {
+	[OTLP_ELSR_FI_RESOURCE_LOGS] = {"resource_logs", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+};
+
+/* ── ResourceLogs ─────────────────────────────────────────────── */
+
+enum {
+	OTLP_RL_FI_RESOURCE,
+	OTLP_RL_FI_SCOPE_LOGS,
+	OTLP_RL_FI_SCHEMA_URL,
+	OTLP_RL_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_RL_FIELDS[] = {
+	[OTLP_RL_FI_RESOURCE]	    = {"resource", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_RL_FI_SCOPE_LOGS]	    = {"scope_logs", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_RL_FI_SCHEMA_URL]	    = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── ScopeLogs ────────────────────────────────────────────────── */
+
+enum {
+	OTLP_SL_FI_SCOPE,
+	OTLP_SL_FI_LOG_RECORDS,
+	OTLP_SL_FI_SCHEMA_URL,
+	OTLP_SL_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_SL_FIELDS[] = {
+	[OTLP_SL_FI_SCOPE]	    = {"scope", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_SL_FI_LOG_RECORDS]   = {"log_records", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_SL_FI_SCHEMA_URL]    = {"schema_url", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
+/* ── LogRecord ────────────────────────────────────────────────── */
+
+enum {
+	OTLP_LOG_FI_TIME,
+	OTLP_LOG_FI_SEVERITY_NUMBER,
+	OTLP_LOG_FI_SEVERITY_TEXT,
+	OTLP_LOG_FI_BODY,
+	OTLP_LOG_FI_ATTRIBUTES,
+	OTLP_LOG_FI_DROPPED_ATTRS,
+	OTLP_LOG_FI_FLAGS,
+	OTLP_LOG_FI_TRACE_ID,
+	OTLP_LOG_FI_SPAN_ID,
+	OTLP_LOG_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_LOG_FIELDS[] = {
+	[OTLP_LOG_FI_TIME]		  = {"time_unix_nano", 1, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_SEVERITY_NUMBER]	  = {"severity_number", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_SEVERITY_TEXT]	  = {"severity_text", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* [4] observed_time_unix_nano — not emitted */
+	[OTLP_LOG_FI_BODY]		  = {"body", 5, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_ATTRIBUTES]		  = {"attributes", 6, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_LOG_FI_DROPPED_ATTRS]	  = {"dropped_attributes_count", 7, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_FLAGS]		  = {"flags", 8, OTLP_PB_WIRE_FIXED32, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_TRACE_ID]		  = {"trace_id", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_LOG_FI_SPAN_ID]		  = {"span_id", 10, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
 #endif
