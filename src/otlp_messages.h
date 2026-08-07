@@ -61,6 +61,17 @@ otlp_emit_instrumentation_scope(struct otlp_pb_buf *parent,
 				const char		*name,
 				const char		*version);
 
+/* Emit a repeated KeyValue list at `field_num` on `parent`. Each
+ * attribute is encoded via otlp_encode_key_value. Shared by the
+ * traces / metrics / logs encoders for the repeated attributes
+ * field (Resource, Span, NumberDataPoint, HistogramDataPoint,
+ * Event, Link, LogRecord). DRY. */
+otlp_status_t
+otlp_emit_attributes(struct otlp_pb_buf	*parent,
+		     uint32_t			 field_num,
+		     const struct otlp_attribute *attrs,
+		     size_t			 n_attrs);
+
 /* ── Traces ────────────────────────────────────────────────────── */
 
 /* Encode a complete ExportTraceServiceRequest body into `out`.

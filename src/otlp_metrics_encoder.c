@@ -57,30 +57,6 @@
 #define HDP_F_MAX	       OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number
 
 static otlp_status_t
-emit_attributes(struct otlp_pb_buf *sub, uint32_t field_num,
-		const struct otlp_attribute *attrs, size_t n)
-{
-	size_t i;
-
-	for (i = 0; i < n; i++) {
-		struct otlp_pb_buf kv = { 0 };
-		otlp_status_t   st;
-
-		st = otlp_pb_buf_init(&kv, 0);
-		if (st != OTLP_OK)
-			return st;
-		st = otlp_encode_key_value(&kv, attrs[i].key, &attrs[i]);
-		if (st == OTLP_OK)
-			st = otlp_pb_field_message(sub, field_num, kv.data, kv.len);
-		otlp_pb_buf_free(&kv);
-		if (st != OTLP_OK)
-			return st;
-	}
-	return OTLP_OK;
-}
-
-/* Append a packed repeated field (tag + len + payload). */
-static otlp_status_t
 emit_packed_field(struct otlp_pb_buf *parent, uint32_t field_num,
 		  const uint8_t *payload, size_t payload_len)
 {
@@ -102,7 +78,7 @@ emit_number_data_point(struct otlp_pb_buf *parent, uint32_t field_num,
 	if (st != OTLP_OK)
 		return st;
 
-	st = emit_attributes(&sub, NDP_F_ATTRIBUTES, attrs, n);
+	st = otlp_emit_attributes(&sub, NDP_F_ATTRIBUTES, attrs, n);
 	if (st != OTLP_OK)
 		goto out;
 
@@ -152,7 +128,7 @@ emit_histogram_data_point(struct otlp_pb_buf *parent, uint32_t field_num,
 	if (st != OTLP_OK)
 		return st;
 
-	st = emit_attributes(&sub, HDP_F_ATTRIBUTES, attrs, n);
+	st = otlp_emit_attributes(&sub, HDP_F_ATTRIBUTES, attrs, n);
 	if (st != OTLP_OK)
 		goto out;
 
