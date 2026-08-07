@@ -220,6 +220,12 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ contains(matrix.name, 'arm64') && 'arm64' || 'x64' }}
+          # Pin to VS 2022 stable. VS 18 Enterprise (preview)
+          # installs on windows-latest by default and its
+          # vcruntime_c11_stdatomic.h header no longer honors the
+          # _HAS_C11_ATOMICS macro override, breaking C11 atomics
+          # even with /std:c11. See TODO.complete/phase-20.
+          vsversion: 2022
 
       - name: Build (Unix)
         if: runner.os != 'Windows'

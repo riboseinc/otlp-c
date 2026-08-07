@@ -55,8 +55,9 @@ jobs:
             msvc: true
 
     # windows-11-arm runner is slow to spin up; MSVC stdatomic.h
-    # support is brittle on preview VS toolchains. Allow Windows
-    # failures to not gate the rest of CI; revisit after 0.1.0.
+    # support is brittle on preview VS toolchains. Pinning to VS 2022
+    # stable (see Setup MSVC step) — keep continue-on-error for ARM
+    # until verified.
     continue-on-error: ${{ contains(matrix.os, 'windows') }}
 
     steps:
@@ -70,6 +71,9 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ contains(matrix.os, 'arm') && 'arm64' || 'x64' }}
+          # Pin to VS 2022 stable. VS 18 Enterprise (preview) breaks
+          # C11 atomics — see release.yml for full comment.
+          vsversion: 2022
 
       - name: Configure (Unix)
         if: runner.os != 'Windows'
