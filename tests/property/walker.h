@@ -13,6 +13,7 @@
 #define OTLP_C_TEST_WALKER_H
 
 #include "decoder.h"
+#include "../src/protobuf_encode.h"
 
 #include <stddef.h>
 #include <stdint.h>
