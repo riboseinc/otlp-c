@@ -15,6 +15,7 @@
 #include "status.h"
 #include "span.h"
 #include "tracer.h"
+#include "sampler.h"
 #include "exporter.h"
 #include "metric.h"
 #include "log.h"

@@ -92,6 +92,7 @@ add_library(otlp_c
     src/common.c
     src/internal_util.c
     src/context.c
+    src/sampler.c
     src/span.c
     src/tracer.c
     src/w3c.c
