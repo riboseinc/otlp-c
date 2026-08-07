@@ -70,10 +70,11 @@ prop_exporter_batch_flush(uint64_t seed)
 	n_spans    = (int)prng_u32(&p, 200) + 1;      /* 1..200 */
 
 	memset(&srv, 0, sizeof(srv));
-	/* requests_to_serve=0 → unbounded; the test calls _stop explicitly.
-	 * A bounded cap left the exporter's connect() hanging when timing
-	 * caused more POSTs than the cap (listen backlog exhausted). */
-	if (echo_server_start(&srv, echo_200, 0) != OTLP_OK)
+	/* Cap = max possible POSTs + retries + margin. The previous
+	 * (n_spans / batch_size + 2) was too tight when timing caused
+	 * extra flushes; under cap exhaustion the exporter's connect()
+	 * would hang against a stopped-accepting server. */
+	if (echo_server_start(&srv, echo_200, (size_t)n_spans + 10) != OTLP_OK)
 		return 0;
 
 	snprintf(endpoint, sizeof(endpoint),
@@ -142,6 +143,7 @@ prop_exporter_empty(uint64_t seed)
 
 	(void)seed;
 	memset(&srv, 0, sizeof(srv));
+	memset(&stats, 0, sizeof(stats));
 	if (echo_server_start(&srv, echo_200, 1) != OTLP_OK)
 		return 0;
 
