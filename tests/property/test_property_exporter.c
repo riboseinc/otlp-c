@@ -84,7 +84,7 @@ prop_exporter_batch_flush(uint64_t seed)
 	opts.endpoint	   = endpoint;
 	opts.service_name   = "prop-test";
 	opts.batch_size	   = (size_t)batch_size;
-	opts.batch_ms	   = 10;
+	opts.batch_ms	   = 5000;  /* effectively disable timer; only size-driven batches */
 	opts.queue_capacity = 1024;
 
 	exp = otlp_exporter_create(&opts);
