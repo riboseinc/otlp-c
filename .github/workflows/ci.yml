@@ -89,16 +89,7 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Test
-        run: ctest --test-dir build --build-config Release --output-on-failure -E 'property-exporter'
-
-      - name: Test (flaky property-exporter)
-        # property-exporter has a known thread-scheduling race in its
-        # in-process echo server that occasionally flakes or SEGFAULTs
-        # under load. Library code is sound (25/26 tests pass
-        # deterministically). Run separately with continue-on-error so
-        # CI is informative without gating on the flake.
-        continue-on-error: true
-        run: ctest --test-dir build --build-config Release --output-on-failure -R 'property-exporter'
+        run: ctest --test-dir build --build-config Release --output-on-failure
 
   alpine-musl:
     name: Alpine ${{ matrix.arch }}
@@ -120,10 +111,7 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOTLP_C_BUILD_TESTS=ON
           cmake --build build
       - name: Test
-        run: ctest --test-dir build --output-on-failure -E 'property-exporter'
-      - name: Test (flaky property-exporter)
-        continue-on-error: true
-        run: ctest --test-dir build --output-on-failure -R 'property-exporter'
+        run: ctest --test-dir build --output-on-failure
 
   freebsd:
     name: FreeBSD 14.2
