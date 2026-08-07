@@ -83,11 +83,11 @@ tracer_prng_next(struct otlp_tracer *t)
 	uint64_t old;
 	uint64_t new;
 
-	old = otlp_atomic_load_explicit(&t->prng_state, OTLP_MEMORY_ORDER_RELAXED);
+	old = otlp_atomic_load_u64(&t->prng_state, OTLP_MEMORY_ORDER_RELAXED);
 	do
 	{
 		new = xorshift64s(old);
-	} while (!otlp_atomic_cas_weak_explicit(&t->prng_state,
+	} while (!otlp_atomic_cas_u64(&t->prng_state,
 		&old,
 		new,
 		OTLP_MEMORY_ORDER_RELAXED,
@@ -180,7 +180,7 @@ otlp_tracer_create(const char *service_name,
 	seed = mono ^ get_thread_id() ^ get_pid();
 	if (seed == 0)
 		seed = 0x9E3779B97F4A7C15ULL;
-	otlp_atomic_store_explicit(&t->prng_state, seed, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_store_u64(&t->prng_state, seed, OTLP_MEMORY_ORDER_RELAXED);
 	return t;
 }
 

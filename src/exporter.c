@@ -30,7 +30,7 @@
 #include "platform.h"
 #include "span_internal.h"
 
-#include <stdatomic.h>
+#include "atomic_compat.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -64,15 +64,15 @@ struct otlp_exporter
 	struct mpsc_queue queue;
 
 	/* Atomic stats + state. */
-	_Atomic uint64_t emitted;
-	_Atomic uint64_t dropped_full;
-	_Atomic uint64_t dropped_err;
-	_Atomic uint64_t sent;
-	_Atomic uint64_t http_2xx;
-	_Atomic uint64_t http_4xx;
-	_Atomic uint64_t http_5xx;
-	_Atomic uint64_t network_err;
-	_Atomic int shutdown_requested;
+	otlp_atomic_u64 emitted;
+	otlp_atomic_u64 dropped_full;
+	otlp_atomic_u64 dropped_err;
+	otlp_atomic_u64 sent;
+	otlp_atomic_u64 http_2xx;
+	otlp_atomic_u64 http_4xx;
+	otlp_atomic_u64 http_5xx;
+	otlp_atomic_u64 network_err;
+	otlp_atomic_int shutdown_requested;
 
 	/* Tick-private state (no synchronisation needed). */
 	otlp_span_t **pending;
@@ -207,7 +207,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (st != OTLP_OK)
 		goto fail;
 
-	atomic_store_explicit(&e->shutdown_requested, 0, memory_order_release);
+	otlp_atomic_store_int(&e->shutdown_requested, 0, OTLP_MEMORY_ORDER_RELEASE);
 	return e;
 
 fail:
@@ -253,7 +253,7 @@ otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 
 	if (!e || !span)
 		return OTLP_ERR_NULL;
-	if (atomic_load_explicit(&e->shutdown_requested, memory_order_acquire))
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 		return OTLP_ERR_SHUTDOWN;
 
 	clone = otlp_span_clone(span);
@@ -263,11 +263,11 @@ otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 	if (st != OTLP_OK)
 	{
 		otlp_span_free(clone);
-		atomic_fetch_add_explicit(
-			&e->dropped_full, 1, memory_order_relaxed);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
-	atomic_fetch_add_explicit(&e->emitted, 1, memory_order_relaxed);
+	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
 
@@ -278,18 +278,18 @@ otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 
 	if (!e || !span)
 		return OTLP_ERR_NULL;
-	if (atomic_load_explicit(&e->shutdown_requested, memory_order_acquire))
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 		return OTLP_ERR_SHUTDOWN;
 
 	st = mpsc_queue_push(&e->queue, span);
 	if (st != OTLP_OK)
 	{
 		otlp_span_free(span);
-		atomic_fetch_add_explicit(
-			&e->dropped_full, 1, memory_order_relaxed);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
-	atomic_fetch_add_explicit(&e->emitted, 1, memory_order_relaxed);
+	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
 
@@ -336,14 +336,14 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	{
 		/* Network-level failure (no HTTP response received).
 		 * Treat as transient — same retry path as 5xx. */
-		atomic_fetch_add_explicit(
-			&e->network_err, 1, memory_order_relaxed);
+		otlp_atomic_fetch_add_u64(
+			&e->network_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			atomic_fetch_add_explicit(&e->dropped_err,
+			otlp_atomic_fetch_add_u64(&e->dropped_err,
 				e->in_flight_count,
-				memory_order_relaxed);
+				OTLP_MEMORY_ORDER_RELAXED);
 			clear_batch(e);
 			return;
 		}
@@ -360,24 +360,24 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	}
 	if (http_status >= 200 && http_status < 300)
 	{
-		atomic_fetch_add_explicit(
-			&e->http_2xx, 1, memory_order_relaxed);
-		atomic_fetch_add_explicit(
-			&e->sent, e->in_flight_count, memory_order_relaxed);
+		otlp_atomic_fetch_add_u64(
+			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&e->sent, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
 		/* Success — free the pending batch (kept across retries). */
 		clear_batch(e);
 		return;
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
 	{
-		atomic_fetch_add_explicit(
-			&e->http_5xx, 1, memory_order_relaxed);
+		otlp_atomic_fetch_add_u64(
+			&e->http_5xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			atomic_fetch_add_explicit(&e->dropped_err,
+			otlp_atomic_fetch_add_u64(&e->dropped_err,
 				e->in_flight_count,
-				memory_order_relaxed);
+				OTLP_MEMORY_ORDER_RELAXED);
 			/* Permanent failure — free the pending batch. */
 			clear_batch(e);
 		}
@@ -394,9 +394,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		return;
 	}
 	/* Permanent 4xx (non-429). */
-	atomic_fetch_add_explicit(&e->http_4xx, 1, memory_order_relaxed);
-	atomic_fetch_add_explicit(
-		&e->dropped_err, e->in_flight_count, memory_order_relaxed);
+	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_fetch_add_u64(
+		&e->dropped_err, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
 	/* Permanent failure — free the pending batch. */
 	clear_batch(e);
 }
@@ -438,7 +438,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					now_mono_ms() - e->first_pending_mono >=
 						e->batch_ms) ||
 				(atomic_load_explicit(&e->shutdown_requested,
-					 memory_order_relaxed) &&
+					 OTLP_MEMORY_ORDER_RELAXED) &&
 					e->pending_count > 0)))
 		{
 			otlp_status_t st = try_start_post(e);
@@ -544,7 +544,7 @@ otlp_exporter_shutdown(otlp_exporter_t *e)
 {
 	if (!e)
 		return OTLP_ERR_NULL;
-	atomic_store_explicit(&e->shutdown_requested, 1, memory_order_release);
+	otlp_atomic_store_int(&e->shutdown_requested, 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 }
 
@@ -577,19 +577,19 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 {
 	if (!e || !out)
 		return OTLP_ERR_NULL;
-	out->emitted = atomic_load_explicit(&e->emitted, memory_order_relaxed);
+	out->emitted = atomic_load_explicit(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
 	out->dropped_full =
-		atomic_load_explicit(&e->dropped_full, memory_order_relaxed);
+		atomic_load_explicit(&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
 	out->dropped_err =
-		atomic_load_explicit(&e->dropped_err, memory_order_relaxed);
-	out->sent = atomic_load_explicit(&e->sent, memory_order_relaxed);
+		atomic_load_explicit(&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->sent = atomic_load_explicit(&e->sent, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_2xx =
-		atomic_load_explicit(&e->http_2xx, memory_order_relaxed);
+		atomic_load_explicit(&e->http_2xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_4xx =
-		atomic_load_explicit(&e->http_4xx, memory_order_relaxed);
+		atomic_load_explicit(&e->http_4xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_5xx =
-		atomic_load_explicit(&e->http_5xx, memory_order_relaxed);
+		atomic_load_explicit(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->network_err =
-		atomic_load_explicit(&e->network_err, memory_order_relaxed);
+		atomic_load_explicit(&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
