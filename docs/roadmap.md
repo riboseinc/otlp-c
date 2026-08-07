@@ -16,15 +16,67 @@ being solid.
 
 | # | Phase | Status | Depends on |
 |---|---|---|---|
-| 0 | Bootstrap | In progress (this commit) | — |
-| 1 | Protobuf wire encoder | Ready | 0 |
-| 2 | OTLP message struct definitions | Ready | 0 |
-| 3 | HTTP/1.1 client | Ready | 0 |
-| 4 | Span builder | Ready | 1, 2 |
-| 5 | Exporter (batch + flush) | Design | 1, 2, 3, 4 |
-| 6 | Integration test against otelcol | Ready (after 5) | 5 |
-| 7 | Documentation polish | Ready (after 6) | 6 |
-| 8 | Tag 0.1.0 | Pending | 1–7 |
+| 0 | Bootstrap | Done | — |
+| 1 | Protobuf wire encoder | Done | 0 |
+| 2 | OTLP message struct definitions | Done | 0 |
+| 3 | HTTP/1.1 client | Done | 0 |
+| 4 | Span builder | Done | 1, 2 |
+| 5 | Exporter (batch + flush) | Done | 1, 2, 3, 4 |
+| 6 | Integration test against otelcol | Done | 5 |
+| 7 | Documentation polish | Done | 6 |
+| 8 | Tag 0.1.0 | Done | 1–7 |
+| 9 | DRY extraction + caller-tick | Done | 5 |
+| 10 | Span move semantics | Done | 5 |
+| 11 | Model-driven encoder | Done | 2 |
+| 12 | Concurrency tests | Done | 5 |
+| 13 | Deferred stubs spec | Done | 4 |
+| 14 | Arena allocator | Removed | — |
+| 15 | Doxygen + cookbook | Done | 7 |
+| 16 | CMake presets + CPack | Done | — |
+| 17 | Benchmark suite | Done | 5 |
+| 18 | Code coverage | Done | — |
+| 19 | Security hardening | Done | — |
+| 20 | Windows MSVC fix | Deferred (MSVC team) | — |
+| 21 | vcpkg registry | Done | 16 |
+| 22 | SBOM + signing | Done | 21 |
+
+## v0.4 (current) — Multi-signal
+
+| # | Item | Status | PR |
+|---|---|---|---|
+| 20 | OTLP metrics signal (counter / gauge / histogram) | Done | #23 |
+| 21 | OTLP logs signal (severity / body / trace correlation) | Done | #23 |
+
+## v0.5 — Architectural improvements + feature completion
+
+| # | Item | Status | PR |
+|---|---|---|---|
+| — | Schema-driven metrics/logs encoders (DRY/OCP) | Done | #24 |
+| — | Table-driven metric-kind dispatch (no switch) | Done | #24 |
+| 22 | Span events + links wire encoding | Done | #24 |
+| 23 | SpanContext propagation (inject/extract) | Done | #24 |
+| 24 | Head sampler interface (always_on/off/ratio) | Done | #24 |
+
+## Deferred (post-1.0)
+
+These are documented in TODO.complete/ with full specs but not on
+the v1.0 critical path. Reasons vary (see each file).
+
+| # | Item | Reason |
+|---|---|---|
+| 25 | TLS support | Sidecar model — otelcol terminates TLS. v1.x WONTFIX. |
+| 26 | OTLP gRPC transport | Sidecar model — HTTP/1.1 is sufficient. v1.x WONTFIX. |
+| 27 | HTTP connection pooling | Sidecar handles pooling. v1.0+. |
+| 42 | Slab allocator | Performance optimization. v0.3+. |
+
+## Out of scope (this repo)
+
+| # | Item | Reason |
+|---|---|---|
+| 11 | FreeBSD CI | CI matrix complexity. WONTFIX for v0.x. |
+| 29 | Retrace otel sink | Separate project. |
+| 30 | Language bindings | Each binding is its own repo. |
+| 31 | Distro packaging | Linux distros are slow; separate effort. |
 
 ## Phase 0 — Bootstrap (this commit)
 
