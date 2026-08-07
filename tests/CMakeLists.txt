@@ -46,7 +46,9 @@ if(UNIX)
     target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c Threads::Threads)
     add_test(NAME exporter-retry
         COMMAND otlp_test_exporter_retry)
-    set_tests_properties(exporter-retry PROPERTIES LABELS "unit" TIMEOUT 30)
+    set_tests_properties(exporter-retry PROPERTIES
+        LABELS "unit" TIMEOUT 30
+        RUN_SERIAL ON)
 endif()
 
 # Custom allocator hook test.

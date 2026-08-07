@@ -70,7 +70,10 @@ prop_exporter_batch_flush(uint64_t seed)
 	n_spans    = (int)prng_u32(&p, 200) + 1;      /* 1..200 */
 
 	memset(&srv, 0, sizeof(srv));
-	if (echo_server_start(&srv, echo_200, n_spans / batch_size + 2) != OTLP_OK)
+	/* requests_to_serve=0 → unbounded; the test calls _stop explicitly.
+	 * A bounded cap left the exporter's connect() hanging when timing
+	 * caused more POSTs than the cap (listen backlog exhausted). */
+	if (echo_server_start(&srv, echo_200, 0) != OTLP_OK)
 		return 0;
 
 	snprintf(endpoint, sizeof(endpoint),
@@ -127,13 +130,15 @@ out_srv:
 	return ok;
 }
 
-static int
+	static int
 prop_exporter_empty(uint64_t seed)
 {
 	struct echo_server	 srv;
 	otlp_exporter_opts_t	 opts;
 	otlp_exporter_t		*exp;
+	otlp_exporter_stats_t	 stats;
 	char			 endpoint[128];
+	int			 ok = 0;
 
 	(void)seed;
 	memset(&srv, 0, sizeof(srv));
@@ -154,11 +159,9 @@ prop_exporter_empty(uint64_t seed)
 	/* Flush without emitting — should not POST. */
 	otlp_exporter_flush(exp);
 
-	otlp_exporter_stats_t stats;
-
 	otlp_exporter_get_stats(exp, &stats);
 	/* No spans emitted, so sent must be 0 and no HTTP requests. */
-	int ok = (stats.emitted == 0 && stats.sent == 0);
+	ok = (stats.emitted == 0 && stats.sent == 0);
 
 	otlp_exporter_free(exp);
 out:
