@@ -506,6 +506,36 @@ out:
 	return st;
 }
 
+/* ── Attributes (shared, DRY across signals) ───────────────────── */
+
+otlp_status_t
+otlp_emit_attributes(struct otlp_pb_buf	       *parent,
+		     uint32_t			field_num,
+		     const struct otlp_attribute *attrs,
+		     size_t			n_attrs)
+{
+	size_t i;
+
+	if (!parent)
+		return OTLP_ERR_NULL;
+	for (i = 0; i < n_attrs; i++) {
+		struct otlp_pb_buf kv = { 0 };
+		otlp_status_t	  st;
+
+		st = otlp_pb_buf_init(&kv, 0);
+		if (st != OTLP_OK)
+			return st;
+		st = otlp_encode_key_value(&kv, attrs[i].key, &attrs[i]);
+		if (st == OTLP_OK)
+			st = otlp_pb_field_message(
+				parent, field_num, kv.data, kv.len);
+		otlp_pb_buf_free(&kv);
+		if (st != OTLP_OK)
+			return st;
+	}
+	return OTLP_OK;
+}
+
 static otlp_status_t
 emit_scope_spans(struct otlp_pb_buf *parent,
 	uint32_t field_num,
