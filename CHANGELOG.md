@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.12] - 2026-08-08
+
+Architecture docs + cookbook updated for v0.5.x.
+
+### Changed — Architecture docs
+
+`docs/architecture.md` comprehensively rewritten: updated the layered
+view to show all 21 modules (was traces-only with 8 modules), added
+MECE table with 20 rows (was 8), added "Design patterns" section
+documenting model-driven encoding, table-driven metric dispatch,
+caller-driven I/O, and lock-free MPSC. Fixed stale claims: mutex →
+lock-free, arena → slab, traces-only → all three signals.
+
+### Added — Cookbook patterns
+
+`docs/cookbook.md` extended with sections 6-10: metric counter +
+histogram patterns, structured logs with trace correlation, context
+propagation across processes (inject/extract), custom sampling
+(ratio + always-off), and custom allocator/slab integration.
+
 ## [0.5.11] - 2026-08-08
 
 README updated to reflect the v0.5.x API surface.
