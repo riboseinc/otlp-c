@@ -186,10 +186,24 @@ otlp_status_t otlp_span_add_event(otlp_span_t *span,
 				  const char *name,
 				  uint64_t time_unix_nano);
 
+/* Set a string attribute on the most-recently-added event.
+ * Call after otlp_span_add_event. Up to 32 attributes per event. */
+OTLP_C_EXPORT
+otlp_status_t otlp_span_set_event_attribute_string(otlp_span_t *span,
+						   const char *key,
+						   const char *value);
+
 OTLP_C_EXPORT
 otlp_status_t otlp_span_add_link(otlp_span_t *span,
 				 const uint8_t *trace_id,
 				 const uint8_t *span_id);
+
+/* Set a string attribute on the most-recently-added link.
+ * Call after otlp_span_add_link. Up to 32 attributes per link. */
+OTLP_C_EXPORT
+otlp_status_t otlp_span_set_link_attribute_string(otlp_span_t *span,
+						  const char *key,
+						  const char *value);
 
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_trace_state(otlp_span_t *span,

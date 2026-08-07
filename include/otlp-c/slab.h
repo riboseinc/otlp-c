@@ -77,6 +77,27 @@ void otlp_slab_free_ptr(otlp_slab_t *slab, void *ptr);
 OTLP_C_EXPORT
 void otlp_slab_get_stats(const otlp_slab_t *slab, otlp_slab_stats_t *out);
 
+/* Install a slab-backed allocator as the process-wide allocator for
+ * the otlp-c library. Subsequent otlp_malloc / otlp_free calls
+ * route through the slab for allocations <= slot_size; everything
+ * else falls through to the previously-installed allocator.
+ *
+ * Returns OTLP_ERR_NOMEM if the arena can't be allocated.
+ *
+ * The slab is single-threaded by design (see file comment). This
+ * install function is intended for embedding scenarios where the
+ * caller controls threading — typically install once at startup,
+ * uninstall at shutdown. */
+OTLP_C_EXPORT
+otlp_status_t otlp_install_slab_allocator(size_t slot_size, size_t capacity);
+
+/* Uninstall the slab allocator; restores the previous allocator.
+ * Frees the arena. Pointers returned by otlp_malloc before this
+ * call must be freed BEFORE calling uninstall — their slots are
+ * invalidated when the arena is freed. */
+OTLP_C_EXPORT
+void otlp_uninstall_slab_allocator(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -100,19 +100,23 @@ void otlp_attribute_free(struct otlp_attribute *a);
 /* Span.Event — opentelemetry-proto Span.Event. v0.5 supports
  * name + time only; attributes are deferred (the API stubs accept
  * no attributes either). */
+#define OTLP_EVENT_MAX_ATTRS  32
+#define OTLP_LINK_MAX_ATTRS   32
+
 struct otlp_event
 {
-	char	   *name;		/* owned */
+	char	   *name;
 	uint64_t    time_unix_nano;
+	struct otlp_attribute attrs[OTLP_EVENT_MAX_ATTRS];
+	size_t		n_attrs;
 };
 
-/* Span.Link — opentelemetry-proto Span.Link. v0.5 supports
- * trace_id + span_id only; trace_state, attributes, and flags are
- * deferred (the API stubs accept only the IDs). */
 struct otlp_link
 {
 	uint8_t trace_id[OTLP_TRACE_ID_LEN];
 	uint8_t span_id[OTLP_SPAN_ID_LEN];
+	struct otlp_attribute attrs[OTLP_LINK_MAX_ATTRS];
+	size_t			n_attrs;
 };
 
 /* ── Read-only accessors for the encoder ────────────────────────

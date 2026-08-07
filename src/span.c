@@ -148,15 +148,21 @@ otlp_span_create(const char *name)
 void
 otlp_span_free(otlp_span_t *span)
 {
-	size_t i;
+	size_t i, j;
 
 	if (!span)
 		return;
 	otlp_free(span->name);
 	otlp_free(span->status_message);
 	otlp_free(span->trace_state);
-	for (i = 0; i < span->n_events; i++)
+	for (i = 0; i < span->n_events; i++) {
 		otlp_free(span->events[i].name);
+		for (j = 0; j < span->events[i].n_attrs; j++)
+			otlp_attribute_free(&span->events[i].attrs[j]);
+	}
+	for (i = 0; i < span->n_links; i++)
+		for (j = 0; j < span->links[i].n_attrs; j++)
+			otlp_attribute_free(&span->links[i].attrs[j]);
 	span_release_attrs(span);
 	otlp_free(span);
 }
@@ -459,6 +465,66 @@ otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 	}
 	otlp_free(span->trace_state);
 	span->trace_state = copy;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_string(otlp_span_t *span,
+				     const char *key,
+				     const char *value)
+{
+	struct otlp_event *ev;
+	char		  *kc, *vc;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	if (span->n_events == 0)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	ev = &span->events[span->n_events - 1];
+	if (ev->n_attrs >= OTLP_EVENT_MAX_ATTRS)
+		return OTLP_ERR_OVERFLOW;
+	kc = otlp_dup_str(key);
+	if (!kc)
+		return OTLP_ERR_NOMEM;
+	vc = otlp_dup_str(value ? value : "");
+	if (!vc) {
+		otlp_free(kc);
+		return OTLP_ERR_NOMEM;
+	}
+	ev->attrs[ev->n_attrs].key	   = kc;
+	ev->attrs[ev->n_attrs].type	   = OTLP_ATTR_STRING;
+	ev->attrs[ev->n_attrs].v.string_val = vc;
+	ev->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_string(otlp_span_t *span,
+				    const char *key,
+				    const char *value)
+{
+	struct otlp_link *lk;
+	char		 *kc, *vc;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	if (span->n_links == 0)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	lk = &span->links[span->n_links - 1];
+	if (lk->n_attrs >= OTLP_LINK_MAX_ATTRS)
+		return OTLP_ERR_OVERFLOW;
+	kc = otlp_dup_str(key);
+	if (!kc)
+		return OTLP_ERR_NOMEM;
+	vc = otlp_dup_str(value ? value : "");
+	if (!vc) {
+		otlp_free(kc);
+		return OTLP_ERR_NOMEM;
+	}
+	lk->attrs[lk->n_attrs].key	     = kc;
+	lk->attrs[lk->n_attrs].type	     = OTLP_ATTR_STRING;
+	lk->attrs[lk->n_attrs].v.string_val = vc;
+	lk->n_attrs++;
 	return OTLP_OK;
 }
 

@@ -47,8 +47,10 @@
 #define KV_F_VALUE		    OTLP_KV_FIELDS[OTLP_KV_FI_VALUE].number
 #define EVENT_F_NAME		    OTLP_EVENT_FIELDS[OTLP_EVENT_FI_NAME].number
 #define EVENT_F_TIME		    OTLP_EVENT_FIELDS[OTLP_EVENT_FI_TIME].number
+#define EVENT_F_ATTRIBUTES	    OTLP_EVENT_FIELDS[OTLP_EVENT_FI_ATTRIBUTES].number
 #define LINK_F_TRACE_ID	    OTLP_LINK_FIELDS[OTLP_LINK_FI_TRACE_ID].number
 #define LINK_F_SPAN_ID	    OTLP_LINK_FIELDS[OTLP_LINK_FI_SPAN_ID].number
+#define LINK_F_ATTRIBUTES	    OTLP_LINK_FIELDS[OTLP_LINK_FI_ATTRIBUTES].number
 #define AV_F_STRING		    OTLP_AV_FIELDS[OTLP_AV_FI_STRING].number
 #define AV_F_BOOL		    OTLP_AV_FIELDS[OTLP_AV_FI_BOOL].number
 #define AV_F_INT64		    OTLP_AV_FIELDS[OTLP_AV_FI_INT64].number
@@ -431,6 +433,10 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 			st = otlp_pb_field_fixed64(&ev, EVENT_F_TIME,
 						    events[i].time_unix_nano);
 			if (st == OTLP_OK)
+				st = otlp_emit_attributes(&ev, EVENT_F_ATTRIBUTES,
+							  events[i].attrs,
+							  events[i].n_attrs);
+			if (st == OTLP_OK)
 				st = otlp_pb_field_message(
 					out, SPAN_F_EVENTS, ev.data, ev.len);
 			otlp_pb_buf_free(&ev);
@@ -457,6 +463,10 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 				st = otlp_pb_field_bytes(&lk, LINK_F_SPAN_ID,
 							 links[i].span_id,
 							 OTLP_SPAN_ID_LEN);
+			if (st == OTLP_OK)
+				st = otlp_emit_attributes(&lk, LINK_F_ATTRIBUTES,
+							  links[i].attrs,
+							  links[i].n_attrs);
 			if (st == OTLP_OK)
 				st = otlp_pb_field_message(
 					out, SPAN_F_LINKS, lk.data, lk.len);

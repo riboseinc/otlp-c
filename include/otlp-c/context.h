@@ -32,12 +32,20 @@
 extern "C" {
 #endif
 
-/* Immutable trace context snapshot. Pass-by-value. */
+/* Immutable trace context snapshot. Pass-by-value.
+ *
+ * The `tracestate` field carries the raw W3C tracestate header value
+ * (key=value,key=value,...). The library does NOT parse it — the
+ * caller is responsible for formatting on inject and parsing on
+ * extract. Empty string means "no tracestate". */
+#define OTLP_CONTEXT_TRACESTATE_MAX 512
+
 typedef struct otlp_context {
 	uint8_t trace_id[OTLP_TRACE_ID_LEN];
 	uint8_t span_id[OTLP_SPAN_ID_LEN];
 	bool    has_context;  /* false if extracted from an empty/invalid carrier */
 	bool    sampled;      /* W3C trace-flags bit 0 */
+	char    tracestate[OTLP_CONTEXT_TRACESTATE_MAX];
 } otlp_context_t;
 
 /* Carrier abstraction. The library calls `set` to write a header

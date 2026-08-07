@@ -4,6 +4,56 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.4] - 2026-08-07
+
+Architectural completion — four deferred TODOs implemented.
+
+### Added — TODO 49: Slab integration
+
+`otlp_install_slab_allocator(slot_size, capacity)` wraps the existing
+slab allocator via the `otlp_set_allocator` hook. All subsequent
+`otlp_malloc`/`otlp_free` calls route small allocations through the
+slab arena; oversize and overflow fall through to the previous
+allocator. `otlp_uninstall_slab_allocator` restores the previous
+allocator and frees the arena.
+
+Fixed an infinite-recursion bug in the free hook: `otlp_slab_free_ptr`
+falls through to `otlp_free` for non-arena pointers, which re-enters
+the hook. The hook now inlines the arena address-range check.
+
+### Added — TODO 48: tracestate in SpanContext
+
+`otlp_context_t` now carries a `tracestate[512]` field (raw W3C
+tracestate header value). `otlp_context_inject` emits both
+`traceparent` and `tracestate` headers (if non-empty).
+`otlp_context_extract` reads both headers. The library treats
+tracestate as opaque — the caller formats/parses the
+`key=value,key=value` list.
+
+### Added — TODO 47: Event/Link attributes
+
+- `struct otlp_event` extended with `attrs[32] + n_attrs`.
+- `struct otlp_link` extended with `attrs[32] + n_attrs`.
+- New public API: `otlp_span_set_event_attribute_string(span, key,
+  value)` and `otlp_span_set_link_attribute_string(span, key, value)`.
+  These set attributes on the most-recently-added event/link.
+- The traces encoder now emits Event.attributes (field 3) and
+  Link.attributes (field 4) via `otlp_emit_attributes`.
+- `otlp_span_free` recursively frees event/link attributes.
+
+### Added — TODO 46: ExponentialHistogram (partial)
+
+- `OTLP_METRIC_EXP_HISTOGRAM` enum value added.
+- Schema entry: `exponential_histogram` at field 10 of Metric.
+- The full encoder (positive/negative buckets, scale, zero_count)
+  is deferred — the schema slot is reserved so adding the encoder
+  later is purely additive (OCP).
+
+### Changed
+
+- `otlp_context_t` is now ~540 bytes (was 28). Still pass-by-value;
+  the tracestate field is inline (no heap allocation per context).
+
 ## [0.5.3] - 2026-08-07
 
 Architectural completion + install-path fix.
