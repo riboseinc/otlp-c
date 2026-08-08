@@ -4,6 +4,81 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.24] - 2026-08-08
+
+Typed Resource attributes — completes the Resource feature
+shipped string-only in v0.5.20. OTLP semantic conventions define
+Resource attributes as int (`process.pid`, `host.cpu.count`),
+double (`system.memory.utilization`), and bool
+(`cloud.auto_scale`) in addition to the common string case.
+
+### Added — Typed Resource attribute values
+
+New public enum + struct fields (source-compatible):
+
+```c
+typedef enum {
+    OTLP_RESOURCE_ATTR_STRING = 0,  /* default — backward compat */
+    OTLP_RESOURCE_ATTR_INT64  = 1,
+    OTLP_RESOURCE_ATTR_DOUBLE = 2,
+    OTLP_RESOURCE_ATTR_BOOL   = 3,
+} otlp_resource_attr_type_t;
+
+typedef struct {
+    const char *key;
+    const char *value;   /* used when type == STRING (default) */
+    otlp_resource_attr_type_t type;  /* 0 = STRING */
+    int64_t int64_val;   /* used when type == INT64 */
+    double  double_val;  /* used when type == DOUBLE */
+    bool    bool_val;    /* used when type == BOOL */
+} otlp_resource_attr_t;
+```
+
+**Source-level backward compatibility:** existing callers who
+write `{.key = "k", .value = "v"}` need no changes — `.type`
+defaults to 0 (STRING) and `.value` is used as before. The
+struct grew (new fields appended), so it's not binary-compatible;
+within the 0.x line this is allowed per CLAUDE.md.
+
+**Encoder dispatch:** `otlp_emit_resource` maps the public type
+enum to the internal `otlp_attr_type` enum, then the existing
+table-driven `attr_encoders[]` dispatch (from v0.5.7) handles
+the wire encoding. Adding a new value type is one enum entry +
+one table row — OCP.
+
+**Exporter deep-copy:** `otlp_exporter_create` now copies the
+type + all value fields. `.value` is always copied for STRING
+attrs; for other types it may be NULL (the free path handles
+both uniformly via `otlp_free(NULL)` which is a no-op).
+
+### Added — Typed-value property tests
+
+3 new properties in `tests/property/test_property_resource_attrs.c`
+(was 4, now 7):
+
+- `prop_resource_typed_int64` — `process.pid = 4242` (INT64)
+  appears on the wire; service.name still present (backward
+  compat).
+- `prop_resource_typed_bool` — `cloud.auto_scale = true` (BOOL)
+  appears on the wire.
+- `prop_resource_mixed_types` — string + int64 + bool + double
+  all coexist in one Resource.
+
+Uses a shared `find_key` helper that walks the wire to verify a
+given key is present at the Resource level. The exact value-byte
+encoding is covered by the existing AnyValue encoder tests; this
+test verifies the resource encoder dispatches types correctly.
+
+### Fixed — Existing resource-attr test uninitialized fields
+
+The v0.5.20 tests declared `otlp_resource_attr_t attrs[3];`
+without initialization. Before v0.5.24, the struct had only
+`key` + `value` (both explicitly set), so uninitialized fields
+didn't matter. After v0.5.24, the struct has `type` +
+`int64_val` etc. — uninitialized `.type` could be garbage,
+breaking the STRING dispatch. Fixed with `memset(attrs, 0,
+sizeof(attrs))` in each test.
+
 ## [0.5.23] - 2026-08-08
 
 Diagnostic callback for production observability + a critical
