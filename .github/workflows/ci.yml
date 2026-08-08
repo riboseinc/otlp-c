@@ -131,6 +131,23 @@ jobs:
             cmake --build build
             ctest --test-dir build --output-on-failure
 
+  asan:
+    name: AddressSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build with ASAN
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOTLP_C_BUILD_TESTS=ON -DOTLP_C_ENABLE_ASAN=ON
+          cmake --build build
+      - name: Test with ASAN
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+        run: ctest --test-dir build --output-on-failure
+
   cmake-integration:
     name: CMake find_package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

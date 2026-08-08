@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.14] - 2026-08-08
+
+ASAN CI + vcpkg port sync + ExpHistogram setter test.
+
+### Added — AddressSanitizer CI
+
+New `asan` job in CI: builds with ASAN on Ubuntu 24.04, runs full
+test suite with leak detection. Catches memory safety issues that
+property tests alone might miss.
+
+### Fixed — vcpkg overlay port
+
+Updated from stale 0.3.0 to 0.5.14 (version + REF in portfile.cmake).
+
+### Added — ExpHistogram setter test
+
+New property test verifying `otlp_metric_set_exp_histogram()` end-to-end:
+creates metric, sets scale + positive buckets, flushes via null_transport.
+
 ## [0.5.13] - 2026-08-08
 
 Slab performance fix + ExpHistogram setter + benchmark.
