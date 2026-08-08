@@ -29,7 +29,9 @@ Specifically in scope:
 - Crashes (segfault, abort, trap) triggered by malformed input to
   the encoder, HTTP client, or exporter.
 - Memory leaks that can be triggered by repeated calls.
-- Race conditions in the exporter's background thread.
+- Race conditions in the exporter's MPSC queue, atomic stats, or
+  the tracer's lock-free PRNG. The library has no background
+  thread by design (caller-driven tick); see `docs/deployment.md`.
 - Buffer overruns in the protobuf wire encoder.
 
 Out of scope:
@@ -52,9 +54,17 @@ Once a fix is ready:
 
 If you're embedding `otlp-c` into a sensitive context, consider:
 
-- Building with `-DOTLP_C_ENABLE_ASAN=ON` and `-DOTLP_C_ENABLE_UBSAN=ON`.
+- Building with `-DOTLP_C_ENABLE_ASAN=ON`, `-DOTLP_C_ENABLE_UBSAN=ON`,
+  and `-DOTLP_C_ENABLE_TSAN=ON` (TSAN if your host application is
+  multi-threaded). These are the same sanitizer jobs CI runs on
+  every PR; see `.github/workflows/ci.yml`.
 - Reviewing the HTTP client for your threat model. The default
   implementation uses plaintext HTTP/1.1 over raw sockets. For TLS,
   run an `otelcol` on localhost and let it terminate TLS.
 - Sandboxing the process running `otlp-c` (seccomp, AppArmor, etc.)
   if untrusted inputs are a concern.
+- If you call `otlp_install_slab_allocator()` to make the slab the
+  process-wide allocator, any hostile caller freeing a pointer that
+  was not slab-allocated is caught by an address-range check and
+  routed to libc `free`. The slab never accepts an arbitrary
+  external pointer.

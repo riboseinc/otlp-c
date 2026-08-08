@@ -2,7 +2,7 @@
 
 A pure-C library for emitting OpenTelemetry telemetry via the OpenTelemetry Protocol (OTLP/HTTP).
 
-[![Build](https://github.com/riboseinc/otlp-c/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/riboseinc/otlp-c/actions/workflows/build.yml)
+[![Build](https://github.com/riboseinc/otlp-c/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/riboseinc/otlp-c/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 ## What this is
@@ -20,7 +20,7 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**0.5.10.** Full OTLP/HTTP client for all three signals (traces,
+**0.5.18.** Full OTLP/HTTP client for all three signals (traces,
 metrics, logs). Features: hand-rolled protobuf encoder with
 schema-driven field tables, lock-free MPSC queue + caller-tick
 exporter, non-blocking HTTP/1.1 client with keep-alive, W3C Trace
@@ -28,8 +28,9 @@ Context propagation, sampler interface (always_on / always_off /
 trace_id_ratio_based), slab allocator, span events/links/trace_state,
 context propagation with tracestate, and more.
 
-Supported platforms: Linux x86_64/ARM64, macOS Intel/ARM64,
-Windows x64/ARM64, FreeBSD, Alpine (musl).
+CI'd platforms: Linux x86_64/ARM64, macOS Intel/ARM64, Windows
+x64/ARM64, FreeBSD 14.2 (best-effort). Expected to work on any
+POSIX platform with a C11 compiler and a socket stack.
 
 The API surface is unstable until 1.0.0. Within the 0.x line, minor
 versions may break the API (documented in CHANGELOG).
@@ -162,7 +163,10 @@ See [examples/minimal.c](examples/minimal.c) for a working example.
 
 ## Compatibility
 
-**Operating systems**: Linux, macOS, FreeBSD, OpenBSD, NetBSD, Windows.
+**Operating systems**: Linux, macOS, FreeBSD, Windows are covered
+by CI. Any POSIX-compliant platform (OpenBSD, NetBSD, Illumos,
+etc.) is expected to work via the POSIX `platform_unix.c` path but
+is not continuously tested.
 **Architectures**: x86_64, aarch64, armv7, riscv64. Anything with a working C99 compiler and a socket stack should work.
 
 The wire format is platform-independent (Protobuf over HTTP/1.1). The transport layer (sockets, threads, time) uses POSIX on Unix-like systems and Win32 on Windows; both paths live behind the same public API.
