@@ -52,6 +52,12 @@ typedef enum
 typedef struct otlp_http_request otlp_http_request_t;
 
 /* Start a POST. Copies body. Initiates non-blocking connect.
+ *
+ * connect_timeout_ms / read_timeout_ms: deadlines for the CONNECTING
+ * and READING phases respectively. 0 means no timeout (infinite) —
+ * use for tests or when the caller has its own deadline via tick's
+ * max_wait_ms / flush_timeout_ms.
+ *
  * Returns:
  *   OTLP_OK             — request started; in CONNECTING state.
  *   OTLP_ERR_NOMEM      — allocation failure.
@@ -64,7 +70,9 @@ otlp_http_request_start(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
 	const uint8_t *body,
-	size_t body_len);
+	size_t body_len,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms);
 
 /* Same as _start, but reuses a previously-connected socket instead
  * of opening a new TCP connection. The request takes ownership of
@@ -74,13 +82,19 @@ otlp_http_request_start(otlp_http_request_t **out,
  * Caller is responsible for ensuring the socket is connected to
  * url->host:url->port. Mismatched host:port is undefined behavior.
  *
- * The request enters SENDING state directly (no CONNECTING phase). */
+ * The request enters SENDING state directly (no CONNECTING phase).
+ * connect_timeout_ms is informational (the socket is already
+ * connected) but accepted for API symmetry.
+ *
+ * Timeout semantics same as _start. */
 otlp_status_t
 otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
 	const uint8_t *body,
 	size_t body_len,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms,
 	otlp_socket_t	       *donated_socket);
 
 /* Detach the underlying socket from a completed (DONE state) request.

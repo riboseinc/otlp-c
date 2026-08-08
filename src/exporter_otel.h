@@ -37,6 +37,8 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms,
 	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out);
 

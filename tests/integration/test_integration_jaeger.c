@@ -40,7 +40,7 @@ blocking_get(const char *url_str,
 	st = otlp_http_parse_url(url_str, &url);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_http_request_start(&req, &url, "otlp-c/test", NULL, 0);
+	st = otlp_http_request_start(&req, &url, "otlp-c/test", NULL, 0, 0, 0);
 	if (st != OTLP_OK)
 		return st;
 	for (int i = 0; i < 100000; i++)

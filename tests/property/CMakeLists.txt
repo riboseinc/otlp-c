@@ -273,3 +273,15 @@ add_test(NAME property-diagnostics
 set_tests_properties(property-diagnostics PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.25: HTTP connect timeout enforcement.
+add_executable(otlp_property_http_timeout test_property_http_timeout.c)
+target_link_libraries(otlp_property_http_timeout PRIVATE otlp_c)
+target_include_directories(otlp_property_http_timeout PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-http-timeout
+    COMMAND otlp_property_http_timeout)
+set_tests_properties(property-http-timeout PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

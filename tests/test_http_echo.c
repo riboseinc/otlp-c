@@ -93,7 +93,8 @@ main(void)
 		&url,
 		"otlp-c/test",
 		(const uint8_t *) body,
-		strlen(body));
+		strlen(body),
+		0, 0);
 	assert(st == OTLP_OK);
 
 	st = drive_to_completion(req);
