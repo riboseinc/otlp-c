@@ -4,6 +4,90 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.23] - 2026-08-08
+
+Diagnostic callback for production observability + a critical
+MPSC queue data-loss fix that the diagnostic feature uncovered.
+
+### Fixed — MPSC queue never enforced capacity (silent data loss)
+
+The bounded MPSC queue's sequence-number formulas were wrong:
+- Push released `seq = h + capacity + 1` (should be `h + 1` per
+  the canonical Vyukov scheme).
+- Init stored `seq = i + 1` (should be `i`).
+- Pop expected `seq == t + capacity + 1` (should be `t + 1`).
+
+Result: the producer's wrap-around full check (`diff < 0`) NEVER
+triggered. The queue claimed to be bounded but silently
+overwrote unconsumed spans whenever the consumer (tick) couldn't
+keep up. No error, no backpressure — just data loss.
+
+The bug was present since the queue was written (early v0.5.x)
+but not caught because:
+- Tests always had the consumer keeping up (concurrency stress
+  test drains via tick).
+- No diagnostic surfaced "I dropped a span because the queue
+  was full" — the code path was dead.
+
+The diagnostic callback test (below) exposed it: emitting 20
+spans into a capacity-4 queue with no ticking returned OK for
+all 20 instead of `OTLP_ERR_BUFFER_FULL` for the last 16.
+
+Fix: restored the canonical Vyukov scheme — init `seq = i`,
+push checks `diff = seq - h` and releases `seq = h + 1`, pop
+checks `diff = seq - (t + 1)` and releases `seq = t + capacity`.
+Now the full check fires correctly on wrap-around; emit returns
+`OTLP_ERR_BUFFER_FULL` when the queue is actually full.
+
+### Added — Diagnostic callback (`otlp_exporter_set_logger`)
+
+Optional callback the library invokes at notable events. Gives
+the caller real-time visibility into exporter behavior for
+production debugging — the stats counters tell you WHAT
+happened after the fact; this tells you WHY.
+
+```c
+typedef enum {
+    OTLP_LOG_DEBUG,  /* routine operation (batch sent) */
+    OTLP_LOG_INFO,   /* notable but expected (retry armed) */
+    OTLP_LOG_WARN,   /* degraded operation (queue full, transient retry) */
+    OTLP_LOG_ERROR,  /* unexpected failure (max retries, permanent 4xx) */
+} otlp_log_level_t;
+
+typedef void (*otlp_log_fn)(void *ctx, otlp_log_level_t level,
+                             const char *message);
+
+void otlp_exporter_set_logger(otlp_exporter_t *exp,
+                               otlp_log_fn fn, void *ctx);
+```
+
+Wired at 7 events in the exporter:
+- emit/emit_move queue full → WARN
+- record_outcome network error → retry → WARN
+- record_outcome network error → max retries → ERROR
+- record_outcome 5xx → retry → WARN
+- record_outcome 5xx → max retries → ERROR
+- record_outcome 4xx permanent → ERROR
+- record_outcome 2xx success → DEBUG
+
+Thread-safety: the callback may fire from any thread that
+touches the exporter. The implementation MUST be thread-safe.
+Default (no callback): every log site compiles to a NULL-pointer
+check — zero observable overhead.
+
+### Added — Diagnostic property tests
+
+`tests/property/test_property_diagnostics.c` (4 properties):
+- `prop_diag_fires_on_queue_full` — 20 emits into capacity-4
+  queue fires WARN with "queue full". (This is the test that
+  caught the MPSC bug.)
+- `prop_diag_fires_on_4xx_permanent` — null_transport returning
+  404 fires ERROR with "permanent".
+- `prop_diag_fires_on_success` — successful send fires DEBUG
+  with "batch sent".
+- `prop_diag_disabled_by_default` — no callback = no crash, no
+  hang. Exercises the NULL-check zero-overhead path.
+
 ## [0.5.22] - 2026-08-08
 
 W3C propagation completeness — baggage support + DRY extraction
