@@ -123,6 +123,47 @@ prop_flush_metric_variants(uint64_t seed)
 	return ok;
 }
 
+static int
+prop_flush_exp_histogram_with_buckets(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_metric_t       *m;
+	otlp_status_t	    st;
+	uint64_t	    pos_counts[] = {1, 3, 2};
+	int		    ok = 0;
+
+	(void) seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "exp-hist-test";
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	otlp_exporter_set_null_transport(exp, true);
+
+	m = otlp_metric_create(OTLP_METRIC_EXP_HISTOGRAM, "latency", "ns",
+			       "Request latency distribution", NULL, 0);
+	if (!m)
+		goto out;
+	otlp_metric_record(m, 0.001);
+	otlp_metric_record(m, 0.002);
+	otlp_metric_mark_time(m);
+	st = otlp_metric_set_exp_histogram(m,
+		20,           /* scale */
+		0,            /* pos_offset */
+		pos_counts, 3,
+		0, NULL, 0);  /* no negative */
+	if (st != OTLP_OK)
+		goto out_metric;
+	st = otlp_exporter_flush_metric(exp, m);
+	ok = (st == OTLP_OK);
+out_metric:
+	otlp_metric_free(m);
+out:
+	otlp_exporter_free(exp);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -134,6 +175,8 @@ main(void)
 				 "prop_flush_log_null_transport", 10, 1);
 	failures += property_run(prop_flush_metric_variants,
 				 "prop_flush_metric_variants", 5, 1);
+	failures += property_run(prop_flush_exp_histogram_with_buckets,
+				 "prop_flush_exp_histogram_with_buckets", 5, 1);
 
 	if (failures)
 		printf("[property] %d flush property(ies) failed\n", failures);
