@@ -25,17 +25,6 @@
 #include "slab.h"
 #include "visibility.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* Returns the runtime version string. The same as
- * OTLP_C_VERSION_STRING, but accessible to dynamic callers. */
-OTLP_C_EXPORT
-const char *otlp_version(void);
-
-#ifdef __cplusplus
-}
-#endif
+/* otlp_version() is declared in version.h (included above). */
 
 #endif

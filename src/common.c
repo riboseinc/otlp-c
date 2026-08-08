@@ -1,13 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
- * Stub implementations. Replace each function with its real
- * implementation as part of the roadmap phases. See
- * docs/roadmap.md for the order.
- *
- * Stubs return OTLP_ERR_NOT_IMPLEMENTED. The library still links
- * and runs (the example program produces a clean stub run), but
- * no real work happens. This file gets deleted as functions are
- * moved into their real modules.
+ * otlp_version() and otlp_strerror() — runtime version string and
+ * human-readable error messages.
  */
 #include <otlp-c/version.h>
 #include <otlp-c/status.h>
