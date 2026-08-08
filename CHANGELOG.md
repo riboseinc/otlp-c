@@ -4,6 +4,60 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.25] - 2026-08-08
+
+HTTP connect/read timeout enforcement — fixes dead configuration
+that was documented as functional but did nothing.
+
+### Fixed — connect_timeout_ms / read_timeout_ms were dead config
+
+The exporter opts `connect_timeout_ms` (default 5000) and
+`read_timeout_ms` (default 10000) were normalized in
+`otlp_exporter_create` but **never stored in the exporter struct
+or passed to the HTTP client**. The HTTP state machine had no
+concept of timeouts — it polled forever until the TCP stack gave
+up (typically 60-120 seconds for connect, indefinite for read).
+
+Impact: if the collector was unreachable, tick() blocked for up
+to `flush_timeout_ms` (30s default) per failed request. With
+this fix, the HTTP client now enforces the configured deadlines:
+connect timeout fires after `connect_timeout_ms`, read timeout
+fires after `read_timeout_ms` of inter-recv silence.
+
+### Added — Deadline enforcement in HTTP state machine
+
+`otlp_http_request_start` and `otlp_http_request_start_with_socket`
+(internal API) now accept `connect_timeout_ms` and
+`read_timeout_ms` parameters. 0 means no timeout (infinite) —
+used by tests and by callers that have their own deadline logic.
+
+The request struct stores the durations + a monotonic start time.
+`step_connecting` checks the connect deadline; `step_reading`
+checks the inter-recv deadline (reset on each successful recv so
+a slow-but-steady stream doesn't time out). On timeout, the
+request transitions to FAILED and returns `OTLP_ERR_TIMEOUT`.
+
+**Timing subtlety:** the deadline clock starts AFTER
+`getaddrinfo` + `connect` initiation, not at function entry.
+The blocking DNS lookup can take seconds; measuring from before
+it would make the deadline fire prematurely.
+
+### Wired — Exporter opts through to HTTP
+
+The exporter now stores `connect_timeout_ms` and
+`read_timeout_ms` and passes them through
+`otlp_exporter_otel_build_request` (traces) and `flush_sync`
+(metrics/logs) to the HTTP client. All 9 call sites updated.
+
+### Added — Timeout property test
+
+`tests/property/test_property_http_timeout.c`: starts a request
+to `192.0.2.1` (RFC 5737 TEST-NET-1, IANA-reserved, never
+routed) with `connect_timeout_ms=200`. Asserts the request
+reaches FAILED within 5 seconds — verifying bounded completion
+rather than the 60+ second TCP default. POSIX-only (uses
+`clock_gettime`).
+
 ## [0.5.24] - 2026-08-08
 
 Typed Resource attributes — completes the Resource feature
