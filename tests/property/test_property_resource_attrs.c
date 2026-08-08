@@ -173,6 +173,7 @@ prop_resource_extra_attrs_encoded(uint64_t seed)
 	int			     ok = 0;
 
 	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "service.version";
 	attrs[0].value = "1.2.3";
 	attrs[1].key = "deployment.environment";
@@ -215,6 +216,7 @@ prop_resource_attrs_skip_empty(uint64_t seed)
 
 	(void) seed;
 	/* Empty-key or empty-value entries should be omitted. */
+	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "";
 	attrs[0].value = "has-empty-key";
 	attrs[1].key = "has-empty-value";
@@ -242,6 +244,160 @@ out:
 	return ok;
 }
 
+/* ── Typed-value properties (v0.5.24) ────────────────────────── */
+
+/* Check whether a given key string appears at the Resource level
+ * (as a KeyValue entry). Used to verify typed attrs are emitted
+ * without duplicating the full wire-walk for each type's value
+ * encoding — the AnyValue encoder tests cover the value bytes. */
+static int
+find_key(const uint8_t *data, size_t pos, size_t end,
+	 const char *want_key)
+{
+	size_t want_len = strlen(want_key);
+
+	while (pos < end) {
+		size_t kv_pos;
+		size_t kv_end;
+		int    wt = 0;
+		size_t vp = 0;
+		size_t vl = 0;
+
+		if (!walker_find_at_level(data, pos, end, R_F_ATTRIBUTES,
+					  &wt, &vp, &vl))
+			return 0;
+		if (wt != OTLP_PB_WIRE_LEN)
+			return 0;
+		kv_pos = vp;
+		kv_end = vp + vl;
+		pos = vp + vl;
+
+		if (walker_find_at_level(data, kv_pos, kv_end,
+					  KV_F_KEY, &wt, &vp, &vl)) {
+			if (wt == OTLP_PB_WIRE_LEN &&
+			    vl == want_len &&
+			    memcmp(data + vp, want_key, want_len) == 0)
+				return 1;
+		}
+	}
+	return 0;
+}
+
+static int
+prop_resource_typed_int64(uint64_t seed)
+{
+	struct otlp_pb_buf buf = { 0 };
+	otlp_status_t     st;
+	otlp_resource_attr_t attrs[1];
+	size_t	     kvs_pos = 0;
+	size_t	     kvs_end = 0;
+	int	     ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "process.pid";
+	attrs[0].type = OTLP_RESOURCE_ATTR_INT64;
+	attrs[0].int64_val = 4242;
+
+	st = otlp_pb_buf_init(&buf, 0);
+	if (st != OTLP_OK)
+		return 0;
+	st = otlp_encode_export_trace_service_request(
+		&buf, "svc", attrs, 1, NULL, NULL, NULL, 0);
+	if (st != OTLP_OK)
+		goto out;
+	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
+		goto out;
+	/* Key is present + service.name is present (backward compat). */
+	ok = find_key(buf.data, kvs_pos, kvs_end, "process.pid") &&
+	     find_string_attr(buf.data, kvs_pos, kvs_end,
+			      "service.name", "svc");
+out:
+	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
+static int
+prop_resource_typed_bool(uint64_t seed)
+{
+	struct otlp_pb_buf buf = { 0 };
+	otlp_status_t     st;
+	otlp_resource_attr_t attrs[1];
+	size_t	     kvs_pos = 0;
+	size_t	     kvs_end = 0;
+	int	     ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "cloud.auto_scale";
+	attrs[0].type = OTLP_RESOURCE_ATTR_BOOL;
+	attrs[0].bool_val = true;
+
+	st = otlp_pb_buf_init(&buf, 0);
+	if (st != OTLP_OK)
+		return 0;
+	st = otlp_encode_export_trace_service_request(
+		&buf, "svc", attrs, 1, NULL, NULL, NULL, 0);
+	if (st != OTLP_OK)
+		goto out;
+	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
+		goto out;
+	ok = find_key(buf.data, kvs_pos, kvs_end, "cloud.auto_scale");
+out:
+	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
+static int
+prop_resource_mixed_types(uint64_t seed)
+{
+	/* Verify string + int64 + bool + double all coexist on the wire. */
+	struct otlp_pb_buf buf = { 0 };
+	otlp_status_t     st;
+	otlp_resource_attr_t attrs[4];
+	size_t	     kvs_pos = 0;
+	size_t	     kvs_end = 0;
+	int	     ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "service.version";
+	attrs[0].value = "1.0.0";  /* STRING (default) */
+	attrs[1].key = "process.pid";
+	attrs[1].type = OTLP_RESOURCE_ATTR_INT64;
+	attrs[1].int64_val = 999;
+	attrs[2].key = "system.crashed";
+	attrs[2].type = OTLP_RESOURCE_ATTR_BOOL;
+	attrs[2].bool_val = false;
+	attrs[3].key = "cpu.load";
+	attrs[3].type = OTLP_RESOURCE_ATTR_DOUBLE;
+	attrs[3].double_val = 3.14;
+
+	st = otlp_pb_buf_init(&buf, 0);
+	if (st != OTLP_OK)
+		return 0;
+	st = otlp_encode_export_trace_service_request(
+		&buf, "svc", attrs, 4, NULL, NULL, NULL, 0);
+	if (st != OTLP_OK)
+		goto out;
+	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
+		goto out;
+
+	/* All four keys present. String value still round-trips
+	 * (backward compat). */
+	ok = find_string_attr(buf.data, kvs_pos, kvs_end,
+			      "service.name", "svc") &&
+	     find_string_attr(buf.data, kvs_pos, kvs_end,
+			      "service.version", "1.0.0") &&
+	     find_key(buf.data, kvs_pos, kvs_end, "process.pid") &&
+	     find_key(buf.data, kvs_pos, kvs_end, "system.crashed") &&
+	     find_key(buf.data, kvs_pos, kvs_end, "cpu.load");
+
+out:
+	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -255,6 +411,12 @@ main(void)
 				 "prop_resource_extra_attrs_encoded", 5, 1);
 	failures += property_run(prop_resource_attrs_skip_empty,
 				 "prop_resource_attrs_skip_empty", 5, 1);
+	failures += property_run(prop_resource_typed_int64,
+				 "prop_resource_typed_int64", 5, 1);
+	failures += property_run(prop_resource_typed_bool,
+				 "prop_resource_typed_bool", 5, 1);
+	failures += property_run(prop_resource_mixed_types,
+				 "prop_resource_mixed_types", 5, 1);
 
 	if (failures)
 		printf("[property] %d resource-attr property(ies) failed\n",

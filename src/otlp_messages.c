@@ -543,18 +543,39 @@ otlp_emit_resource(struct otlp_pb_buf		*parent,
 
 	for (size_t i = 0; i < n_attrs; i++)
 	{
-		struct otlp_attribute a = {
-			.key = NULL,
-			.type = OTLP_ATTR_STRING,
-			.v.string_val = (char *) attrs[i].value,
-		};
+		struct otlp_attribute a = { .key = NULL };
 		struct otlp_pb_buf kv = { 0 };
 		const char *key = attrs[i].key ? attrs[i].key : "";
-		const char *val = attrs[i].value ? attrs[i].value : "";
 
-		if (!key[0] || !val[0])
+		if (!key[0])
 			continue;
-		a.v.string_val = (char *) val;
+
+		/* Map the public Resource attr type to the internal AnyValue
+		 * type. One-to-one correspondence; the internal attr_encoders[]
+		 * table (see above) dispatches the wire encoding. */
+		switch (attrs[i].type)
+		{
+			case OTLP_RESOURCE_ATTR_STRING:
+				if (!attrs[i].value || !attrs[i].value[0])
+					continue;
+				a.type = OTLP_ATTR_STRING;
+				a.v.string_val = (char *) attrs[i].value;
+				break;
+			case OTLP_RESOURCE_ATTR_INT64:
+				a.type = OTLP_ATTR_INT64;
+				a.v.int64_val = attrs[i].int64_val;
+				break;
+			case OTLP_RESOURCE_ATTR_DOUBLE:
+				a.type = OTLP_ATTR_DOUBLE;
+				a.v.double_val = attrs[i].double_val;
+				break;
+			case OTLP_RESOURCE_ATTR_BOOL:
+				a.type = OTLP_ATTR_BOOL;
+				a.v.bool_val = attrs[i].bool_val;
+				break;
+			default:
+				continue;
+		}
 		st = otlp_pb_buf_init(&kv, 0);
 		if (st != OTLP_OK)
 			goto out;
