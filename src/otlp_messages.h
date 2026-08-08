@@ -23,6 +23,7 @@
 #include "protobuf_encode.h"
 #include "span_internal.h"
 
+#include <otlp-c/exporter.h>
 #include <otlp-c/log.h>
 #include <otlp-c/metric.h>
 
@@ -45,13 +46,21 @@ otlp_encode_key_value(struct otlp_pb_buf *out,
 		      const char		   *key,
 		      const struct otlp_attribute *attr);
 
-/* Emit a Resource{attributes=[service.name KeyValue]} sub-message
- * at `field_num` on `parent`. No-op (returns OTLP_OK without
- * emitting) if service_name is NULL or empty. */
+/* Emit a Resource sub-message at `field_num` on `parent`. The
+ * Resource carries:
+ *   - service.name (from `service_name`; skipped if NULL/empty)
+ *   - any additional attributes from `attrs` (e.g. service.version,
+ *     deployment.environment, host.name). May be NULL/0.
+ *
+ * No-op (returns OTLP_OK without emitting) if service_name is
+ * NULL/empty AND attrs is NULL/empty — an empty Resource is not
+ * emitted, matching the protobuf convention. */
 otlp_status_t
-otlp_emit_resource(struct otlp_pb_buf *parent,
-		   uint32_t		field_num,
-		   const char	       *service_name);
+otlp_emit_resource(struct otlp_pb_buf		*parent,
+		   uint32_t			 field_num,
+		   const char			*service_name,
+		   const otlp_resource_attr_t	*attrs,
+		   size_t			 n_attrs);
 
 /* Emit an InstrumentationScope sub-message at `field_num` on
  * `parent`. No-op if both name and version are NULL/empty. */
@@ -78,15 +87,19 @@ otlp_emit_attributes(struct otlp_pb_buf	*parent,
  *
  * `service_name` becomes the value of the resource attribute
  * "service.name" (skipped if NULL or empty).
+ * `resource_attributes` are emitted as additional Resource attributes
+ * after service.name (may be NULL when n_resource_attributes is 0).
  * `scope_name` / `scope_version` populate InstrumentationScope
  * (skipped if both NULL or empty).
  * `spans` is an array of `n_spans` span pointers.
  *
- * Empty request (no service name, no scope, no spans) produces a
- * zero-length body, matching the spec. */
+ * Empty request (no service name, no attrs, no scope, no spans)
+ * produces a zero-length body, matching the spec. */
 otlp_status_t
 otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 					 const char		*service_name,
+					 const otlp_resource_attr_t *resource_attributes,
+					 size_t			 n_resource_attributes,
 					 const char		*scope_name,
 					 const char		*scope_version,
 					 const otlp_span_t *const *spans,
@@ -101,6 +114,8 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span);
 otlp_status_t
 otlp_encode_export_metrics_service_request(struct otlp_pb_buf		*out,
 					   const char			*service_name,
+					   const otlp_resource_attr_t	*resource_attributes,
+					   size_t			 n_resource_attributes,
 					   const char			*scope_name,
 					   const char			*scope_version,
 					   const otlp_metric_t *const	*metrics,
@@ -111,6 +126,8 @@ otlp_encode_export_metrics_service_request(struct otlp_pb_buf		*out,
 otlp_status_t
 otlp_encode_export_logs_service_request(struct otlp_pb_buf *out,
 					const char			  *service_name,
+					const otlp_resource_attr_t	  *resource_attributes,
+					size_t				  n_resource_attributes,
 					const char			  *scope_name,
 					const char			  *scope_version,
 					const otlp_log_record_t *const *logs,

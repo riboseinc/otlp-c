@@ -503,20 +503,25 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 /* ── Resource / InstrumentationScope / ScopeSpans / ResourceSpans ─ */
 
 otlp_status_t
-otlp_emit_resource(struct otlp_pb_buf *parent,
-		   uint32_t		field_num,
-		   const char	       *service_name)
+otlp_emit_resource(struct otlp_pb_buf		*parent,
+		   uint32_t			 field_num,
+		   const char			*service_name,
+		   const otlp_resource_attr_t	*attrs,
+		   size_t			 n_attrs)
 {
 	struct otlp_pb_buf sub = { 0 };
 	otlp_status_t st;
+	bool have_service = (service_name && service_name[0]);
+	bool have_attrs = (attrs && n_attrs > 0);
 
-	if (!service_name || !service_name[0])
+	if (!have_service && !have_attrs)
 		return OTLP_OK;
 
 	st = otlp_pb_buf_init(&sub, 0);
 	if (st != OTLP_OK)
 		return st;
 
+	if (have_service)
 	{
 		struct otlp_attribute svc_attr = {
 			.key = NULL,
@@ -528,6 +533,32 @@ otlp_emit_resource(struct otlp_pb_buf *parent,
 		if (st != OTLP_OK)
 			goto out;
 		st = otlp_encode_key_value(&kv, "service.name", &svc_attr);
+		if (st == OTLP_OK)
+			st = otlp_pb_field_message(
+				&sub, R_F_ATTRIBUTES, kv.data, kv.len);
+		otlp_pb_buf_free(&kv);
+		if (st != OTLP_OK)
+			goto out;
+	}
+
+	for (size_t i = 0; i < n_attrs; i++)
+	{
+		struct otlp_attribute a = {
+			.key = NULL,
+			.type = OTLP_ATTR_STRING,
+			.v.string_val = (char *) attrs[i].value,
+		};
+		struct otlp_pb_buf kv = { 0 };
+		const char *key = attrs[i].key ? attrs[i].key : "";
+		const char *val = attrs[i].value ? attrs[i].value : "";
+
+		if (!key[0] || !val[0])
+			continue;
+		a.v.string_val = (char *) val;
+		st = otlp_pb_buf_init(&kv, 0);
+		if (st != OTLP_OK)
+			goto out;
+		st = otlp_encode_key_value(&kv, key, &a);
 		if (st == OTLP_OK)
 			st = otlp_pb_field_message(
 				&sub, R_F_ATTRIBUTES, kv.data, kv.len);
@@ -658,6 +689,8 @@ static otlp_status_t
 emit_resource_spans(struct otlp_pb_buf *parent,
 	uint32_t field_num,
 	const char *service_name,
+	const otlp_resource_attr_t *resource_attributes,
+	size_t n_resource_attributes,
 	const char *scope_name,
 	const char *scope_version,
 	const otlp_span_t *const *spans,
@@ -670,7 +703,9 @@ emit_resource_spans(struct otlp_pb_buf *parent,
 	if (st != OTLP_OK)
 		return st;
 
-	st = otlp_emit_resource(&sub, RS_F_RESOURCE, service_name);
+	st = otlp_emit_resource(
+		&sub, RS_F_RESOURCE, service_name,
+		resource_attributes, n_resource_attributes);
 	if (st != OTLP_OK)
 		goto out;
 
@@ -697,6 +732,8 @@ out:
 otlp_status_t
 otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const otlp_resource_attr_t *resource_attributes,
+	size_t n_resource_attributes,
 	const char *scope_name,
 	const char *scope_version,
 	const otlp_span_t *const *spans,
@@ -705,13 +742,17 @@ otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 	if (!out)
 		return OTLP_ERR_NULL;
 
-	/* Empty request: zero spans and no service name → zero bytes. */
-	if (n_spans == 0 && !(service_name && service_name[0]))
+	/* Empty request: zero spans, no service name, no attrs → zero bytes. */
+	if (n_spans == 0 &&
+	    !(service_name && service_name[0]) &&
+	    !(resource_attributes && n_resource_attributes > 0))
 		return OTLP_OK;
 
 	return emit_resource_spans(out,
 		ETSR_F_RESOURCE_SPANS,
 		service_name,
+		resource_attributes,
+		n_resource_attributes,
 		scope_name,
 		scope_version,
 		spans,

@@ -121,7 +121,7 @@ prop_metrics_empty_request(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, NULL, NULL, NULL, NULL, 0) == OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, NULL, 0) == OTLP_OK)
 		ok = (buf.len == 0);
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -150,7 +150,7 @@ prop_metrics_counter_field_nums(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, "svc", "scope", "1.0", arr, 1) != OTLP_OK)
+		    &buf, "svc", NULL, 0, "scope", "1.0", arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -211,7 +211,7 @@ prop_metrics_gauge_field_nums(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -265,7 +265,7 @@ prop_metrics_histogram_field_nums(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -336,7 +336,7 @@ prop_metrics_counter_value(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -391,7 +391,7 @@ prop_metrics_attributes_roundtrip(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, "svc", NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, "svc", NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;

@@ -42,6 +42,22 @@ extern "C"
 
 	typedef struct otlp_exporter otlp_exporter_t;
 
+	/* A key-value pair attached to the OTLP Resource of every batch
+	 * this exporter emits. Resource attributes describe the process
+	 * being instrumented (service.version, deployment.environment,
+	 * host.name, process.pid, etc.) and are constant for the exporter's
+	 * lifetime. See the OpenTelemetry semantic-conventions spec for
+	 * standard keys.
+	 *
+	 * v0.5.x: string values only — covers every common Resource
+	 * attribute. A typed variant (int/double/bool/bytes) can be
+	 * added later without breaking this struct. */
+	typedef struct
+	{
+		const char *key;
+		const char *value;
+	} otlp_resource_attr_t;
+
 	/* Configuration for otlp_exporter_create. Pass zero-initialized +
 	 * fill the fields you care about; the library supplies defaults
 	 * for the rest. */
@@ -58,6 +74,19 @@ extern "C"
 		 * Override per-tracer if you need different service names for
 		 * different spans. */
 		const char *service_name;
+
+		/* Additional Resource attributes emitted on every batch
+		 * alongside service.name (e.g., service.version,
+		 * deployment.environment, host.name). The library copies
+		 * these at create time; the caller may free the array
+		 * immediately after otlp_exporter_create() returns.
+		 *
+		 * service.name (from the service_name field above) is always
+		 * emitted first as a Resource attribute; entries in this
+		 * array follow in order. May be NULL (n_resource_attributes
+		 * is then ignored). */
+		const otlp_resource_attr_t *resource_attributes;
+		size_t n_resource_attributes;
 
 		/* Max spans per HTTP request. Default: 512. */
 		size_t batch_size;

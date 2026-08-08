@@ -225,3 +225,15 @@ add_test(NAME property-flush
 set_tests_properties(property-flush PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.20: Resource attributes (additional Resource KeyValues).
+add_executable(otlp_property_resource_attrs test_property_resource_attrs.c)
+target_link_libraries(otlp_property_resource_attrs PRIVATE otlp_c)
+target_include_directories(otlp_property_resource_attrs PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-resource-attrs
+    COMMAND otlp_property_resource_attrs)
+set_tests_properties(property-resource-attrs PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

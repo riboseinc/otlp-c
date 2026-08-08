@@ -123,10 +123,12 @@ out:
 otlp_status_t
 otlp_encode_export_logs_service_request(struct otlp_pb_buf		*out,
 					const char			*service_name,
+					const otlp_resource_attr_t	*resource_attributes,
+					size_t				n_resource_attributes,
 					const char			*scope_name,
 					const char			*scope_version,
 					const otlp_log_record_t *const	*logs,
-					size_t				 n_logs)
+					size_t				n_logs)
 {
 	struct otlp_pb_buf rl = { 0 }, sl = { 0 };
 	otlp_status_t	    st;
@@ -134,7 +136,9 @@ otlp_encode_export_logs_service_request(struct otlp_pb_buf		*out,
 
 	if (!out)
 		return OTLP_ERR_NULL;
-	if (n_logs == 0 && !(service_name && service_name[0]))
+	if (n_logs == 0 &&
+	    !(service_name && service_name[0]) &&
+	    !(resource_attributes && n_resource_attributes > 0))
 		return OTLP_OK;
 
 	st = otlp_pb_buf_init(&rl, 0);
@@ -144,7 +148,8 @@ otlp_encode_export_logs_service_request(struct otlp_pb_buf		*out,
 	if (st != OTLP_OK)
 		goto out_rl;
 
-	st = otlp_emit_resource(&rl, RL_F_RESOURCE, service_name);
+	st = otlp_emit_resource(&rl, RL_F_RESOURCE, service_name,
+				resource_attributes, n_resource_attributes);
 	if (st != OTLP_OK)
 		goto out_sl;
 

@@ -56,6 +56,8 @@ struct otlp_exporter
 	struct otlp_http_url url;
 	char *user_agent;
 	char *service_name;
+	otlp_resource_attr_t *resource_attributes;
+	size_t n_resource_attributes;
 	size_t batch_size;
 	uint32_t batch_ms;
 	uint32_t max_retries;
@@ -197,6 +199,26 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->service_name = otlp_dup_str(o.service_name);
 	if (!e->user_agent || !e->service_name)
 		goto fail;
+	if (o.n_resource_attributes > 0 && o.resource_attributes)
+	{
+		size_t i;
+		e->resource_attributes =
+			otlp_malloc(o.n_resource_attributes *
+				    sizeof(*e->resource_attributes));
+		if (!e->resource_attributes)
+			goto fail;
+		e->n_resource_attributes = o.n_resource_attributes;
+		for (i = 0; i < o.n_resource_attributes; i++)
+		{
+			e->resource_attributes[i].key =
+				otlp_dup_str(o.resource_attributes[i].key);
+			e->resource_attributes[i].value =
+				otlp_dup_str(o.resource_attributes[i].value);
+			if (!e->resource_attributes[i].key ||
+			    !e->resource_attributes[i].value)
+				goto fail;
+		}
+	}
 	e->batch_size = o.batch_size;
 	e->batch_ms = o.batch_ms;
 	e->max_retries = o.max_retries;
@@ -218,6 +240,16 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 fail:
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	if (e->resource_attributes)
+	{
+		size_t i;
+		for (i = 0; i < e->n_resource_attributes; i++)
+		{
+			otlp_free((char *) e->resource_attributes[i].key);
+			otlp_free((char *) e->resource_attributes[i].value);
+		}
+		otlp_free(e->resource_attributes);
+	}
 	otlp_free(e->pending);
 	otlp_free(e);
 	return NULL;
@@ -245,6 +277,16 @@ otlp_exporter_free(otlp_exporter_t *e)
 	otlp_free(e->pending);
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	if (e->resource_attributes)
+	{
+		size_t i;
+		for (i = 0; i < e->n_resource_attributes; i++)
+		{
+			otlp_free((char *) e->resource_attributes[i].key);
+			otlp_free((char *) e->resource_attributes[i].value);
+		}
+		otlp_free(e->resource_attributes);
+	}
 	otlp_free(e);
 }
 
@@ -310,6 +352,8 @@ try_start_post(struct otlp_exporter *e)
 	st = otlp_exporter_otel_build_request(&e->url,
 		e->user_agent,
 		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
 		(const otlp_span_t *const *) e->pending,
 		e->pending_count,
 		e->keepalive_sock,
@@ -647,7 +691,9 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		return st;
 	arr[0] = m;
 	st = otlp_encode_export_metrics_service_request(
-		&body, e->service_name, NULL, NULL, arr, 1);
+		&body, e->service_name,
+		e->resource_attributes, e->n_resource_attributes,
+		NULL, NULL, arr, 1);
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/metrics", body.data, body.len);
 	otlp_pb_buf_free(&body);
@@ -668,7 +714,9 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		return st;
 	arr[0] = lr;
 	st = otlp_encode_export_logs_service_request(
-		&body, e->service_name, NULL, NULL, arr, 1);
+		&body, e->service_name,
+		e->resource_attributes, e->n_resource_attributes,
+		NULL, NULL, arr, 1);
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/logs", body.data, body.len);
 	otlp_pb_buf_free(&body);

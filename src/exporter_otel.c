@@ -18,6 +18,8 @@ otlp_status_t
 otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
+	const otlp_resource_attr_t *resource_attributes,
+	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
 	otlp_socket_t *reuse_socket,
@@ -33,7 +35,9 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_encode_export_trace_service_request(
-		&body, service_name, NULL, NULL, spans, n_spans);
+		&body, service_name,
+		resource_attributes, n_resource_attributes,
+		NULL, NULL, spans, n_spans);
 	if (st != OTLP_OK)
 	{
 		otlp_pb_buf_free(&body);
