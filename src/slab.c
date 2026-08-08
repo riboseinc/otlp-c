@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define OTLP_SLAB_ALIGN _Alignof(void *)
@@ -34,6 +35,10 @@ struct otlp_slab {
 	uint8_t *arena;        /* slot_size * capacity bytes */
 	bool	   *used; /* capacity bytes */
 	size_t	in_use;
+	/* Free-list stack: indices of available slots. Alloc pops,
+	 * free pushes. O(1) per operation (was O(capacity) linear scan). */
+	size_t  *free_stack;
+	size_t	free_top;      /* number of entries in free_stack */
 	otlp_slab_stats_t stats;
 };
 
@@ -73,6 +78,7 @@ slab_free_hook(void *p)
 				s->stats.free_count++;
 				s->stats.slab_free_hits++;
 				s->stats.in_use = s->in_use;
+				s->free_stack[s->free_top++] = i;
 				return;
 			}
 		}
@@ -138,10 +144,18 @@ otlp_slab_create(size_t slot_size, size_t capacity)
 	s->used      = otlp_calloc(capacity, sizeof(*s->used));
 	if (!s->used)
 		goto fail;
+	s->free_stack = otlp_malloc(capacity * sizeof(*s->free_stack));
+	if (!s->free_stack)
+		goto fail;
+	/* Initialise free-list: all slots available. */
+	for (size_t i = 0; i < capacity; i++)
+		s->free_stack[i] = capacity - 1 - i;  /* reverse so slot 0 pops first */
+	s->free_top = capacity;
 	s->stats.slot_size = aligned_slot;
 	s->stats.capacity  = capacity;
 	return s;
 fail:
+	otlp_free(s->free_stack);
 	otlp_free(s->arena);
 	otlp_free(s->used);
 	otlp_free(s);
@@ -155,6 +169,7 @@ otlp_slab_free(otlp_slab_t *slab)
 		return;
 	otlp_free(slab->arena);
 	otlp_free(slab->used);
+	otlp_free(slab->free_stack);
 	otlp_free(slab);
 }
 
@@ -174,20 +189,20 @@ otlp_slab_alloc(otlp_slab_t *slab, size_t size)
 	if (!slab)
 		return NULL;
 	slab->stats.alloc_count++;
-	if (size <= slab->slot_size) {
-		for (size_t i = 0; i < slab->capacity; i++) {
-			if (!slab->used[i]) {
-				slab->used[i] = true;
-				slab->in_use++;
-				slab->stats.in_use	  = slab->in_use;
-				slab->stats.slab_hits++;
-				return slab->arena + (i * slab->slot_size);
-			}
-		}
+	if (size <= slab->slot_size && slab->free_top > 0) {
+		size_t i = slab->free_stack[--slab->free_top];
+		slab->used[i]   = true;
+		slab->in_use++;
+		slab->stats.in_use	  = slab->in_use;
+		slab->stats.slab_hits++;
+		return slab->arena + (i * slab->slot_size);
 	}
-	/* Overflow or oversize: fall through to malloc. */
+	/* Overflow or oversize: fall through to libc malloc directly,
+	 * NOT otlp_malloc. When the slab is installed as the global
+	 * allocator, otlp_malloc would re-enter slab_alloc_hook →
+	 * infinite recursion. libc malloc is always safe. */
 	slab->stats.malloc_fallbacks++;
-	return otlp_malloc(size);
+	return malloc(size);
 }
 
 void
@@ -205,13 +220,17 @@ otlp_slab_free_ptr(otlp_slab_t *slab, void *ptr)
 			slab->in_use--;
 			slab->stats.in_use	    = slab->in_use;
 			slab->stats.slab_free_hits++;
+			slab->free_stack[slab->free_top++] = i;
 			return;
 		}
 		/* Pointer is in arena range but not a valid in-use slot —
 		 * fall through to free() defensively (double-free is UB). */
 	}
 	slab->stats.malloc_free_fallbacks++;
-	otlp_free(ptr);
+	/* Use libc free directly — matches the malloc() used in the
+	 * alloc fallback (not otlp_free, which would re-enter the
+	 * slab_free_hook when the slab is installed globally). */
+	free(ptr);
 }
 
 void

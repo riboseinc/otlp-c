@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.13] - 2026-08-08
+
+Slab performance fix + ExpHistogram setter + benchmark.
+
+### Fixed — Slab allocator: O(1) free-list
+
+The slab's `otlp_slab_alloc` used a linear scan over the `used[]`
+bitmap — O(capacity) per allocation. Benchmark showed 13× slower
+than system malloc (429 ns/op vs 32 ns/op).
+
+Replaced with a free-list stack: alloc pops (O(1)), free pushes
+(O(1)). Benchmark now shows 36 ns/op — near-parity with optimized
+system malloc.
+
+Also fixed an infinite-recursion bug in the alloc/free fallback
+paths when the slab is installed as the global allocator.
+
+### Added — Slab benchmark
+
+`bench/bench_slab.c`: 100K alloc+free cycles of 64-byte objects.
+Measures ns/op for system malloc vs slab allocator. Prints speedup.
+
+### Added — ExponentialHistogram setter
+
+`otlp_metric_set_exp_histogram()`: sets scale + positive/negative
+bucket data in one call. The library copies the arrays. Caller
+manages bucket-index computation.
+
 ## [0.5.12] - 2026-08-08
 
 Architecture docs + cookbook updated for v0.5.x.

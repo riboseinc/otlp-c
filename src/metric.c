@@ -243,6 +243,43 @@ otlp_metric_set_attribute_double(otlp_metric_t *m, const char *key, double val)
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_metric_set_exp_histogram(otlp_metric_t *m,
+			      int32_t scale,
+			      int32_t pos_offset,
+			      const uint64_t *pos_counts,
+			      size_t pos_n,
+			      int32_t neg_offset,
+			      const uint64_t *neg_counts,
+			      size_t neg_n)
+{
+	if (!m)
+		return OTLP_ERR_NULL;
+	if (m->type != OTLP_METRIC_EXP_HISTOGRAM)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	m->exp_scale = scale;
+	m->has_exp_scale = true;
+	if (pos_n > 0 && pos_counts) {
+		m->exp_pos_offset = pos_offset;
+		otlp_free(m->exp_pos_counts);
+		m->exp_pos_counts = otlp_malloc(pos_n * sizeof(uint64_t));
+		if (!m->exp_pos_counts)
+			return OTLP_ERR_NOMEM;
+		memcpy(m->exp_pos_counts, pos_counts, pos_n * sizeof(uint64_t));
+		m->exp_pos_n = pos_n;
+	}
+	if (neg_n > 0 && neg_counts) {
+		m->exp_neg_offset = neg_offset;
+		otlp_free(m->exp_neg_counts);
+		m->exp_neg_counts = otlp_malloc(neg_n * sizeof(uint64_t));
+		if (!m->exp_neg_counts)
+			return OTLP_ERR_NOMEM;
+		memcpy(m->exp_neg_counts, neg_counts, neg_n * sizeof(uint64_t));
+		m->exp_neg_n = neg_n;
+	}
+	return OTLP_OK;
+}
+
 /* ── Internal accessors ───────────────────────────────────────── */
 
 const char *otlp_metric_get_name(const otlp_metric_t *m) { return m ? m->name : NULL; }
