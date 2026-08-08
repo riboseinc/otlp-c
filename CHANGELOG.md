@@ -55,6 +55,52 @@ builds with the project's full warning set (`-Wall -Wextra
 -Wpointer-arith -Wformat=2 -Wwrite-strings -Wold-style-definition
 -Wmissing-prototypes`).
 
+## [0.5.19] - 2026-08-08
+
+Policy-docs staleness sweep — the same kind of accuracy audit
+[0.5.16] did for CLAUDE.md, applied to the rest of the policy
+surface.
+
+### Fixed — SECURITY.md concurrency-surface claim
+
+Listed "race conditions in the exporter's **background thread**" as
+in scope. The library has had no background thread since the
+caller-tick exporter landed early in the v0.5.x line. Replaced with
+the correct surface (MPSC queue, atomic stats, tracer's lock-free
+PRNG) and a pointer to `docs/deployment.md`.
+
+### Fixed — SECURITY.md hardening section missing TSAN
+
+Recommended ASAN + UBSAN but omitted TSAN. The CI runs all three
+(added in v0.5.15). Added `-DOTLP_C_ENABLE_TSAN=ON` to the
+recommendation.
+
+### Fixed — SECURITY-ASSESSMENT.md v0.1.x → v0.5.x scope
+
+The assessment was tagged "v0.1.x" but the project was at v0.5.17.
+Refreshed: added surface sections for metrics, logs, context
+propagation, sampler, and slab allocator; added a threat-model note
+for `otlp_install_slab_allocator` (the address-range check that
+catches hostile callers freeing non-slab pointers); marked the
+completed v0.2.x recommendations with their resolutions.
+
+### Fixed — README badge URL
+
+Pointed at `workflows/build.yml` (renamed to `workflows/ci.yml` in
+an earlier release). Badge SVG was 404; visitors saw a broken/red
+build status. Fixed.
+
+### Fixed — README platform coverage
+
+Listed OpenBSD and NetBSD as supported alongside Linux/macOS/Windows.
+CI does not run on OpenBSD or NetBSD. Reworded to distinguish
+"CI'd" (Linux, macOS, FreeBSD best-effort, Windows) from "expected
+to work on any POSIX platform".
+
+### Fixed — README status version
+
+"**0.5.10.**" → "**0.5.18.**" (this release tags 0.5.19).
+
 ## [0.5.17] - 2026-08-08
 
 Zero compiler warnings. Stale comments cleaned.
