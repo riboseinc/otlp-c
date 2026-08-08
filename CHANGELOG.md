@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.16] - 2026-08-08
+
+CLAUDE.md accuracy audit — the most important documentation fix.
+
+### Fixed — CLAUDE.md stale claims
+
+The project's CLAUDE.md (the file every future contributor and AI
+agent reads first) had 5 stale claims from the v0.1.0 bootstrap era:
+
+- "emits trace spans (and, in future, metrics and logs)" → corrected
+  to "all three signals"
+- "Stubbed-default builds... stub library" → corrected to "Clean
+  default builds... no stubs"
+- Phase 1-8 instructions as future work → replaced with completion
+  status + OCP extension guide
+- "The stubs in src/*.c are placeholders" → removed
+- "the exporter holds a mutex" → corrected to "lock-free"
+
+Key files table updated with all current modules (was missing
+metric.h, log.h, sampler.h, context.h, slab.h, otlp_schema.h, etc.).
+
 ## [0.5.15] - 2026-08-08
 
 Complete sanitizer trio in CI: ASAN + UBSAN + TSAN.

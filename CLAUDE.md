@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What otlp-c is
 
-`otlp-c` is a pure-C99 client library for the OpenTelemetry Protocol (OTLP/HTTP). It emits trace spans (and, in future, metrics and logs) over HTTP/1.1 to an OpenTelemetry collector.
+`otlp-c` is a pure-C99 client library for the OpenTelemetry Protocol (OTLP/HTTP). It emits all three OTLP signals — traces, metrics, and logs — over HTTP/1.1 to an OpenTelemetry collector.
 
 The hard constraint that defines this project: **zero non-libc dependencies**. No C++ runtime. No vendored protobuf. No TLS library (defer TLS to a local `otelcol` sidecar). No async runtime. The library must build with a C99 compiler and link cleanly into any C application, including kernel modules, embedded firmware, language runtimes, and libc-preloaded tracers.
 
@@ -17,7 +17,7 @@ These are not stylistic preferences; they are load-bearing. Breaking any of them
 3. **Apache 2.0 only.** Every line committed must be Apache-2.0 compatible. Don't introduce BSD-only or GPL code. This matters for the eventual CNCF donation path.
 4. **No telemetry from otlp-c itself.** The library does not phone home. No version checks. No usage reporting.
 5. **Public API stability within a major version.** Once 1.0.0 ships, no breaking API changes within the 1.x line. New features = new functions or new opt-in structs. See `docs/roadmap.md` for the version policy.
-6. **Stubbed-default builds.** `cmake -B build && cmake --build build` must succeed and link a working stub library. Real implementations live behind feature flags or in src subdirectories.
+6. **Clean default builds.** `cmake -B build && cmake --build build` must succeed and link a working library. All implementations are real — no stubs, no `OTLP_ERR_NOT_IMPLEMENTED`.
 
 ## Build
 
@@ -100,21 +100,27 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | Path | Purpose |
 |---|---|
 | `CMakeLists.txt` | All build switches, feature probes |
-| `vcpkg.json` | Dependency manifest (currently empty by design) |
+| `vcpkg.json` | Dependency manifest (empty by design — zero deps) |
 | `include/otlp-c/otlp.h` | Umbrella public header |
-| `include/otlp-c/exporter.h` | The main entry point most callers use |
-| `include/otlp-c/span.h` | Span type — the unit of telemetry |
-| `include/otlp-c/tracer.h` | Tracer — owns span creation |
-| `src/protobuf_encode.c` | Protobuf wire encoder (hand-rolled) |
-| `src/http_client.c` | HTTP/1.1 client (raw socket) |
-| `src/exporter_otel.c` | OTLP/HTTP exporter — batches + flushes |
-| `tests/property/` | Property-based tests (QuickCheck-style) |
+| `include/otlp-c/exporter.h` | Exporter — emit/tick/flush + metric/log flush |
+| `include/otlp-c/span.h` | Span type — events, links, attributes, sampling |
+| `include/otlp-c/metric.h` | Metric types (counter/gauge/histogram/exp-histogram) |
+| `include/otlp-c/log.h` | Log records with trace correlation |
+| `include/otlp-c/sampler.h` | Sampler vtable + 3 built-ins |
+| `include/otlp-c/context.h` | W3C Trace Context propagation |
+| `include/otlp-c/slab.h` | Slab allocator + global integration |
+| `src/otlp_schema.h` | Schema tables — single source of truth for field numbers |
+| `src/otlp_messages.c` | Traces encoder + shared helpers (any_value, resource) |
+| `src/otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) |
+| `src/otlp_logs_encoder.c` | Logs encoder |
+| `src/exporter.c` | Exporter lifecycle — MPSC, batch, retry, flush |
+| `src/http_client.c` | HTTP/1.1 non-blocking state machine + keep-alive |
+| `src/atomic_compat.h` | Atomic abstraction (MSVC intrinsics fallback) |
+| `tests/property/` | Property-based tests (QuickCheck-style, deterministic) |
 | `tests/integration/` | End-to-end against a local otelcol |
-| `docs/otlp-spec.md` | The OTLP protocol reference |
-| `docs/architecture.md` | The layered design |
-| `docs/roadmap.md` | Phase-by-phase implementation plan |
-| `ci/checkpatch.sh` | checkpatch driver + ignore list |
-| `.github/workflows/build.yml` | Multi-platform CI |
+| `docs/architecture.md` | Layered design (21 modules) |
+| `docs/roadmap.md` | Status and version plan |
+| `.github/workflows/ci.yml` | Multi-platform CI + sanitizers (ASAN/UBSAN/TSAN) |
 
 ## The OTLP protocol
 
@@ -130,27 +136,40 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-When you pick up this repository, work through [docs/roadmap.md](docs/roadmap.md) phase by phase:
+All phases are complete (v0.5.15). The library implements:
+- Full protobuf wire encoder with schema-driven field tables
+- All three OTLP signals (traces, metrics, logs) with encoders
+- Span/metric/log lifecycle with events, links, attributes
+- W3C Trace Context propagation (traceparent + tracestate)
+- Sampler interface (always_on / always_off / trace_id_ratio_based)
+- Lock-free MPSC queue + caller-tick exporter (no library threads)
+- Non-blocking HTTP/1.1 client with keep-alive
+- Slab allocator (standalone + global integration)
+- ExponentialHistogram with configurable buckets
+- Null-transport mode for deterministic testing
 
-1. **Phase 1**: Protobuf wire encoder (`src/protobuf_encode.c`). Property-test it.
-2. **Phase 2**: Message struct definitions (`src/otlp_messages.h`).
-3. **Phase 3**: HTTP/1.1 client (`src/http_client.c`).
-4. **Phase 4**: Span builder (`src/span.c`).
-5. **Phase 5**: Exporter with batching (`src/exporter.c`, `src/exporter_otel.c`).
-6. **Phase 6**: Integration test against a real `otelcol`.
-7. **Phase 7**: Documentation, examples polish.
-8. **Phase 8**: Tag 0.1.0.
+When extending the library:
+- **New attribute type**: add enum value + encoder function +
+  `attr_encoders[]` table entry in `otlp_messages.c`. OCP.
+- **New metric type**: add enum + schema + encoder + dispatch
+  table entry in `otlp_metrics_encoder.c`. OCP.
+- **New sampler**: implement the `otlp_sampler_t` vtable.
+- **Schema changes**: edit `src/otlp_schema.h` tables (single
+  source of truth for all field numbers).
 
-Each phase has acceptance criteria in the roadmap. Don't skip ahead — later phases depend on earlier ones being solid.
-
-The stubs in `src/*.c` are placeholders that compile and link but return `OTLP_ERR_NOT_IMPLEMENTED`. Replace each stub with its real implementation in order. Run `ctest --test-dir build -L property` after every phase; the property tests catch regressions in the encoder immediately.
+Run `ctest --test-dir build -L property` after every change; the
+property tests catch regressions in the encoder immediately.
 
 ## Conventions
 
 - **Opaque types**: every public type is `typedef struct foo foo;` in the header, with the struct definition in the .c file. No public struct members.
 - **Error codes**: every public function returns `otlp_status_t`. `OTLP_OK` (0) is success; negative values are errors. See `include/otlp-c/status.h`.
 - **Ownership**: functions that return heap-allocated pointers have `_create` / `_free` pairs. The caller owns the pointer between them. Document ownership in the docstring.
-- **Threads**: the library is thread-safe at the exporter level (the exporter holds a mutex around batch emission). Span construction is single-threaded by design — each thread builds its own span.
+- **Threads**: the library is lock-free. Cross-thread data flow uses
+  atomics (via `atomic_compat.h`) + MPSC queue. The exporter is
+  caller-tick driven — the caller drives I/O via `otlp_exporter_tick()`
+  from a thread it controls. Span construction is single-threaded by
+  design — each thread builds its own span.
 - **Memory**: use the platform's `malloc`/`free`. Custom allocators are a P1 feature; defer.
 
 ## CI
