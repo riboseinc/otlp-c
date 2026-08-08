@@ -4,7 +4,68 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.5.18] - 2026-08-08
+## [0.5.20] - 2026-08-08
+
+Resource attributes — the OTLP Resource message carries arbitrary
+KeyValue attributes (service.version, deployment.environment,
+host.name, etc.) alongside service.name. Until now the library only
+let callers set service.name; now the full Resource is exposed.
+
+### Added — Resource attributes on the public API
+
+New public type in `include/otlp-c/exporter.h`:
+
+```c
+typedef struct {
+    const char *key;
+    const char *value;
+} otlp_resource_attr_t;
+```
+
+New opts fields on `otlp_exporter_opts_t`:
+
+```c
+const otlp_resource_attr_t *resource_attributes;
+size_t n_resource_attributes;
+```
+
+`service.name` (from the existing `service_name` field) is always
+emitted first; entries in `resource_attributes` follow in array
+order. Empty-key or empty-value entries are skipped (matches the
+protobuf "empty fields omitted" convention the library uses
+elsewhere). v0.5.x supports string values only — covers every
+common Resource attribute. A typed variant (int/double/bool/bytes)
+can be added later without breaking this struct.
+
+### Changed — Internal encoder signatures
+
+`otlp_emit_resource`, `otlp_encode_export_trace_service_request`,
+`otlp_encode_export_metrics_service_request`, and
+`otlp_encode_export_logs_service_request` now take
+`(const otlp_resource_attr_t *attrs, size_t n_attrs)` alongside
+`service_name`. All three signal encoders (traces, metrics, logs)
+emit the same Resource. The exporter deep-copies the attrs array
+at `otlp_exporter_create` and frees it at `otlp_exporter_free`.
+
+This is an INTERNAL API change (in `src/otlp_messages.h`); the
+PUBLIC API change is purely additive (new opts fields, no existing
+field changed).
+
+### Added — Property test for resource attributes
+
+New `tests/property/test_property_resource_attrs.c` (4 properties):
+
+- `prop_resource_empty` — no service + no attrs → 0 bytes.
+- `prop_resource_service_name_only` — service.name on wire.
+- `prop_resource_extra_attrs_encoded` — 3 extra attrs all present
+  alongside service.name.
+- `prop_resource_attrs_skip_empty` — empty-key/empty-value entries
+  omitted; service.name still present.
+
+Uses the shared `walker.h` to descend the wire tree and scan the
+Resource's KeyValue list for each expected key/value pair.
+
+## [0.5.19] - 2026-08-08
 
 Test infrastructure TSAN races fixed + zero compiler warnings. The
 TSAN CI job added in v0.5.15 flagged three tests as data races; all
