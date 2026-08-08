@@ -4,6 +4,64 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.21] - 2026-08-08
+
+Configurable flush timeout + multi-threaded example + a
+null-transport backoff fix that makes retry testing meaningful.
+
+### Added — `flush_timeout_ms` on exporter opts
+
+The `flush()` and `flush_metric()` / `flush_log()` paths had a
+hardcoded 30-second cap (flagged as LOW finding #3 in
+SECURITY-ASSESSMENT.md). Now configurable:
+
+```c
+otlp_exporter_opts_t opts = { 0 };
+opts.flush_timeout_ms = 5000;  /* 5s cap; default remains 30000 */
+```
+
+Closes SECURITY-ASSESSMENT.md LOW finding #3. Callers wanting
+unbounded flush should loop `tick()` manually (documented in the
+opts field comment).
+
+### Fixed — null_transport ignores backoff_armed
+
+The null-transport fast path in `tick()` fired on every tick
+regardless of `backoff_armed`. This meant the null_transport
+status callback (used to test retry/backoff behavior) exhausted
+retries instantly — the callback fired `max_retries + 1` times in
+microseconds, and the batch was dropped before any backoff logic
+ran. Retry tests via null_transport were effectively meaningless.
+
+Fix: the null-transport path now checks `!e->backoff_armed`
+before firing, matching the real HTTP path's behavior. Retry/
+backoff is now testable deterministically via the status callback.
+
+### Changed — `flush_sync()` converted from iteration-count to time-based
+
+The synchronous metric/log flush path used `for (i = 0; i < 30000; i++)`
+with a 1ms sleep per iteration — an iteration-count proxy for 30
+seconds. Replaced with an explicit deadline check using
+`flush_timeout_ms`. Cleaner (no magic iteration count) and respects
+the configured timeout.
+
+### Added — Multi-threaded example
+
+`examples/multithread.c`: N worker threads emit spans concurrently
+into one exporter while a dedicated tick thread drains the queue.
+Demonstrates the library's core embedding pattern: thread-safe
+`emit()` from any thread + caller-driven `tick()` from one thread.
+Cross-platform (pthread on POSIX, CreateThread on Windows). Runs
+via null_transport so it works without a local collector.
+
+### Added — Flush timeout property test
+
+`tests/property/test_property_flush_timeout.c`: verifies a custom
+`flush_timeout_ms` (200ms) is respected — flush returns near the
+configured deadline, not the 30s default. Uses null_transport with
+a 500-status callback + high `backoff_initial_ms` to keep pending
+non-empty without exhausting retries.
+
 ## [0.5.20] - 2026-08-08
 
 Resource attributes — the OTLP Resource message carries arbitrary
