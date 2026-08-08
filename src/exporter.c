@@ -32,6 +32,7 @@
 #include "span_internal.h"
 
 #include "atomic_compat.h"
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -80,6 +81,10 @@ struct otlp_exporter
 	otlp_atomic_u64 network_err;
 	otlp_atomic_int shutdown_requested;
 
+	/* Optional diagnostic callback (NULL = no-op). */
+	otlp_log_fn log_fn;
+	void       *log_ctx;
+
 	/* Tick-private state (no synchronisation needed). */
 	otlp_span_t **pending;
 	size_t pending_cap;
@@ -109,6 +114,25 @@ now_mono_ms(void)
 
 	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
 							    : 0;
+}
+
+/* Diagnostic logger. No-op when exp->log_fn is NULL (zero overhead:
+ * the check happens before any formatting work). */
+static void
+otlp_log(const struct otlp_exporter *e,
+	 otlp_log_level_t		 level,
+	 const char			*fmt,
+	 ...)
+{
+	char	 buf[256];
+	va_list ap;
+
+	if (!e || !e->log_fn)
+		return;
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	e->log_fn(e->log_ctx, level, buf);
 }
 
 static size_t
@@ -317,6 +341,9 @@ otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 		otlp_span_free(clone);
 		otlp_atomic_fetch_add_u64(
 			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_WARN,
+			 "span dropped: queue full (size=%zu)",
+			 mpsc_queue_size(&e->queue));
 		return st;
 	}
 	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
@@ -339,6 +366,9 @@ otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 		otlp_span_free(span);
 		otlp_atomic_fetch_add_u64(
 			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_WARN,
+			 "span dropped: queue full (size=%zu)",
+			 mpsc_queue_size(&e->queue));
 		return st;
 	}
 	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
@@ -398,6 +428,10 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			otlp_atomic_fetch_add_u64(&e->dropped_err,
 				e->in_flight_count,
 				OTLP_MEMORY_ORDER_RELAXED);
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "network error: %llu spans dropped (max retries %u)",
+				 (unsigned long long) e->in_flight_count,
+				 e->max_retries);
 			clear_batch(e);
 			return;
 		}
@@ -409,6 +443,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
+			otlp_log(e, OTLP_LOG_WARN,
+				 "network error; retry %u/%u in %ums",
+				 e->attempt, e->max_retries, delay);
 		}
 		return;
 	}
@@ -418,6 +455,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 		otlp_atomic_fetch_add_u64(
 			&e->sent, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_DEBUG,
+			 "batch sent: %llu spans",
+			 (unsigned long long) e->in_flight_count);
 		/* Success — free the pending batch (kept across retries). */
 		clear_batch(e);
 		return;
@@ -432,6 +472,11 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			otlp_atomic_fetch_add_u64(&e->dropped_err,
 				e->in_flight_count,
 				OTLP_MEMORY_ORDER_RELAXED);
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "HTTP %d: %llu spans dropped (max retries %u)",
+				 http_status,
+				 (unsigned long long) e->in_flight_count,
+				 e->max_retries);
 			/* Permanent failure — free the pending batch. */
 			clear_batch(e);
 		}
@@ -444,6 +489,10 @@ record_outcome(struct otlp_exporter *e, int http_status)
 				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
+			otlp_log(e, OTLP_LOG_WARN,
+				 "HTTP %d; retry %u/%u in %ums",
+				 http_status, e->attempt, e->max_retries,
+				 delay);
 		}
 		return;
 	}
@@ -451,6 +500,9 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 	otlp_atomic_fetch_add_u64(
 		&e->dropped_err, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_log(e, OTLP_LOG_ERROR,
+		 "HTTP %d: %llu spans dropped (permanent)",
+		 http_status, (unsigned long long) e->in_flight_count);
 	/* Permanent failure — free the pending batch. */
 	clear_batch(e);
 }
@@ -629,6 +681,15 @@ otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *e,
 	if (e) {
 		e->null_transport_status_fn  = fn;
 		e->null_transport_status_ctx = ctx;
+	}
+}
+
+void
+otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
+{
+	if (e) {
+		e->log_fn  = fn;
+		e->log_ctx = ctx;
 	}
 }
 

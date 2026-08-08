@@ -2,26 +2,29 @@
 /*
  * Lock-free bounded MPSC ring. See src/mpsc_queue.h.
  *
- * Per-slot sequence-number scheme (Dmitry Vyukov's bounded MPMC):
+ * Uses Dmitry Vyukov's canonical bounded-queue sequence scheme:
  *
- *   Producer claiming slot at index h:
- *     - read slot.seq; expect == h+1 (slot is empty for this turn)
- *     - CAS slot.seq from h+1 to h+1+mask (slot claimed)
- *     - write slot.data
- *     - CAS slot.seq from h+1+mask to h+1+mask+1 (slot published)
+ *   init: slot[i].seq = i
  *
- *   Consumer at index t:
- *     - read slot.seq; expect == t+1+mask+1 (slot is published)
- *     - read slot.data
- *     - store slot.seq = t+1+mask+1+1 = t+mask+2 (slot is empty for next turn)
+ *   push(h):  diff = slot.seq - h
+ *             diff == 0 → slot empty for this turn; CAS head, write data,
+ *                         release slot.seq = h + 1
+ *             diff < 0  → queue full (slot not yet consumed by the time
+ *                         the producer wrapped to it)
  *
- * The sequence number's lower bits encode "whose turn" the slot
- * belongs to; the upper bits encode state transitions. This handles
- * the producer-wins-CAS-then-writes race correctly: the consumer
- * won't read the slot until the sequence is "published."
+ *   pop(t):   diff = slot.seq - (t + 1)
+ *             diff == 0 → slot published; read data, advance tail,
+ *                         release slot.seq = t + capacity (so the next
+ *                         producer turn at h = t + capacity sees
+ *                         slot.seq == h, i.e. diff == 0 again)
+ *             diff < 0  → queue empty
  *
- * For MPSC this is overkill (works for MPMC) but it's a well-trodden
- * pattern with no ABA on a bounded ring.
+ * The scheme is correct because: after a push at turn h, the slot's
+ * sequence is h + 1. When the producer wraps (h reaches t + capacity
+ * without an intervening pop), slot.seq is still h_old + 1 which is
+ * far below the new h, so diff < 0 (full). Only after the consumer
+ * pops at t (setting slot.seq = t + capacity = h_new) does the slot
+ * become available for the wrapped producer.
  *
  * Atomic operations are wrapped through src/atomic_compat.h so the
  * library compiles on MSVC, whose <stdatomic.h> is unreliable
@@ -59,7 +62,7 @@ mpsc_queue_init(struct mpsc_queue *q, size_t capacity)
 	otlp_atomic_store_u64(&q->tail, 0, OTLP_MEMORY_ORDER_RELAXED);
 	for (i = 0; i < capacity; i++)
 		otlp_atomic_store_u64(
-			&q->slots[i].seq, i + 1, OTLP_MEMORY_ORDER_RELAXED);
+			&q->slots[i].seq, i, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
 
@@ -85,14 +88,14 @@ mpsc_queue_push(struct mpsc_queue *q, void *item)
 	{
 		slot = &q->slots[h & q->mask];
 		seq = otlp_atomic_load_u64(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
-		const int64_t diff = (int64_t) seq - (int64_t) (h + 1);
+		const int64_t diff = (int64_t) seq - (int64_t) h;
 		if (diff == 0)
 		{
 			if (otlp_atomic_cas_u64(&q->head,
-				    &h,
-				    h + 1,
-				    OTLP_MEMORY_ORDER_RELAXED,
-				    OTLP_MEMORY_ORDER_RELAXED))
+					    &h,
+					    h + 1,
+					    OTLP_MEMORY_ORDER_RELAXED,
+					    OTLP_MEMORY_ORDER_RELAXED))
 				break;
 		}
 		else if (diff < 0)
@@ -108,7 +111,7 @@ mpsc_queue_push(struct mpsc_queue *q, void *item)
 
 	slot->data = item;
 	otlp_atomic_store_u64(
-		&slot->seq, h + 1 + q->mask + 1, OTLP_MEMORY_ORDER_RELEASE);
+		&slot->seq, h + 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 }
 
@@ -118,14 +121,14 @@ mpsc_queue_pop(struct mpsc_queue *q)
 	uint64_t t = otlp_atomic_load_u64(&q->tail, OTLP_MEMORY_ORDER_RELAXED);
 	struct mpsc_slot *slot = &q->slots[t & q->mask];
 	uint64_t seq = otlp_atomic_load_u64(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
-	const int64_t diff = (int64_t) seq - (int64_t) (t + 1 + q->mask + 1);
+	const int64_t diff = (int64_t) seq - (int64_t) (t + 1);
 
 	if (diff != 0)
 		return NULL;
 
 	void *data = slot->data;
 	otlp_atomic_store_u64(
-		&slot->seq, t + q->mask + 2, OTLP_MEMORY_ORDER_RELEASE);
+		&slot->seq, t + q->mask + 1, OTLP_MEMORY_ORDER_RELEASE);
 	otlp_atomic_store_u64(&q->tail, t + 1, OTLP_MEMORY_ORDER_RELAXED);
 	return data;
 }
