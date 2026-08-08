@@ -111,6 +111,16 @@ extern "C"
 		/* Read timeout in milliseconds. Default: 10000 (10s). */
 		uint32_t read_timeout_ms;
 
+		/* Max wall-clock milliseconds for otlp_exporter_flush() and
+		 * the synchronous metric/log flush paths before they give up
+		 * and return OTLP_ERR_NETWORK (flush) or OTLP_ERR_TIMEOUT
+		 * (flush_metric/flush_log). Covers the case where the
+		 * collector is unreachable or slow and the caller wants
+		 * bounded shutdown latency. Default: 30000 (30s). Set to
+		 * UINT32_MAX for effectively unbounded (callers wanting
+		 * longer should loop tick() manually instead). */
+		uint32_t flush_timeout_ms;
+
 		/* User-Agent header. Default: "otlp-c/<version>". */
 		const char *user_agent;
 
