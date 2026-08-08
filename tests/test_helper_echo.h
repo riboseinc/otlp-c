@@ -8,6 +8,12 @@
  * via Content-Length, returns HTTP 200 with the same body.
  *
  * Optional: a custom handler lets a test return a canned status.
+ *
+ * Cross-thread state (`running`, `requests_served`, `requests_seen`)
+ * is atomic so ThreadSanitizer sees clean happens-before edges.
+ * The worker thread writes; the test main thread reads via
+ * echo_server_join() or directly. Memory ordering: increments and
+ * the running=false store use RELEASE; loads use ACQUIRE.
  */
 #ifndef OTLP_C_TEST_HELPER_ECHO_H
 #define OTLP_C_TEST_HELPER_ECHO_H
@@ -17,6 +23,7 @@
 #include <stdbool.h>
 
 #include <otlp-c/status.h>
+#include "../src/atomic_compat.h"
 
 /* A handler decided by the test. Receives the request body and
  * returns the HTTP status code to send back, and copies the
@@ -31,11 +38,11 @@ struct echo_server
 {
 	uint16_t port;
 	int sock_fd;
-	bool running;
+	otlp_atomic_int running;           /* 0/1; written by worker, polled by main */
 	echo_handler_t handler;
-	size_t requests_to_serve;
-	size_t requests_served;  /* incremented per request; alias of requests_seen for older tests */
-	size_t requests_seen;    /* backwards-compat alias; same value as requests_served */
+	size_t requests_to_serve;          /* const after _start; no sync needed */
+	otlp_atomic_u64 requests_served;   /* incremented by worker; read by main */
+	otlp_atomic_u64 requests_seen;     /* mirror of requests_served for old callers */
 };
 
 /* Start an echo server bound to a kernel-chosen port on localhost.

@@ -11,9 +11,10 @@
 
 /* ── Custom-allocator-backed wrappers ───────────────────────────
  *
- * All src/*.c files MUST use these instead of malloc/free/realloc/
- * calloc directly. The wrappers dispatch through the global
- * allocator set via otlp_set_allocator() (see include/otlp-c/allocator.h).
+ * All source .c files under src/ MUST use these instead of
+ * malloc/free/realloc/calloc directly. The wrappers dispatch
+ * through the global allocator set via otlp_set_allocator()
+ * (see include/otlp-c/allocator.h).
  */
 void  *otlp_malloc(size_t n);
 void  *otlp_realloc(void *p, size_t n);
