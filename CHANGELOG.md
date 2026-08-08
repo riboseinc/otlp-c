@@ -4,6 +4,79 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.22] - 2026-08-08
+
+W3C propagation completeness — baggage support + DRY extraction
+of the traceparent formatting primitive.
+
+### Added — W3C Baggage propagation
+
+The library now propagates the W3C [Baggage](https://www.w3.org/TR/baggage/)
+header alongside traceparent and tracestate. Baggage carries
+arbitrary key-value pairs (user IDs, request IDs, feature flags)
+across service boundaries — distributed tracing without baggage
+is incomplete.
+
+**Public API** (additive — existing callers see no behavior change
+when baggage is empty):
+
+- `OTLP_CONTEXT_BAGGAGE_MAX` (2048) — max baggage string length.
+- `otlp_context_t.baggage[OTLP_CONTEXT_BAGGAGE_MAX]` — opaque
+  string field, same contract as `tracestate` (library doesn't
+  parse it; caller formats/reads).
+- `OTLP_CONTEXT_BAGGAGE_HEADER` — the string `"baggage"`.
+- `otlp_context_inject` now writes the baggage header when
+  `ctx.baggage` is non-empty.
+- `otlp_context_extract` now reads the baggage header when present.
+
+OCP: the field is additive; existing callers that don't set
+baggage see identical behavior (no header written, no field
+populated).
+
+### Added — `otlp_traceparent_format_raw` primitive
+
+The traceparent hex-formatting logic was duplicated between
+`src/w3c.c` (`otlp_traceparent_format`, which takes a span) and
+`src/context.c` (`otlp_context_inject`, which has raw IDs from
+the context struct and inlined its own copy of the formatting).
+
+Extracted the raw-bytes version as a new public primitive:
+
+```c
+otlp_status_t otlp_traceparent_format_raw(
+    const uint8_t trace_id[16],
+    const uint8_t span_id[8],
+    bool sampled,
+    char *buf, size_t cap,
+    size_t *out_len);  /* optional; may be NULL */
+```
+
+- `otlp_traceparent_format` (span-based) now delegates to it.
+- `otlp_context_inject` calls it directly, removing ~20 lines
+  of duplicated hex formatting.
+- `out_len` is now optional (NULL means "don't care") — aligns
+  with the span-based wrapper, which also accepts NULL.
+
+This is both DRY (eliminates duplication) and API completion (the
+raw-bytes version is the fundamental operation; the span-based
+version is a convenience wrapper).
+
+### Added — Baggage + DRY property tests
+
+`tests/property/test_property_baggage.c` (5 properties):
+
+- `prop_baggage_roundtrip` — inject with baggage, extract,
+  baggage matches.
+- `prop_baggage_absent_on_extract` — carrier without baggage
+  header produces empty baggage field.
+- `prop_baggage_with_tracestate` — both baggage and tracestate
+  coexist on the same carrier.
+- `prop_baggage_header_constant` — `OTLP_CONTEXT_BAGGAGE_HEADER`
+  is the string `"baggage"`.
+- `prop_format_raw_matches_format` — `otlp_traceparent_format_raw`
+  produces the same output as `otlp_traceparent_format` for a
+  given span (DRY regression check).
+
 ## [0.5.21] - 2026-08-08
 
 Configurable flush timeout + multi-threaded example + a
