@@ -189,7 +189,7 @@ prop_keepalive_disabled_on_explicit_close(uint64_t seed)
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
 	if (otlp_http_request_start(&req, &url, "test",
-	    (const uint8_t *) "x", 1) != OTLP_OK)
+	    (const uint8_t *) "x", 1, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req) != OTLP_OK)
 		goto out;
@@ -224,7 +224,7 @@ prop_keepalive_eligible_by_default(uint64_t seed)
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
 	if (otlp_http_request_start(&req, &url, "test",
-	    (const uint8_t *) "x", 1) != OTLP_OK)
+	    (const uint8_t *) "x", 1, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req) != OTLP_OK)
 		goto out;
@@ -261,7 +261,7 @@ prop_keepalive_reuse_roundtrip(uint64_t seed)
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
 	if (otlp_http_request_start(&req1, &url, "test",
-	    (const uint8_t *) "first", 5) != OTLP_OK)
+	    (const uint8_t *) "first", 5, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req1) != OTLP_OK)
 		goto out;
@@ -269,7 +269,7 @@ prop_keepalive_reuse_roundtrip(uint64_t seed)
 	if (!sock)
 		goto out;
 	if (otlp_http_request_start_with_socket(&req2, &url, "test",
-	    (const uint8_t *) "second", 6, sock) != OTLP_OK) {
+	    (const uint8_t *) "second", 6, 0, 0, sock) != OTLP_OK) {
 		req2 = NULL;
 		sock = NULL;
 		goto out;

@@ -66,6 +66,8 @@ struct otlp_exporter
 	uint32_t backoff_initial_ms;
 	uint32_t backoff_max_ms;
 	uint32_t flush_timeout_ms;
+	uint32_t connect_timeout_ms;
+	uint32_t read_timeout_ms;
 
 	/* MPSC queue of pending otlp_span_t*. */
 	struct mpsc_queue queue;
@@ -262,6 +264,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->backoff_initial_ms = o.backoff_initial_ms;
 	e->backoff_max_ms = o.backoff_max_ms;
 	e->flush_timeout_ms = o.flush_timeout_ms;
+	e->connect_timeout_ms = o.connect_timeout_ms;
+	e->read_timeout_ms = o.read_timeout_ms;
 
 	e->pending_cap = e->batch_size * 2;
 	e->pending = otlp_malloc(e->pending_cap * sizeof(*e->pending));
@@ -400,6 +404,8 @@ try_start_post(struct otlp_exporter *e)
 		e->n_resource_attributes,
 		(const otlp_span_t *const *) e->pending,
 		e->pending_count,
+		e->connect_timeout_ms,
+		e->read_timeout_ms,
 		e->keepalive_sock,
 		&e->in_flight);
 	if (st != OTLP_OK)
@@ -722,7 +728,8 @@ flush_sync(struct otlp_exporter *e,
 		return OTLP_OK;
 	url = e->url;
 	snprintf(url.path, sizeof(url.path), "%s", path);
-	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len);
+	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len,
+				      e->connect_timeout_ms, e->read_timeout_ms);
 	if (st != OTLP_OK)
 		return st;
 	deadline = now_mono_ms() + e->flush_timeout_ms;

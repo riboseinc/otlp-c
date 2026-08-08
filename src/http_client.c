@@ -43,6 +43,16 @@
 
 /* ── URL parser ───────────────────────────────────────────────── */
 
+/* Monotonic clock in milliseconds. Used for deadline enforcement. */
+static uint64_t
+mono_ms(void)
+{
+	uint64_t n;
+
+	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
+							    : 0;
+}
+
 static int
 parse_uint16(const char *s, size_t len, uint16_t *out)
 {
@@ -154,6 +164,15 @@ struct otlp_http_request
 	const uint8_t *body_ptr; /* into resp_buf */
 	size_t body_len;
 	bool keepalive_eligible; /* set by response parser */
+
+	/* Deadline enforcement (0 = no timeout / infinite). Stored as
+	 * the original duration; the step functions compute "has the
+	 * deadline elapsed?" by comparing now to the request start time
+	 * (for connect) or the last successful recv (for read). */
+	uint32_t connect_timeout_ms;
+	uint32_t read_timeout_ms;
+	uint64_t start_ms;       /* monotonic ms at _start time */
+	uint64_t last_recv_ms;   /* monotonic ms at most recent recv */
 };
 
 static otlp_status_t
@@ -205,6 +224,8 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	const char *user_agent,
 	const uint8_t *body,
 	size_t body_len,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms,
 	struct otlp_socket   *donated_socket)
 {
 	struct otlp_http_request *r;
@@ -224,6 +245,13 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	/* Donated socket: skip CONNECTING, go straight to SENDING. */
 	r->state = OTLP_HTTP_REQ_SENDING;
 	r->sock  = donated_socket;
+
+	/* Store timeout durations + start time for deadline checks in
+	 * step. 0 means no timeout (infinite). */
+	r->connect_timeout_ms = connect_timeout_ms;
+	r->read_timeout_ms    = read_timeout_ms;
+	r->start_ms           = mono_ms();
+	r->last_recv_ms       = r->start_ms;
 
 	st = build_request(r, url, user_agent, body, body_len);
 	if (st != OTLP_OK)
@@ -245,7 +273,9 @@ otlp_http_request_start(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
 	const uint8_t *body,
-	size_t body_len)
+	size_t body_len,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms)
 {
 	struct otlp_http_request *r;
 	otlp_status_t st;
@@ -260,6 +290,11 @@ otlp_http_request_start(otlp_http_request_t **out,
 		return OTLP_ERR_NOMEM;
 	r->state = OTLP_HTTP_REQ_CONNECTING;
 
+	/* Store timeout durations + start time for deadline checks in
+	 * step. 0 means no timeout (infinite). */
+	r->connect_timeout_ms = connect_timeout_ms;
+	r->read_timeout_ms    = read_timeout_ms;
+
 	st = build_request(r, url, user_agent, body, body_len);
 	if (st != OTLP_OK)
 		goto fail;
@@ -267,6 +302,12 @@ otlp_http_request_start(otlp_http_request_t **out,
 	st = otlp_socket_connect(&r->sock, url->host, url->port);
 	if (st != OTLP_OK)
 		goto fail;
+
+	/* Start the deadline clock AFTER getaddrinfo + connect initiation.
+	 * The blocking DNS lookup can take seconds; measuring the connect
+	 * timeout from before it would make the deadline fire prematurely. */
+	r->start_ms     = mono_ms();
+	r->last_recv_ms = r->start_ms;
 
 	/* If connect() completed synchronously (rare for non-blocking
 	 * on the first call), advance state to SENDING. */
@@ -429,6 +470,15 @@ step_connecting(struct otlp_http_request *r)
 		r->state = OTLP_HTTP_REQ_SENDING;
 		return OTLP_OK;
 	}
+	/* Deadline check: if the caller set a connect timeout and it
+	 * has elapsed since start, fail the request rather than waiting
+	 * forever for an unreachable collector. */
+	if (st == OTLP_ERR_WOULDBLOCK && r->connect_timeout_ms != 0 &&
+	    mono_ms() - r->start_ms >= r->connect_timeout_ms)
+	{
+		r->state = OTLP_HTTP_REQ_FAILED;
+		return OTLP_ERR_TIMEOUT;
+	}
 	return st; /* WOULDBLOCK or error */
 }
 
@@ -468,7 +518,18 @@ step_reading(struct otlp_http_request *r)
 
 	st = otlp_socket_read(r->sock, small, sizeof(small), &n_read);
 	if (st == OTLP_ERR_WOULDBLOCK)
+	{
+		/* Deadline check: if the caller set a read timeout and it
+		 * has elapsed since the last successful recv (or start),
+		 * fail the request. */
+		if (r->read_timeout_ms != 0 &&
+		    mono_ms() - r->last_recv_ms >= r->read_timeout_ms)
+		{
+			r->state = OTLP_HTTP_REQ_FAILED;
+			return OTLP_ERR_TIMEOUT;
+		}
 		return OTLP_ERR_WOULDBLOCK;
+	}
 	if (st != OTLP_OK)
 		return st;
 
@@ -494,6 +555,9 @@ step_reading(struct otlp_http_request *r)
 		}
 		memcpy(r->resp_buf + r->resp_len, small, n_read);
 		r->resp_len += n_read;
+		/* Reset the inter-recv timer: a slow-but-steady stream
+		 * should not time out as long as bytes keep arriving. */
+		r->last_recv_ms = mono_ms();
 	}
 
 	parsed = try_parse_response(r);

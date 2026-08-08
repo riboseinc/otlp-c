@@ -22,6 +22,8 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
+	uint32_t connect_timeout_ms,
+	uint32_t read_timeout_ms,
 	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out)
 {
@@ -46,10 +48,12 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 
 	if (reuse_socket)
 		st = otlp_http_request_start_with_socket(
-			out, url, user_agent, body.data, body.len, reuse_socket);
+			out, url, user_agent, body.data, body.len,
+			connect_timeout_ms, read_timeout_ms, reuse_socket);
 	else
 		st = otlp_http_request_start(
-			out, url, user_agent, body.data, body.len);
+			out, url, user_agent, body.data, body.len,
+			connect_timeout_ms, read_timeout_ms);
 	otlp_pb_buf_free(&body);
 	return st;
 }
