@@ -249,3 +249,15 @@ add_test(NAME property-flush-timeout
 set_tests_properties(property-flush-timeout PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.22: W3C Baggage + traceparent_format_raw DRY.
+add_executable(otlp_property_baggage test_property_baggage.c)
+target_link_libraries(otlp_property_baggage PRIVATE otlp_c)
+target_include_directories(otlp_property_baggage PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-baggage
+    COMMAND otlp_property_baggage)
+set_tests_properties(property-baggage PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

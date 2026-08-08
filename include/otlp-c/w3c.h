@@ -38,7 +38,28 @@ extern "C" {
 #define OTLP_TRACEPARENT_LEN 55
 #define OTLP_TRACEPARENT_BUF_SIZE (OTLP_TRACEPARENT_LEN + 1)
 
+/* Format raw trace-id + span-id byte arrays as a W3C traceparent
+ * header. The primitive that otlp_traceparent_format() (which takes
+ * a span) builds on; useful when the caller has raw bytes — e.g.
+ * from an otlp_context_t value — rather than a span pointer.
+ *
+ * `sampled` controls the trace-flags byte (bit 0).
+ * `buf` must be at least OTLP_TRACEPARENT_BUF_SIZE bytes.
+ * `out_len` receives the number of chars written (excluding NUL).
+ *
+ * Returns OTLP_OK, OTLP_ERR_NULL, or OTLP_ERR_OVERFLOW. */
+OTLP_C_EXPORT
+otlp_status_t otlp_traceparent_format_raw(const uint8_t trace_id[16],
+					   const uint8_t span_id[8],
+					   bool sampled,
+					   char *buf,
+					   size_t cap,
+					   size_t *out_len);
+
 /* Format the span's trace_id + span_id as a W3C traceparent header.
+ *
+ * Convenience wrapper around otlp_traceparent_format_raw() that
+ * extracts the IDs from a span pointer.
  *
  * `sampled` controls the trace-flags byte (bit 0).
  * `buf` must be at least OTLP_TRACEPARENT_BUF_SIZE bytes.

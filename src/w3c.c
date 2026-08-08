@@ -29,22 +29,19 @@ hex_value(char c)
 }
 
 otlp_status_t
-otlp_traceparent_format(const otlp_span_t *span, bool sampled,
-			char *buf, size_t cap, size_t *out_len)
+otlp_traceparent_format_raw(const uint8_t trace_id[16],
+			    const uint8_t span_id[8],
+			    bool sampled,
+			    char *buf,
+			    size_t cap,
+			    size_t *out_len)
 {
-	const uint8_t *trace_id;
-	const uint8_t *span_id;
-	size_t	      i;
+	size_t i;
 
-	if (!span || !buf || !out_len)
+	if (!trace_id || !span_id || !buf)
 		return OTLP_ERR_NULL;
 	if (cap < OTLP_TRACEPARENT_BUF_SIZE)
 		return OTLP_ERR_OVERFLOW;
-
-	trace_id = otlp_span_get_trace_id(span);
-	span_id	 = otlp_span_get_span_id(span);
-	if (!trace_id || !span_id)
-		return OTLP_ERR_INVALID_ARGUMENT;
 
 	/* version */
 	buf[0] = '0';
@@ -70,8 +67,28 @@ otlp_traceparent_format(const otlp_span_t *span, bool sampled,
 	buf[54] = sampled ? '1' : '0';
 	buf[55] = '\0';
 
-	*out_len = OTLP_TRACEPARENT_LEN;
+	if (out_len)
+		*out_len = OTLP_TRACEPARENT_LEN;
 	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_traceparent_format(const otlp_span_t *span, bool sampled,
+			char *buf, size_t cap, size_t *out_len)
+{
+	const uint8_t *trace_id;
+	const uint8_t *span_id;
+
+	if (!span)
+		return OTLP_ERR_NULL;
+
+	trace_id = otlp_span_get_trace_id(span);
+	span_id	 = otlp_span_get_span_id(span);
+	if (!trace_id || !span_id)
+		return OTLP_ERR_INVALID_ARGUMENT;
+
+	return otlp_traceparent_format_raw(
+	    trace_id, span_id, sampled, buf, cap, out_len);
 }
 
 otlp_status_t

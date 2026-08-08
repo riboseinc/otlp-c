@@ -20,6 +20,7 @@
 
 const char OTLP_CONTEXT_TRACEPARENT_HEADER[] = "traceparent";
 const char OTLP_CONTEXT_TRACESTATE_HEADER[]  = "tracestate";
+const char OTLP_CONTEXT_BAGGAGE_HEADER[]     = "baggage";
 
 otlp_context_t
 otlp_context_from_span(const otlp_span_t *span)
@@ -51,39 +52,21 @@ otlp_context_inject(otlp_context_t     ctx,
 		    void	      *carrier_ctx)
 {
 	char buf[OTLP_TRACEPARENT_BUF_SIZE];
+	otlp_status_t st;
 
 	if (!set)
 		return OTLP_ERR_NULL;
 	if (!ctx.has_context)
 		return OTLP_ERR_INVALID_ARGUMENT;
 
-	/* Build the traceparent value manually using the format from
-	 * w3c.c. We can't call otlp_traceparent_format() because it
-	 * takes an otlp_span_t*, but ctx is a value type. The format
-	 * is identical. */
-	{
-		static const char hex[] = "0123456789abcdef";
-		size_t	       i;
+	/* Build the traceparent value from raw IDs via the shared
+	 * primitive in w3c.c (DRY: no inlined hex formatting here). */
+	st = otlp_traceparent_format_raw(ctx.trace_id, ctx.span_id,
+					 ctx.sampled, buf, sizeof(buf), NULL);
+	if (st != OTLP_OK)
+		return st;
 
-		buf[0] = '0';
-		buf[1] = '0';
-		buf[2] = '-';
-		for (i = 0; i < OTLP_TRACE_ID_LEN; i++) {
-			buf[3 + i * 2]     = hex[(ctx.trace_id[i] >> 4) & 0x0F];
-			buf[3 + i * 2 + 1] = hex[ctx.trace_id[i] & 0x0F];
-		}
-		buf[35] = '-';
-		for (i = 0; i < OTLP_SPAN_ID_LEN; i++) {
-			buf[36 + i * 2]     = hex[(ctx.span_id[i] >> 4) & 0x0F];
-			buf[36 + i * 2 + 1] = hex[ctx.span_id[i] & 0x0F];
-		}
-		buf[52] = '-';
-		buf[53] = '0';
-		buf[54] = ctx.sampled ? '1' : '0';
-		buf[55] = '\0';
-	}
-
-	/* Also emit tracestate if present (non-empty). */
+	/* Emit tracestate if present (non-empty). */
 	if (ctx.tracestate[0]) {
 		otlp_status_t ts_st;
 
@@ -92,6 +75,17 @@ otlp_context_inject(otlp_context_t     ctx,
 		if (ts_st != OTLP_OK)
 			return ts_st;
 	}
+
+	/* Emit baggage if present (non-empty). */
+	if (ctx.baggage[0]) {
+		otlp_status_t bg_st;
+
+		bg_st = set(carrier_ctx, OTLP_CONTEXT_BAGGAGE_HEADER,
+			    ctx.baggage);
+		if (bg_st != OTLP_OK)
+			return bg_st;
+	}
+
 	return set(carrier_ctx, OTLP_CONTEXT_TRACEPARENT_HEADER, buf);
 }
 
@@ -121,7 +115,7 @@ otlp_context_extract(otlp_carrier_get_fn get,
 	ctx.sampled     = (flags & 0x01) != 0;
 	ctx.has_context = true;
 
-	/* Also extract tracestate if present. */
+	/* Extract tracestate if present. */
 	{
 		const char *ts = get(carrier_ctx, OTLP_CONTEXT_TRACESTATE_HEADER);
 
@@ -132,6 +126,20 @@ otlp_context_extract(otlp_carrier_get_fn get,
 				len = OTLP_CONTEXT_TRACESTATE_MAX - 1;
 			memcpy(ctx.tracestate, ts, len);
 			ctx.tracestate[len] = '\0';
+		}
+	}
+
+	/* Extract baggage if present. */
+	{
+		const char *bg = get(carrier_ctx, OTLP_CONTEXT_BAGGAGE_HEADER);
+
+		if (bg && bg[0]) {
+			size_t len = strlen(bg);
+
+			if (len >= OTLP_CONTEXT_BAGGAGE_MAX)
+				len = OTLP_CONTEXT_BAGGAGE_MAX - 1;
+			memcpy(ctx.baggage, bg, len);
+			ctx.baggage[len] = '\0';
 		}
 	}
 	return ctx;

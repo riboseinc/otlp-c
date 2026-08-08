@@ -37,8 +37,19 @@ extern "C" {
  * The `tracestate` field carries the raw W3C tracestate header value
  * (key=value,key=value,...). The library does NOT parse it — the
  * caller is responsible for formatting on inject and parsing on
- * extract. Empty string means "no tracestate". */
+ * extract. Empty string means "no tracestate".
+ *
+ * The `baggage` field carries the raw W3C baggage header value
+ * (key1=value1,key2=value2;prop=val). Same opaque-string contract
+ * as tracestate: the library propagates it without parsing. Empty
+ * string means "no baggage". See:
+ * https://www.w3.org/TR/baggage/
+ *
+ * OTLP_C_CONTEXT_BAGGAGE_MAX is set to 2048 bytes. The W3C spec
+ * recommends implementations support at least 8192; callers with
+ * larger baggage should split entries or use a side-channel. */
 #define OTLP_CONTEXT_TRACESTATE_MAX 512
+#define OTLP_CONTEXT_BAGGAGE_MAX 2048
 
 typedef struct otlp_context {
 	uint8_t trace_id[OTLP_TRACE_ID_LEN];
@@ -46,6 +57,7 @@ typedef struct otlp_context {
 	bool    has_context;  /* false if extracted from an empty/invalid carrier */
 	bool    sampled;      /* W3C trace-flags bit 0 */
 	char    tracestate[OTLP_CONTEXT_TRACESTATE_MAX];
+	char    baggage[OTLP_CONTEXT_BAGGAGE_MAX];
 } otlp_context_t;
 
 /* Carrier abstraction. The library calls `set` to write a header
@@ -66,6 +78,7 @@ typedef const char *(*otlp_carrier_get_fn)(void       *carrier_ctx,
 /* Header name constants (UTF-8, NUL-terminated). */
 OTLP_C_EXPORT extern const char OTLP_CONTEXT_TRACEPARENT_HEADER[];
 OTLP_C_EXPORT extern const char OTLP_CONTEXT_TRACESTATE_HEADER[];
+OTLP_C_EXPORT extern const char OTLP_CONTEXT_BAGGAGE_HEADER[];
 
 /* Build a context from a span's identity fields.
  *
@@ -76,7 +89,11 @@ otlp_context_t otlp_context_from_span(const otlp_span_t *span);
 
 /* Inject a context into a carrier using the W3C traceparent header.
  *
- * Calls `set(carrier_ctx, "traceparent", "<traceparent value>")`.
+ * Writes up to three headers:
+ *   - "traceparent" (always, when ctx.has_context)
+ *   - "tracestate"  (when ctx.tracestate is non-empty)
+ *   - "baggage"     (when ctx.baggage is non-empty)
+ *
  * Returns OTLP_OK on success, OTLP_ERR_NULL if set/carrier_ctx is
  * NULL, OTLP_ERR_INVALID_ARGUMENT if ctx.has_context is false, or
  * whatever `set` returns on failure. */
@@ -86,6 +103,11 @@ otlp_status_t otlp_context_inject(otlp_context_t     ctx,
 				  void	      *carrier_ctx);
 
 /* Extract a context from a carrier by reading the traceparent header.
+ *
+ * Reads up to three headers:
+ *   - "traceparent" (required; absent → has_context=false)
+ *   - "tracestate"  (optional; copied verbatim into ctx.tracestate)
+ *   - "baggage"     (optional; copied verbatim into ctx.baggage)
  *
  * Returns a context with has_context=true on successful parse, or
  * has_context=false if the header is absent or invalid. Never
