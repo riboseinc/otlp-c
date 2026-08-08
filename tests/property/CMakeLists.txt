@@ -261,3 +261,15 @@ add_test(NAME property-baggage
 set_tests_properties(property-baggage PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.23: diagnostic callback (otlp_exporter_set_logger).
+add_executable(otlp_property_diagnostics test_property_diagnostics.c)
+target_link_libraries(otlp_property_diagnostics PRIVATE otlp_c)
+target_include_directories(otlp_property_diagnostics PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-diagnostics
+    COMMAND otlp_property_diagnostics)
+set_tests_properties(property-diagnostics PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

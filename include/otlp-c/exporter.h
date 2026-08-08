@@ -243,6 +243,54 @@ extern "C"
 		otlp_null_transport_status_fn fn,
 		void *ctx);
 
+	/* ── Diagnostics ────────────────────────────────────────────
+	 *
+	 * Optional callback the library invokes at notable events:
+	 * batch sent, HTTP error, retry armed, span dropped (queue
+	 * full or max retries), network failure. Gives the caller
+	 * real-time visibility into exporter behavior for production
+	 * debugging — the stats counters tell you what happened after
+	 * the fact; this tells you WHY.
+	 *
+	 * Severity follows the standard syslog/OpenTelemetry model:
+	 *   DEBUG — routine operation (batch sent successfully).
+	 *   INFO  — notable but expected (retry armed).
+	 *   WARN  — degraded operation (queue full, transient retry).
+	 *   ERROR — unexpected failure (max retries, permanent 4xx).
+	 *
+	 * Thread-safety: the callback may be invoked from any thread
+	 * that touches the exporter (emit from any caller thread,
+	 * tick/flush from the tick thread). The implementation MUST
+	 * be thread-safe. A common pattern is to write to a ring
+	 * buffer or atomic flag inside the callback, then drain from
+	 * a dedicated logger thread.
+	 *
+	 * `message` is a NUL-terminated formatted string, valid only
+	 * for the duration of the call. Copy if you need it longer.
+	 *
+	 * Performance: when no callback is installed (default), every
+	 * log site compiles to a NULL-pointer check — zero observable
+	 * overhead in hot paths. */
+	typedef enum {
+		OTLP_LOG_DEBUG = 0,
+		OTLP_LOG_INFO  = 1,
+		OTLP_LOG_WARN  = 2,
+		OTLP_LOG_ERROR = 3,
+	} otlp_log_level_t;
+
+	typedef void (*otlp_log_fn)(void		     *ctx,
+				    otlp_log_level_t	      level,
+				    const char		      *message);
+
+	/* Install a diagnostic callback. Pass fn=NULL to disable.
+	 * Default: no callback. Safe to call at any time during the
+	 * exporter's lifetime; the next event observes the new
+	 * callback. */
+	OTLP_C_EXPORT
+	void otlp_exporter_set_logger(otlp_exporter_t *exp,
+				     otlp_log_fn fn,
+				     void	    *ctx);
+
 	/* Synchronously encode and POST a single metric to the OTLP
 	 * collector at /v1/metrics. Blocks the calling thread until
 	 * the HTTP request completes (or fails). The metric is NOT
