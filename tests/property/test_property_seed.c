@@ -26,6 +26,7 @@ static int prop_version_consistent(uint64_t seed)
 {
 	const char *v = otlp_version();
 
+	(void) seed;
 	return (v != NULL && v[0] != '\0' &&
 		str_eq(v, OTLP_C_VERSION_STRING)) ? 1 : 0;
 }

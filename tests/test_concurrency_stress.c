@@ -148,9 +148,15 @@ int main(void)
 
 	expected = N_THREADS * SPANS_PER_THREAD;
 
+	/* Load once after join: the join's ACQUIRE load of `running`
+	 * carries every increment the worker made before exit. RELAXED
+	 * here is safe because the ACQUIRE load above already established
+	 * the happens-before edge. */
+	size_t served = otlp_atomic_load_u64(&srv.requests_served,
+		OTLP_MEMORY_ORDER_RELAXED);
+
 	printf("[stress] emitted=%d expected=%d failures=%d served=%zu\n",
-	       total_emitted, expected, total_failures,
-	       srv.requests_served);
+	       total_emitted, expected, total_failures, served);
 
 	if (total_emitted != expected) {
 		fprintf(stderr, "[stress] FAIL: emitted %d != %d\n",
@@ -168,7 +174,7 @@ int main(void)
 		return 1;
 	}
 
-	if (srv.requests_served == 0) {
+	if (served == 0) {
 		fprintf(stderr, "[stress] FAIL: no HTTP requests reached server\n");
 		otlp_exporter_free(g_exp);
 		otlp_tracer_free(g_tracer);
@@ -179,7 +185,7 @@ int main(void)
 	otlp_tracer_free(g_tracer);
 
 	printf("[stress] PASS: %d spans, %d threads, %zu requests\n",
-	       total_emitted, N_THREADS, srv.requests_served);
+	       total_emitted, N_THREADS, served);
 	return 0;
 }
 

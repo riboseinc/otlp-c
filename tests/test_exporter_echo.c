@@ -31,13 +31,10 @@ count_handler(const uint8_t *req_body,
 	size_t resp_cap,
 	size_t *resp_len)
 {
-	static int requests_seen;
-
 	(void) req_body;
 	(void) req_len;
 	(void) resp_buf;
 	(void) resp_cap;
-	requests_seen++;
 	*resp_len = 0;
 	return 200;
 }

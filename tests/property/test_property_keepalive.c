@@ -11,9 +11,16 @@
  *
  * Uses a tiny inline TCP server (no echo helper) so we control the
  * exact response bytes — including whether Connection: close is sent.
+ *
+ * `requests_served` is atomic: the server thread increments it
+ * BEFORE send() returns, so by the time the main thread's recv()
+ * delivers the response, the counter has already been bumped (with
+ * at least release ordering, observed by main's relaxed load). TSAN
+ * is satisfied because every cross-thread access goes through atomics.
  */
 #include "prng.h"
 #include "property_harness.h"
+#include "../src/atomic_compat.h"
 #include "../src/http_client.h"
 #include "../src/platform.h"
 
@@ -33,7 +40,7 @@ struct mini_srv {
 	int listen_fd;
 	uint16_t port;
 	bool send_connection_close;
-	int requests_served;
+	otlp_atomic_int requests_served;
 };
 
 static int
@@ -127,9 +134,13 @@ mini_serve_thread(void *arg)
 				? "Connection: close\r\n"
 				: "");
 		(void) resp;
+		/* Bump BEFORE send: once main's recv() returns the response,
+		 * the counter has already advanced. RELEASE so main's relaxed
+		 * load is well-defined. */
+		otlp_atomic_fetch_add_int(&s->requests_served, 1,
+			OTLP_MEMORY_ORDER_RELEASE);
 		if (send(conn_fd, buf, strlen(buf), 0) < 0)
 			break;
-		s->requests_served++;
 		if (s->send_connection_close) {
 			close(conn_fd);
 			return NULL;
@@ -267,7 +278,9 @@ prop_keepalive_reuse_roundtrip(uint64_t seed)
 	if (drive_to_done(req2) != OTLP_OK)
 		goto out;
 	body2 = otlp_http_request_body(req2, &len2);
-	ok = (len2 == 2 && memcmp(body2, "hi", 2) == 0 && srv.requests_served == 2);
+	ok = (len2 == 2 && memcmp(body2, "hi", 2) == 0 &&
+	      otlp_atomic_load_int(&srv.requests_served,
+		  OTLP_MEMORY_ORDER_RELAXED) == 2);
 out:
 	if (req1)
 		otlp_http_request_free(req1);

@@ -75,7 +75,8 @@ echo_server_start(struct echo_server *s,
 
 	s->handler = handler;
 	s->requests_to_serve = requests_to_serve;
-	s->requests_served = 0;
+	otlp_atomic_store_u64(&s->requests_served, 0, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_store_u64(&s->requests_seen, 0, OTLP_MEMORY_ORDER_RELAXED);
 
 	a = malloc(sizeof(*a));
 	if (!a)
@@ -87,7 +88,9 @@ echo_server_start(struct echo_server *s,
 		goto fail;
 	}
 	pthread_detach(tid);
-	s->running = true;
+	/* RELEASE so all the setup above is visible to whichever thread
+	 * observes running == 1 via an ACQUIRE load. */
+	otlp_atomic_store_int(&s->running, 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 
 fail:
@@ -110,7 +113,11 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 		(uint64_t) mono.tv_nsec / 1000ULL;
 	deadline = now + timeout_us;
 
-	while (s->running && now < deadline)
+	/* ACQUIRE load pairs with the worker's RELEASE store of 0 on exit.
+	 * Once we observe running == 0, every write the worker made before
+	 * exiting (including the final requests_served value) is visible. */
+	while (otlp_atomic_load_int(&s->running, OTLP_MEMORY_ORDER_ACQUIRE) &&
+	       now < deadline)
 	{
 		ts.tv_sec = 0;
 		ts.tv_nsec = 1000 * 100; /* 100us */
@@ -119,7 +126,8 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 		now = (uint64_t) mono.tv_sec * 1000000ULL +
 			(uint64_t) mono.tv_nsec / 1000ULL;
 	}
-	return s->running ? OTLP_ERR_TIMEOUT : OTLP_OK;
+	return otlp_atomic_load_int(&s->running, OTLP_MEMORY_ORDER_ACQUIRE)
+		? OTLP_ERR_TIMEOUT : OTLP_OK;
 }
 
 void
@@ -133,7 +141,8 @@ echo_server_stop(struct echo_server *s)
 	shutdown(s->sock_fd, SHUT_RDWR);
 	close(s->sock_fd);
 	s->sock_fd = -1;
-	s->running = false;
+	/* _stop does not flip running; the worker does that on its way out.
+	 * Callers waiting via _join will observe the worker's release store. */
 }
 
 /* ── Internal: parse + serve one request ──────────────────────── */
@@ -260,16 +269,23 @@ echo_thread_main(void *arg)
 		}
 		serve_one(conn_fd, s->handler);
 		close(conn_fd);
-		s->requests_served++;
-		s->requests_seen = s->requests_served;
+		otlp_atomic_fetch_add_u64(&s->requests_served, 1,
+			OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_store_u64(&s->requests_seen,
+			otlp_atomic_load_u64(&s->requests_served,
+				OTLP_MEMORY_ORDER_RELAXED),
+			OTLP_MEMORY_ORDER_RELAXED);
 		if (s->requests_to_serve > 0 &&
-		    s->requests_served >= s->requests_to_serve)
+		    otlp_atomic_load_u64(&s->requests_served,
+				OTLP_MEMORY_ORDER_RELAXED) >= s->requests_to_serve)
 			break;
 	}
 	if (s->sock_fd >= 0)
 		close(s->sock_fd);
 	s->sock_fd = -1;
-	s->running = false;
+	/* RELEASE store: every request-count increment above is visible to
+	 * any thread that observes running == 0 via ACQUIRE load. */
+	otlp_atomic_store_int(&s->running, 0, OTLP_MEMORY_ORDER_RELEASE);
 	free(a);
 	return NULL;
 }
