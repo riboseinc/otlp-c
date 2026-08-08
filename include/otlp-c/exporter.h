@@ -42,20 +42,58 @@ extern "C"
 
 	typedef struct otlp_exporter otlp_exporter_t;
 
+	/* Value type for a Resource attribute. Maps 1:1 to the OTLP
+	 * AnyValue oneof variants the library supports for Resource
+	 * attributes. STRING is the default (0) for backward
+	 * compatibility — callers who only set `.value` get string
+	 * encoding with no code change. */
+	typedef enum {
+		OTLP_RESOURCE_ATTR_STRING = 0,
+		OTLP_RESOURCE_ATTR_INT64  = 1,
+		OTLP_RESOURCE_ATTR_DOUBLE = 2,
+		OTLP_RESOURCE_ATTR_BOOL   = 3,
+	} otlp_resource_attr_type_t;
+
 	/* A key-value pair attached to the OTLP Resource of every batch
 	 * this exporter emits. Resource attributes describe the process
 	 * being instrumented (service.version, deployment.environment,
-	 * host.name, process.pid, etc.) and are constant for the exporter's
-	 * lifetime. See the OpenTelemetry semantic-conventions spec for
-	 * standard keys.
+	 * host.name, process.pid, host.cpu.count, etc.) and are constant
+	 * for the exporter's lifetime. See the OpenTelemetry semantic-
+	 * conventions spec for standard keys.
 	 *
-	 * v0.5.x: string values only — covers every common Resource
-	 * attribute. A typed variant (int/double/bool/bytes) can be
-	 * added later without breaking this struct. */
+	 * Value selection: set `.type` to the desired variant, then fill
+	 * the matching value field. When `.type` is omitted (zero-
+	 * initialized = STRING), `.value` is used as the string. This
+	 * means existing callers who write `{.key = "k", .value = "v"}`
+	 * need no changes.
+	 *
+	 * Example — typed values:
+	 *   otlp_resource_attr_t pid = {
+	 *       .key = "process.pid",
+	 *       .type = OTLP_RESOURCE_ATTR_INT64,
+	 *       .int64_val = 4242,
+	 *   };
+	 *   otlp_resource_attr_t ratio = {
+	 *       .key = "system.memory.utilization",
+	 *       .type = OTLP_RESOURCE_ATTR_DOUBLE,
+	 *       .double_val = 0.87,
+	 *   };
+	 *   otlp_resource_attr_t flag = {
+	 *       .key = "feature.flag_enabled",
+	 *       .type = OTLP_RESOURCE_ATTR_BOOL,
+	 *       .bool_val = true,
+	 *   };
+	 *
+	 * The library deep-copies all fields at otlp_exporter_create()
+	 * time; the caller may free the input array immediately after. */
 	typedef struct
 	{
 		const char *key;
-		const char *value;
+		const char *value;   /* used when type == STRING (default) */
+		otlp_resource_attr_type_t type;  /* 0 = STRING; see enum above */
+		int64_t int64_val;   /* used when type == INT64 */
+		double  double_val;  /* used when type == DOUBLE */
+		bool    bool_val;    /* used when type == BOOL */
 	} otlp_resource_attr_t;
 
 	/* Configuration for otlp_exporter_create. Pass zero-initialized +

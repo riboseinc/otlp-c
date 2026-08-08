@@ -238,12 +238,21 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 		e->n_resource_attributes = o.n_resource_attributes;
 		for (i = 0; i < o.n_resource_attributes; i++)
 		{
-			e->resource_attributes[i].key =
-				otlp_dup_str(o.resource_attributes[i].key);
-			e->resource_attributes[i].value =
-				otlp_dup_str(o.resource_attributes[i].value);
-			if (!e->resource_attributes[i].key ||
-			    !e->resource_attributes[i].value)
+			const otlp_resource_attr_t *src = &o.resource_attributes[i];
+			otlp_resource_attr_t       *dst = &e->resource_attributes[i];
+
+			dst->key = otlp_dup_str(src->key);
+			if (!dst->key)
+				goto fail;
+			dst->type       = src->type;
+			dst->int64_val  = src->int64_val;
+			dst->double_val = src->double_val;
+			dst->bool_val   = src->bool_val;
+			/* Always copy value — for STRING it's the string; for
+			 * other types it's NULL/unused but copying keeps the
+			 * free path uniform (always free key + value). */
+			dst->value = src->value ? otlp_dup_str(src->value) : NULL;
+			if (src->value && !dst->value)
 				goto fail;
 		}
 	}
