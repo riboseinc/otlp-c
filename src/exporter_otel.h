@@ -33,6 +33,8 @@ otlp_status_t
 otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
+	const otlp_resource_attr_t *resource_attributes,
+	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
 	otlp_socket_t *reuse_socket,

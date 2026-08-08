@@ -61,7 +61,7 @@ prop_logs_empty_request(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, NULL, 0) == OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, NULL, 0) == OTLP_OK)
 		ok = (buf.len == 0);
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -86,7 +86,7 @@ prop_logs_severity_present(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 	if (!descend_to_log_record(buf.data, buf.len, &pos, &end))
 		goto out_buf;
@@ -123,7 +123,7 @@ prop_logs_severity_omitted(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 	/* Empty body, no attrs, no severity → no log_records emitted →
 	 * ScopeLogs empty → ResourceLogs empty → request 0 bytes. */
@@ -163,7 +163,7 @@ prop_logs_body_string_roundtrip(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 	if (!descend_to_log_record(buf.data, buf.len, &pos, &end))
 		goto out_buf;
@@ -215,7 +215,7 @@ prop_logs_trace_correlation(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 	if (!descend_to_log_record(buf.data, buf.len, &pos, &end))
 		goto out_buf;
@@ -261,7 +261,7 @@ prop_logs_attributes_roundtrip(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_logs_service_request(
-		    &buf, NULL, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 	if (!descend_to_log_record(buf.data, buf.len, &pos, &end))
 		goto out_buf;
