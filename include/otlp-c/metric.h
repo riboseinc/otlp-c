@@ -94,6 +94,23 @@ otlp_status_t otlp_metric_set_attribute_double(otlp_metric_t *m,
 					       const char *key,
 					       double value);
 
+/* Set ExponentialHistogram bucket data. Only valid for
+ * OTLP_METRIC_EXP_HISTOGRAM. The library copies the arrays.
+ * Pass NULL + 0 for pos_counts / neg_counts to omit that side.
+ *
+ * `scale` is the base-2 resolution (0 = each bucket doubles;
+ * 20 = ~0.1% resolution). The bucket at offset `i` covers
+ * [2^((offset+i-1)/2^scale), 2^((offset+i)/2^scale)). */
+OTLP_C_EXPORT
+otlp_status_t otlp_metric_set_exp_histogram(otlp_metric_t *m,
+					    int32_t scale,
+					    int32_t pos_offset,
+					    const uint64_t *pos_counts,
+					    size_t pos_n,
+					    int32_t neg_offset,
+					    const uint64_t *neg_counts,
+					    size_t neg_n);
+
 #ifdef __cplusplus
 }
 #endif
