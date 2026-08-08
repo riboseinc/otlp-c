@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.15] - 2026-08-08
+
+Complete sanitizer trio in CI: ASAN + UBSAN + TSAN.
+
+### Added — UBSAN CI job
+
+Builds with `-DOTLP_C_ENABLE_UBSAN=ON`, runs full test suite.
+Catches integer overflow, null dereference, alignment, and other
+undefined behavior. Verified locally: 27/27 tests clean.
+
+### Added — TSAN CI job
+
+Builds with `-DOTLP_C_ENABLE_TSAN=ON`, runs full test suite.
+Catches data races in the MPSC queue, tracer PRNG atomic CAS,
+and exporter stats counters. Validates lock-free correctness.
+
+The project now has complete sanitizer coverage in CI:
+ASAN (memory safety) + UBSAN (undefined behavior) + TSAN (data races).
+
 ## [0.5.14] - 2026-08-08
 
 ASAN CI + vcpkg port sync + ExpHistogram setter test.

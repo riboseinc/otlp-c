@@ -148,6 +148,40 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
         run: ctest --test-dir build --output-on-failure
 
+  ubsan:
+    name: UndefinedBehaviorSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build with UBSAN
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOTLP_C_BUILD_TESTS=ON -DOTLP_C_ENABLE_UBSAN=ON
+          cmake --build build
+      - name: Test with UBSAN
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1
+        run: ctest --test-dir build --output-on-failure
+
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build with TSAN
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOTLP_C_BUILD_TESTS=ON -DOTLP_C_ENABLE_TSAN=ON
+          cmake --build build
+      - name: Test with TSAN
+        env:
+          TSAN_OPTIONS: abort_on_error=1
+        run: ctest --test-dir build --output-on-failure
+
   cmake-integration:
     name: CMake find_package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
