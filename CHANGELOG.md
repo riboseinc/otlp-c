@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.17] - 2026-08-08
+
+Zero compiler warnings. Stale comments cleaned.
+
+### Fixed — -Wmissing-prototypes warning
+
+`otlp_version()` was declared in `otlp.h` but defined in `common.c`
+which includes only `version.h`. Moved the declaration to `version.h`
+where it logically belongs. Now `-Wmissing-prototypes` is clean.
+
+### Fixed — Stale comments
+
+- `src/common.c`: removed "Stub implementations" comment (no stubs
+  exist since v0.1.0).
+- `src/platform.c`: removed "minimal stub for Phase 0" and
+  "close enough for stub" comments.
+
+Result: clean build with `-Wall -Wextra -Wpedantic -Wconversion
+-Wsign-conversion -Wmissing-prototypes`. Zero warnings.
+
 ## [0.5.16] - 2026-08-08
 
 CLAUDE.md accuracy audit — the most important documentation fix.

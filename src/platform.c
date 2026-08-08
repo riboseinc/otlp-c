@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
- * Cross-platform helpers — minimal stub for Phase 0.
+ * Cross-platform clock helpers. Shared POSIX + Win32 code.
  *
  * Real platform.c (and platform_unix.c / platform_win.c) lands in
  * Phase 3 alongside http_client.c.
@@ -42,7 +42,7 @@ otlp_status_t otlp_platform_now_unix_nano(uint64_t *out)
 	struct timespec ts;
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
-		return OTLP_ERR_NETWORK;  /* close enough for stub */
+		return OTLP_ERR_NETWORK;
 	*out = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 	return OTLP_OK;
 #endif
