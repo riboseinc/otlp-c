@@ -145,9 +145,11 @@ A hostile caller is partially in scope (input validation).
    realistic inputs; would need ~584 years at 100M spans/sec to
    roll over. Documented in `src/mpsc_queue.c`.
 
-3. **`otlp_exporter_flush` has a 30s hard cap** — magic number. If
-   a caller needs longer, they must call `tick()` in a loop. Documented
-   in `include/otlp-c/exporter.h`.
+3. **`otlp_exporter_flush` has a 30s hard cap** — ~~magic number.~~
+   Resolved in v0.5.21: the cap is now configurable via
+   `otlp_exporter_opts_t.flush_timeout_ms` (default 30000). Callers
+   wanting longer should loop `tick()` manually (documented in the
+   opts field comment).
 
 4. **HTTP response body unbounded up to 64KB** — `OTLP_HTTP_RESP_MAX`
    cap. A malicious collector could send a 64KB body and the library
@@ -169,9 +171,8 @@ status:
   `test_http_echo_state_machine` and `test_http_status_codes` in
   `tests/test_http_echo.c`. Truncated-oversized-response coverage
   added in TODO 50.
-- **Configurable `flush()` cap** — Open. The 30s cap remains
-  hardcoded; callers wanting longer loop `tick()`. Tracked as a
-  post-1.0 polish item.
+- **Configurable `flush()` cap** — Done (v0.5.21). The cap is now
+  `flush_timeout_ms` on `otlp_exporter_opts_t`. Closes this item.
 
 The v0.5.x sanitizer work (ASAN + UBSAN + TSAN in CI; see
 `.github/workflows/ci.yml`) covers continuous fuzz-class coverage

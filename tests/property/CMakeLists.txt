@@ -237,3 +237,15 @@ add_test(NAME property-resource-attrs
 set_tests_properties(property-resource-attrs PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.21: configurable flush_timeout_ms.
+add_executable(otlp_property_flush_timeout test_property_flush_timeout.c)
+target_link_libraries(otlp_property_flush_timeout PRIVATE otlp_c)
+target_include_directories(otlp_property_flush_timeout PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-flush-timeout
+    COMMAND otlp_property_flush_timeout)
+set_tests_properties(property-flush-timeout PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)

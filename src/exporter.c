@@ -48,6 +48,7 @@
 #define OTLP_DEFAULT_BACKOFF_MAX_MS 30000
 #define OTLP_DEFAULT_CONNECT_TIMEOUT 5000
 #define OTLP_DEFAULT_READ_TIMEOUT 10000
+#define OTLP_DEFAULT_FLUSH_TIMEOUT_MS 30000
 #define OTLP_DEFAULT_QUEUE_CAP 4096
 
 struct otlp_exporter
@@ -63,6 +64,7 @@ struct otlp_exporter
 	uint32_t max_retries;
 	uint32_t backoff_initial_ms;
 	uint32_t backoff_max_ms;
+	uint32_t flush_timeout_ms;
 
 	/* MPSC queue of pending otlp_span_t*. */
 	struct mpsc_queue queue;
@@ -144,6 +146,8 @@ normalize_opts(otlp_exporter_opts_t *o)
 		o->connect_timeout_ms = OTLP_DEFAULT_CONNECT_TIMEOUT;
 	if (o->read_timeout_ms == 0)
 		o->read_timeout_ms = OTLP_DEFAULT_READ_TIMEOUT;
+	if (o->flush_timeout_ms == 0)
+		o->flush_timeout_ms = OTLP_DEFAULT_FLUSH_TIMEOUT_MS;
 	if (!o->user_agent)
 		o->user_agent = "otlp-c/" OTLP_C_VERSION_STRING;
 	if (o->queue_capacity == 0)
@@ -224,6 +228,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->max_retries = o.max_retries;
 	e->backoff_initial_ms = o.backoff_initial_ms;
 	e->backoff_max_ms = o.backoff_max_ms;
+	e->flush_timeout_ms = o.flush_timeout_ms;
 
 	e->pending_cap = e->batch_size * 2;
 	e->pending = otlp_malloc(e->pending_cap * sizeof(*e->pending));
@@ -480,8 +485,13 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			work_done = true;
 		}
 
-		/* 1b. Null-transport fast path: skip HTTP entirely. */
-		if (e->null_transport && e->pending_count > 0) {
+		/* 1b. Null-transport fast path: skip HTTP entirely.
+		 * Respects backoff_armed so retry/backoff behavior is
+		 * testable via the null_transport status callback —
+		 * without this check, the callback would fire every
+		 * tick and exhaust retries instantly. */
+		if (e->null_transport && e->pending_count > 0 &&
+		    !e->backoff_armed) {
 			int http_status = 200;
 			if (e->null_transport_status_fn)
 				http_status = e->null_transport_status_fn(
@@ -589,7 +599,7 @@ otlp_exporter_flush(otlp_exporter_t *e)
 
 	if (!e)
 		return OTLP_ERR_NULL;
-	deadline = now_mono_ms() + 30000; /* hard cap: 30s */
+	deadline = now_mono_ms() + e->flush_timeout_ms;
 
 	do
 	{
@@ -633,7 +643,8 @@ flush_sync(struct otlp_exporter *e,
 	struct otlp_http_url url;
 	otlp_http_request_t      *req = NULL;
 	otlp_status_t		st;
-	int			i;
+	uint64_t			deadline;
+	uint64_t			now;
 
 	if (!e || !path || (!body && body_len > 0))
 		return OTLP_ERR_NULL;
@@ -644,7 +655,8 @@ flush_sync(struct otlp_exporter *e,
 	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len);
 	if (st != OTLP_OK)
 		return st;
-	for (i = 0; i < 30000; i++) {
+	deadline = now_mono_ms() + e->flush_timeout_ms;
+	for (;;) {
 		st = otlp_http_request_step(req);
 		otlp_http_req_state_t s = otlp_http_request_state(req);
 
@@ -663,6 +675,11 @@ flush_sync(struct otlp_exporter *e,
 		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK) {
 			otlp_http_request_free(req);
 			return st;
+		}
+		now = now_mono_ms();
+		if (now >= deadline) {
+			otlp_http_request_free(req);
+			return OTLP_ERR_TIMEOUT;
 		}
 #if defined(_WIN32)
 		Sleep(1);
