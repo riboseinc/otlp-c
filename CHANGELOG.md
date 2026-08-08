@@ -4,6 +4,57 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.18] - 2026-08-08
+
+Test infrastructure TSAN races fixed + zero compiler warnings. The
+TSAN CI job added in v0.5.15 flagged three tests as data races; all
+three shared the same root cause and are now fixed.
+
+### Fixed — TSAN data races in test infrastructure
+
+Three tests failed intermittently under the v0.5.15 TSAN job, all
+from one root cause: cross-thread shared state in test helpers
+accessed without atomics, synchronized only by `nanosleep` (which
+is NOT a synchronization primitive).
+
+- `tests/test_helper_echo.{h,c}`: `running`, `requests_served`,
+  `requests_seen` are now `otlp_atomic_int` / `otlp_atomic_u64`
+  via `../src/atomic_compat.h`. Memory ordering: the worker's
+  `running = 0` store uses RELEASE; `echo_server_join`'s poll loop
+  uses ACQUIRE, which establishes happens-before for all
+  pre-exit writes (so post-join reads of `requests_served` are
+  safe with RELAXED loads).
+- `tests/property/test_property_keepalive.c`: `mini_srv.requests_served`
+  atomicized. Also reordered the increment to happen BEFORE `send()`
+  (logical correctness — once main's `recv()` returns the response,
+  the counter has already advanced).
+- `tests/test_concurrency_stress.c`: `srv.requests_served` reads
+  converted to `otlp_atomic_load_u64`.
+
+CI now passes the full TSAN matrix cleanly: 27/27 tests, zero race
+reports. Local reproduction confirmed before and after the fix.
+
+### Fixed — Pre-existing `-Wcomment` warning
+
+`src/internal_util.h:14` had the sequence `/*` inside a block
+comment (in the phrase "src/*.c files"). clang's `-Wcomment`
+flagged this as a potential nested-comment error since v0.4.
+Rephrased to "source .c files under src/".
+
+### Fixed — Two `-Wunused` warnings in tests
+
+- `test_exporter_echo.c`: dead `static int requests_seen` counter
+  in `count_handler` — incremented but never read. Removed.
+- `test_property_seed.c`: `prop_version_consistent(uint64_t seed)`
+  had an unused `seed` parameter (the property doesn't need
+  randomness — it checks a constant). Marked `(void) seed;`.
+
+Result: zero compiler warnings across plain, ASAN, UBSAN, and TSAN
+builds with the project's full warning set (`-Wall -Wextra
+-Wpedantic -Wconversion -Wsign-conversion -Wundef -Wshadow
+-Wpointer-arith -Wformat=2 -Wwrite-strings -Wold-style-definition
+-Wmissing-prototypes`).
+
 ## [0.5.17] - 2026-08-08
 
 Zero compiler warnings. Stale comments cleaned.
