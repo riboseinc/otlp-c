@@ -4,6 +4,78 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.28] - 2026-08-09
+
+Async metric/log batching — closes the #1 architectural gap.
+Metrics and logs now flow through the same MPSC + tick + retry
+pipeline as traces, instead of blocking the caller on HTTP.
+
+### Added — Async metric/log emission
+
+Two new public functions (move semantics — caller gives up
+ownership, same contract as `otlp_exporter_emit_move` for spans):
+
+```c
+otlp_status_t otlp_exporter_emit_metric_move(otlp_exporter_t *exp,
+    otlp_metric_t *metric);
+
+otlp_status_t otlp_exporter_emit_log_move(otlp_exporter_t *exp,
+    otlp_log_record_t *log);
+```
+
+These push into new MPSC queues (`metric_queue`, `log_queue`)
+and return immediately. `tick()` drains all three signals (span,
+metric, log) by priority, batches per signal, encodes, and POSTs
+to the correct endpoint (`/v1/traces`, `/v1/metrics`, `/v1/logs`).
+
+One in-flight HTTP request at a time (shared across all signals).
+Retry/backoff is shared — a failure on any signal briefly backs
+off all signals, preventing hammering a broken collector.
+
+The existing `flush_metric()` / `flush_log()` synchronous
+functions remain as fallbacks for low-frequency, one-shot export.
+
+### Changed — tick() handles all three signals
+
+`tick()` now:
+1. Drains span, metric, and log queues into separate pending
+   arrays.
+2. Null-transport fast path tries span first, then metric, then
+   log.
+3. POST start checks all three signals' batch-ready conditions
+   (same `batch_size` / `batch_ms` / `shutdown` logic).
+4. Backoff retry dispatches based on `in_flight_signal` (which
+   signal was last in-flight).
+
+The span path is structurally unchanged — all existing span
+tests pass without modification.
+
+### Added — Per-signal stats
+
+`otlp_exporter_stats_t` extended with 8 new fields:
+
+```c
+uint64_t emitted_metrics, sent_metrics;
+uint64_t dropped_metrics_full, dropped_metrics_err;
+uint64_t emitted_logs, sent_logs;
+uint64_t dropped_logs_full, dropped_logs_err;
+```
+
+Existing span counters (`emitted`, `sent`, `dropped_*`) track
+spans only (backward compatible). HTTP-level counters
+(`http_2xx`, `http_4xx`, `http_5xx`, `network_err`) are global
+across all signals.
+
+### Added — Property tests
+
+`tests/property/test_property_async_metrics.c` (4 properties):
+- `prop_async_metric_sent` — emit + tick + verify sent_metrics.
+- `prop_async_log_sent` — same for logs.
+- `prop_async_spans_coexist` — spans and metrics flow through
+  the same exporter without interference.
+- `prop_async_metric_drop_full` — queue overflow returns
+  BUFFER_FULL and increments dropped_metrics_full.
+
 ## [0.5.27] - 2026-08-09
 
 Header accuracy audit + emit throughput benchmark + compile-time
