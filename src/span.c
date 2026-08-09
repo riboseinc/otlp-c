@@ -710,51 +710,15 @@ otlp_span_clone(const otlp_span_t *src)
 	}
 
 	attrs = otlp_span_get_attrs(src, &n_attrs);
-	for (i = 0; i < n_attrs; i++)
+	if (n_attrs > 0)
 	{
-		otlp_status_t st = OTLP_ERR_NOMEM;
-
-		switch (attrs[i].type)
-		{
-			case OTLP_ATTR_STRING:
-				st = otlp_span_set_attribute_string(dst,
-					attrs[i].key,
-					attrs[i].v.string_val);
-				break;
-			case OTLP_ATTR_INT64:
-				st = otlp_span_set_attribute_int(dst,
-					attrs[i].key,
-					attrs[i].v.int64_val);
-				break;
-			case OTLP_ATTR_DOUBLE:
-				st = otlp_span_set_attribute_double(dst,
-					attrs[i].key,
-					attrs[i].v.double_val);
-				break;
-			case OTLP_ATTR_BOOL:
-				st = otlp_span_set_attribute_bool(
-					dst, attrs[i].key, attrs[i].v.bool_val);
-				break;
-			case OTLP_ATTR_BYTES:
-				st = otlp_span_set_attribute_bytes(dst,
-					attrs[i].key,
-					attrs[i].v.bytes_val.data,
-					attrs[i].v.bytes_val.len);
-				break;
-			case OTLP_ATTR_ARRAY:
-			case OTLP_ATTR_KVLIST:
-				/* No public setter yet (encoder exists via
-				 * otlp_encode_any_value, but the span API
-				 * doesn't expose array/kvlist construction).
-				 * Skip — clone cannot reconstruct these. */
-				st = OTLP_ERR_NOT_IMPLEMENTED;
-				break;
-		}
-		if (st != OTLP_OK)
+		if (otlp_attribute_copy_all(dst->attrs, attrs, n_attrs)
+		    != OTLP_OK)
 		{
 			otlp_span_free(dst);
 			return NULL;
 		}
+		dst->n_attrs = n_attrs;
 	}
 
 	events = otlp_span_get_events(src, &n_events);

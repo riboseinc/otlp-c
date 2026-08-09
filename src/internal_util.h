@@ -6,10 +6,16 @@
 #ifndef OTLP_C_INTERNAL_UTIL_H
 #define OTLP_C_INTERNAL_UTIL_H
 
-#include "span_internal.h"
+#include <otlp-c/status.h>
 
 #include <stddef.h>
 #include <stdint.h>
+
+/* Forward declaration — the full struct is in span_internal.h.
+ * We avoid including span_internal.h here to prevent a dependency
+ * cycle (span.c → internal_util.h → span_internal.h). Only the
+ * .c file needs the full definition. */
+struct otlp_attribute;
 
 /* ── Custom-allocator-backed wrappers ───────────────────────────
  *
