@@ -411,25 +411,29 @@ static const struct metric_kind_spec metric_kind_specs[] = {
 
 /* Per-kind extra fields emitted inside the oneof wrapper, after the
  * data points. Counter requires agg_temp + is_monotonic; Histogram
- * requires agg_temp; Gauge has none. */
+ * requires agg_temp; Gauge has none. Values read from the metric
+ * struct (caller-configurable via _set_aggregation_temporality and
+ * _set_monotonic). */
 static otlp_status_t
 emit_kind_extra_fields(struct otlp_pb_buf *wrapper,
-		       otlp_metric_type_t kind)
+		       const otlp_metric_t *m)
 {
+	otlp_metric_type_t kind = otlp_metric_get_type(m);
+	uint8_t	     agg_temp = otlp_metric_get_agg_temp(m);
+
 	switch (kind) {
 	case OTLP_METRIC_COUNTER:
 		if (otlp_pb_field_varint(wrapper, SUM_F_AGG_TEMP,
-					 OTLP_AGG_TEMP_CUMULATIVE) != OTLP_OK)
+					 agg_temp) != OTLP_OK)
 			return OTLP_ERR_NOMEM;
-		return otlp_pb_field_varint(wrapper, SUM_F_IS_MONOTONIC, 1);
+		return otlp_pb_field_varint(wrapper, SUM_F_IS_MONOTONIC,
+					    otlp_metric_get_is_monotonic(m) ? 1 : 0);
 	case OTLP_METRIC_HISTOGRAM:
 		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
-					   OTLP_AGG_TEMP_CUMULATIVE);
+					   agg_temp);
 	case OTLP_METRIC_EXP_HISTOGRAM:
-		/* ExponentialHistogram's aggregation_temporality is also
-		 * at field 2, same position as Histogram. */
 		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
-					   OTLP_AGG_TEMP_CUMULATIVE);
+					   agg_temp);
 	default:
 		return OTLP_OK;
 	}
@@ -478,7 +482,7 @@ emit_metric(struct otlp_pb_buf *parent, uint32_t field_num,
 			goto out;
 		st = spec->data_point_encode(&wrapper, 1, m);
 		if (st == OTLP_OK)
-			st = emit_kind_extra_fields(&wrapper, kind);
+			st = emit_kind_extra_fields(&wrapper, m);
 		if (st == OTLP_OK)
 			st = otlp_pb_field_message(&sub, oneof_field,
 						   wrapper.data, wrapper.len);
