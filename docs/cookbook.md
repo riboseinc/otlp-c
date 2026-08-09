@@ -308,3 +308,127 @@ otlp_allocator_t my_alloc = {
 };
 otlp_set_allocator(&my_alloc);
 ```
+
+## 11. Async metrics and logs (v0.5.28+)
+
+Metrics and logs can be emitted asynchronously through the same
+MPSC + tick pipeline as traces:
+
+```c
+/* Move semantics — exporter takes ownership, caller must not
+ * touch the metric afterward. Faster (no clone). */
+otlp_metric_t *m = otlp_metric_create(
+    OTLP_METRIC_COUNTER, "requests", "1", "", NULL, 0);
+otlp_metric_record(m, 1.0);
+otlp_metric_mark_time(m);
+otlp_exporter_emit_metric_move(exp, m);  /* m is now owned by exp */
+
+/* Clone variant — caller keeps ownership. Slower (deep copy). */
+otlp_metric_t *m2 = otlp_metric_create(
+    OTLP_METRIC_GAUGE, "temperature", "C", "", NULL, 0);
+otlp_metric_record(m2, 23.5);
+otlp_metric_mark_time(m2);
+otlp_exporter_emit_metric(exp, m2);  /* m2 is still yours */
+otlp_metric_free(m2);                 /* free when done */
+
+/* Logs work the same way: */
+otlp_log_record_t *lr = otlp_log_record_create(
+    OTLP_SEVERITY_INFO, "service started");
+otlp_log_record_mark_timestamp(lr);
+otlp_exporter_emit_log_move(exp, lr);  /* lr is now owned by exp */
+
+/* tick() drains all three signals (span > metric > log priority). */
+otlp_exporter_tick(exp, 100);
+```
+
+The synchronous `flush_metric()` / `flush_log()` functions remain
+available for low-frequency, one-shot export.
+
+## 12. Production diagnostics (v0.5.23+)
+
+Install a diagnostic callback to get real-time visibility into
+exporter behavior:
+
+```c
+static void my_logger(void *ctx, otlp_log_level_t level,
+                      const char *msg) {
+    FILE *f = ctx;
+    fprintf(f, "[otlp %d] %s\n", level, msg);
+}
+
+otlp_exporter_set_logger(exp, my_logger, stderr);
+```
+
+Fires at 7 events:
+- DEBUG: batch sent successfully.
+- WARN: queue full (span/metric/log dropped), transient retry.
+- ERROR: max retries exhausted, permanent 4xx, network failure.
+
+Default: no callback (zero overhead — NULL check per site).
+
+## 13. Resource attributes (v0.5.20, v0.5.24)
+
+Describe the process being instrumented:
+
+```c
+otlp_resource_attr_t attrs[] = {
+    /* String (default) */
+    {.key = "service.version", .value = "1.2.3"},
+    /* Typed values (v0.5.24) */
+    {.key = "process.pid", .type = OTLP_RESOURCE_ATTR_INT64,
+     .int64_val = 4242},
+    {.key = "system.memory.utilization",
+     .type = OTLP_RESOURCE_ATTR_DOUBLE, .double_val = 0.87},
+    {.key = "cloud.auto_scale", .type = OTLP_RESOURCE_ATTR_BOOL,
+     .bool_val = true},
+};
+
+otlp_exporter_opts_t opts = {0};
+opts.service_name = "my-service";
+opts.resource_attributes = attrs;
+opts.n_resource_attributes = 4;
+otlp_exporter_t *exp = otlp_exporter_create(&opts);
+```
+
+Emitted on every batch's Resource alongside `service.name`.
+
+## 14. W3C Baggage propagation (v0.5.22)
+
+Propagate arbitrary key-value pairs across service boundaries:
+
+```c
+/* Inject: write baggage header on outgoing request */
+otlp_context_t ctx = otlp_context_from_span(span);
+snprintf(ctx.baggage, sizeof(ctx.baggage),
+         "userId=42,feature.flag=true,zone=us-west-2");
+otlp_context_inject(ctx, carrier_set, &carrier);
+
+/* Extract: read baggage header on incoming request */
+otlp_context_t ctx2 = otlp_context_extract(carrier_get, &carrier);
+/* ctx2.baggage is now "userId=42,feature.flag=true,zone=us-west-2" */
+```
+
+Baggage is opaque to the library — the caller formats and parses
+the string. Same contract as `tracestate`.
+
+## 15. Metric temporality and is_monotonic (v0.5.26)
+
+```c
+/* Delta temporality (Prometheus-style push): */
+otlp_metric_set_aggregation_temporality(m, OTLP_AGG_TEMP_DELTA);
+
+/* Non-monotonic counter (up/down, e.g., queue depth): */
+otlp_metric_set_monotonic(m, false);
+```
+
+Defaults: CUMULATIVE temporality, is_monotonic = true.
+
+## 16. Configurable flush timeout (v0.5.21)
+
+```c
+otlp_exporter_opts_t opts = {0};
+opts.flush_timeout_ms = 5000;  /* 5s cap; default 30000 */
+```
+
+Both `flush()` and the synchronous metric/log flush paths respect
+the configured value.

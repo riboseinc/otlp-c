@@ -197,8 +197,18 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 					       src[i].v.bytes_val.len);
 				}
 				break;
+			case OTLP_ATTR_ARRAY:
+			case OTLP_ATTR_KVLIST:
+				/* Nested structures require recursive copy;
+				 * not implemented. Fail rather than leave a
+				 * dangling pointer in the union. */
+				otlp_free(dst[i].key);
+				dst[i].key = NULL;
+				goto fail;
 			default:
-				break;
+				otlp_free(dst[i].key);
+				dst[i].key = NULL;
+				goto fail;
 		}
 	}
 	return OTLP_OK;
