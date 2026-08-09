@@ -4,6 +4,44 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.35] - 2026-08-09
+
+Fixes null_transport backoff-retry double-processing + adds metric/
+log retry tests.
+
+### Fixed — Backoff retry starts HTTP request under null_transport
+
+The backoff retry path in `tick()` (step 5) unconditionally called
+`paths[in_flight_signal].start_post(e)` — even when
+`null_transport` was enabled. This started a REAL HTTP request
+alongside the null-transport fast path, causing double-processing:
+the next tick iteration's null-transport path would re-send the
+same batch, incrementing `sent_metrics`/`sent_logs` twice for one
+emit.
+
+Fix: the backoff retry now checks `!e->null_transport` before
+starting an HTTP request. When null_transport is enabled, backoff
+is cleared but the retry is handled by the null-transport fast
+path on the next tick iteration (same as the initial send).
+
+This is the same class of bug as v0.5.21 (null_transport ignored
+backoff_armed) and v0.5.23 (null_transport fast path didn't
+respect backoff_armed). The null_transport / HTTP interaction
+has now been fully audited.
+
+### Added — Metric/log retry property tests
+
+Two new properties in `test_property_async_metrics.c`:
+
+- `prop_async_metric_retry` — null_transport returns 500 first,
+  200 second. Verifies the metric is retried and sent exactly
+  once (not double-counted by the old backoff-retry bug).
+- `prop_async_log_retry` — same pattern for logs (503 → 200).
+
+These exercise the metric/log backoff retry dispatch
+(`paths[in_flight_signal].start_post`) that had never been tested
+before v0.5.35.
+
 ## [0.5.34] - 2026-08-09
 
 Multi-signal concurrency stress test — validates the v0.5.28 async
