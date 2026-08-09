@@ -72,6 +72,8 @@ otlp_metric_create(otlp_metric_type_t type, const char *name,
 	m->name = otlp_dup_str(name ? name : "");
 	m->unit = otlp_dup_str(unit ? unit : "");
 	m->description = otlp_dup_str(description ? description : "");
+	m->agg_temp = OTLP_AGG_TEMP_CUMULATIVE;
+	m->is_monotonic = true;
 	if (!m->name || !m->unit || !m->description)
 		goto fail;
 	if (type == OTLP_METRIC_HISTOGRAM && histogram_bounds && histogram_n_bounds > 0) {
@@ -325,4 +327,34 @@ otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n)
 	if (n)
 		*n = m ? m->n_attrs : 0;
 	return m ? m->attrs : NULL;
+}
+
+uint8_t otlp_metric_get_agg_temp(const otlp_metric_t *m)
+{
+	return m ? m->agg_temp : OTLP_AGG_TEMP_CUMULATIVE;
+}
+
+bool otlp_metric_get_is_monotonic(const otlp_metric_t *m)
+{
+	return m ? m->is_monotonic : true;
+}
+
+otlp_status_t
+otlp_metric_set_aggregation_temporality(otlp_metric_t *m, uint8_t temp)
+{
+	if (!m)
+		return OTLP_ERR_NULL;
+	if (temp != OTLP_AGG_TEMP_DELTA && temp != OTLP_AGG_TEMP_CUMULATIVE)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	m->agg_temp = temp;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_metric_set_monotonic(otlp_metric_t *m, bool monotonic)
+{
+	if (!m)
+		return OTLP_ERR_NULL;
+	m->is_monotonic = monotonic;
+	return OTLP_OK;
 }

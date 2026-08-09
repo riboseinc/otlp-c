@@ -433,6 +433,122 @@ out:
 	return ok;
 }
 
+/* Verify DELTA aggregation temporality appears on the wire (field 2
+ * inside Sum = VARINT with value 1). Default is CUMULATIVE (2). */
+static int
+prop_metrics_delta_temporality(uint64_t seed)
+{
+	otlp_metric_t     *m;
+	struct otlp_pb_buf buf = { 0 };
+	const otlp_metric_t *arr[1] = { NULL };
+	int		       ok = 0;
+	size_t	       pos, end;
+	int		       wt;
+	size_t	       vp, vl;
+
+	(void) seed;
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "req", "1", "", NULL, 0);
+	if (!m)
+		return 0;
+	otlp_metric_record(m, 1.0);
+	if (otlp_metric_set_aggregation_temporality(m, OTLP_AGG_TEMP_DELTA) != OTLP_OK)
+		goto out;
+	arr[0] = m;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_metrics_service_request(
+		    &buf, "svc", NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+
+	pos = 0;
+	end = buf.len;
+	if (!descend(buf.data, &pos, &end, 1)) /* ResourceMetrics */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2)) /* ScopeMetrics */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2)) /* Metric */
+		goto out_buf;
+	if (!find_at_level(buf.data, pos, end, 7, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_LEN)
+		goto out_buf;
+	/* Inside Sum: find agg_temp (field 2) and decode its varint. */
+	{
+		size_t sp = vp, se = vp + vl;
+
+		if (!find_at_level(buf.data, sp, se, 2, &wt, &vp, &vl) ||
+		    wt != OTLP_PB_WIRE_VARINT)
+			goto out_buf;
+		{
+			uint64_t v = 0;
+			size_t   p2 = vp;
+			if (decode_varint(buf.data, vp + vl, &p2, &v) != OTLP_OK)
+				goto out_buf;
+			ok = (v == OTLP_AGG_TEMP_DELTA);
+		}
+	}
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_metric_free(m);
+	return ok;
+}
+
+/* Verify is_monotonic=false appears on the wire as field 3 ABSENT
+ * (proto3 omits false/default bool values; the collector interprets
+ * absence as false). Default is true → field 3 present with value 1. */
+static int
+prop_metrics_non_monotonic_counter(uint64_t seed)
+{
+	otlp_metric_t     *m;
+	struct otlp_pb_buf buf = { 0 };
+	const otlp_metric_t *arr[1] = { NULL };
+	int		       ok = 0;
+	size_t	       pos, end;
+	int		       wt;
+	size_t	       vp, vl;
+
+	(void) seed;
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "depth", "1",
+			       "queue depth (up/down)", NULL, 0);
+	if (!m)
+		return 0;
+	otlp_metric_record(m, 42.0);
+	if (otlp_metric_set_monotonic(m, false) != OTLP_OK)
+		goto out;
+	arr[0] = m;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_metrics_service_request(
+		    &buf, "svc", NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+
+	pos = 0;
+	end = buf.len;
+	if (!descend(buf.data, &pos, &end, 1))
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2))
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2))
+		goto out_buf;
+	if (!find_at_level(buf.data, pos, end, 7, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_LEN)
+		goto out_buf;
+	{
+		size_t sp = vp, se = vp + vl;
+
+		/* is_monotonic=false → field 3 ABSENT (proto3 omits false).
+		 * The collector interprets absence as false. */
+		ok = !find_at_level(buf.data, sp, se, 3, &wt, &vp, &vl);
+	}
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_metric_free(m);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -450,6 +566,10 @@ main(void)
 				 "prop_metrics_counter_value", 200, 1);
 	failures += property_run(prop_metrics_attributes_roundtrip,
 				 "prop_metrics_attributes_roundtrip", 200, 1);
+	failures += property_run(prop_metrics_delta_temporality,
+				 "prop_metrics_delta_temporality", 5, 1);
+	failures += property_run(prop_metrics_non_monotonic_counter,
+				 "prop_metrics_non_monotonic_counter", 5, 1);
 
 	if (failures)
 		printf("[property] %d metrics property(ies) failed\n", failures);

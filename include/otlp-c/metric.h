@@ -21,6 +21,7 @@
 #include <otlp-c/status.h>
 #include <otlp-c/visibility.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -110,6 +111,28 @@ otlp_status_t otlp_metric_set_exp_histogram(otlp_metric_t *m,
 					    int32_t neg_offset,
 					    const uint64_t *neg_counts,
 					    size_t neg_n);
+
+/* Set the aggregation temporality. Applies to Counter (Sum),
+ * Histogram, and ExponentialHistogram; ignored by Gauge.
+ *
+ * Pass OTLP_AGG_TEMP_DELTA (1) for delta-style reporting (value
+ * since last export) or OTLP_AGG_TEMP_CUMULATIVE (2) for
+ * cumulative (value since process start). Default: CUMULATIVE.
+ *
+ * Returns OTLP_ERR_INVALID_ARGUMENT if `temp` is not DELTA or
+ * CUMULATIVE. */
+OTLP_C_EXPORT
+otlp_status_t otlp_metric_set_aggregation_temporality(otlp_metric_t *m,
+						       uint8_t temp);
+
+/* Set is_monotonic for Counter (Sum). Only meaningful for
+ * OTLP_METRIC_COUNTER; ignored by other types. Default: true.
+ *
+ * Set false for an up/down counter (a Sum that can decrease —
+ * e.g., queue depth, active connections). The backend uses this
+ * flag to interpret the metric correctly. */
+OTLP_C_EXPORT
+otlp_status_t otlp_metric_set_monotonic(otlp_metric_t *m, bool monotonic);
 
 #ifdef __cplusplus
 }

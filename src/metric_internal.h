@@ -19,6 +19,13 @@ struct otlp_metric {
 	bool		    has_time;
 	struct otlp_attribute attrs[128];
 	size_t		    n_attrs;
+	/* Aggregation temporality (OTLP_AGG_TEMP_DELTA or _CUMULATIVE).
+	 * Default CUMULATIVE. Applies to Sum/Histogram/ExpHistogram;
+	 * Gauge does not use it. */
+	uint8_t		    agg_temp;
+	/* is_monotonic for Sum (Counter). Default true. Meaningful only
+	 * for OTLP_METRIC_COUNTER; ignored by other types. */
+	bool		    is_monotonic;
 	/* Counter / gauge: */
 	double		    value;
 	/* Histogram: */
@@ -67,5 +74,7 @@ int32_t			otlp_metric_get_exp_neg_offset(const otlp_metric_t *m);
 const uint64_t	       *otlp_metric_get_exp_neg_counts(const otlp_metric_t *m, size_t *n);
 bool			otlp_metric_has_exp_scale(const otlp_metric_t *m);
 const struct otlp_attribute *otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n);
+uint8_t			otlp_metric_get_agg_temp(const otlp_metric_t *m);
+bool			otlp_metric_get_is_monotonic(const otlp_metric_t *m);
 
 #endif
