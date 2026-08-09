@@ -102,23 +102,24 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `CMakeLists.txt` | All build switches, feature probes |
 | `vcpkg.json` | Dependency manifest (empty by design — zero deps) |
 | `include/otlp-c/otlp.h` | Umbrella public header |
-| `include/otlp-c/exporter.h` | Exporter — emit/tick/flush + metric/log flush |
+| `include/otlp-c/exporter.h` | Exporter — emit/tick/flush for all 3 signals + diagnostics |
 | `include/otlp-c/span.h` | Span type — events, links, attributes, sampling |
 | `include/otlp-c/metric.h` | Metric types (counter/gauge/histogram/exp-histogram) |
 | `include/otlp-c/log.h` | Log records with trace correlation |
 | `include/otlp-c/sampler.h` | Sampler vtable + 3 built-ins |
-| `include/otlp-c/context.h` | W3C Trace Context propagation |
+| `include/otlp-c/context.h` | W3C Trace Context + Baggage propagation |
 | `include/otlp-c/slab.h` | Slab allocator + global integration |
 | `src/otlp_schema.h` | Schema tables — single source of truth for field numbers |
 | `src/otlp_messages.c` | Traces encoder + shared helpers (any_value, resource) |
 | `src/otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) |
 | `src/otlp_logs_encoder.c` | Logs encoder |
-| `src/exporter.c` | Exporter lifecycle — MPSC, batch, retry, flush |
-| `src/http_client.c` | HTTP/1.1 non-blocking state machine + keep-alive |
+| `src/exporter.c` | Exporter lifecycle — 3 MPSC queues, batch, retry, flush, diagnostics |
+| `src/http_client.c` | HTTP/1.1 non-blocking state machine + keep-alive + timeouts |
 | `src/atomic_compat.h` | Atomic abstraction (MSVC intrinsics fallback) |
 | `tests/property/` | Property-based tests (QuickCheck-style, deterministic) |
 | `tests/integration/` | End-to-end against a local otelcol |
-| `docs/architecture.md` | Layered design (21 modules) |
+| `bench/bench_emit.c` | Emit pipeline throughput benchmark |
+| `docs/architecture.md` | Layered design (21+ modules) |
 | `docs/roadmap.md` | Status and version plan |
 | `.github/workflows/ci.yml` | Multi-platform CI + sanitizers (ASAN/UBSAN/TSAN) |
 
@@ -136,17 +137,27 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.15). The library implements:
+All phases are complete (v0.5.28). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
 - All three OTLP signals (traces, metrics, logs) with encoders
 - Span/metric/log lifecycle with events, links, attributes
-- W3C Trace Context propagation (traceparent + tracestate)
+- **Async emission for ALL three signals** via MPSC queue + caller-tick
+  (v0.5.28: `emit_metric_move` / `emit_log_move` join `emit` / `emit_move`)
+- W3C Trace Context propagation (traceparent + tracestate) +
+  **W3C Baggage** (v0.5.22)
+- Resource attributes: **typed** (string/int64/double/bool, v0.5.24) +
+  configurable aggregation temporality + is_monotonic (v0.5.26)
 - Sampler interface (always_on / always_off / trace_id_ratio_based)
 - Lock-free MPSC queue + caller-tick exporter (no library threads)
-- Non-blocking HTTP/1.1 client with keep-alive
+- Non-blocking HTTP/1.1 client with keep-alive +
+  **connect/read timeout enforcement** (v0.5.25)
+- **Diagnostic callback** for production observability (v0.5.23):
+  `otlp_exporter_set_logger()` fires at 7 events (queue full, retry,
+  drop, success, etc.)
 - Slab allocator (standalone + global integration)
 - ExponentialHistogram with configurable buckets
 - Null-transport mode for deterministic testing
+- Configurable flush timeout + compile-time span cap overrides
 
 When extending the library:
 - **New attribute type**: add enum value + encoder function +
@@ -170,6 +181,19 @@ property tests catch regressions in the encoder immediately.
   caller-tick driven — the caller drives I/O via `otlp_exporter_tick()`
   from a thread it controls. Span construction is single-threaded by
   design — each thread builds its own span.
+- **Three signals, one pipeline**: traces, metrics, and logs all flow
+  through the same MPSC + tick + retry pipeline (v0.5.28). The exporter
+  has three queues (span/metric/log); tick() drains all three by
+  priority and POSTs one signal at a time to /v1/traces, /v1/metrics,
+  or /v1/logs. `emit()` / `emit_move()` (spans), `emit_metric_move()`,
+  and `emit_log_move()` are all safe to call from any thread.
+- **Diagnostics**: `otlp_exporter_set_logger()` installs an optional
+  callback that fires at notable events (queue full, HTTP error,
+  retry, drop, success). Default: no callback, zero overhead (NULL
+  check). Thread-safe by contract.
+- **Stats**: `otlp_exporter_get_stats()` returns per-signal counters
+  (emitted/sent/dropped for spans, metrics, and logs) plus global
+  HTTP-level counters (2xx/4xx/5xx/network_err).
 - **Memory**: use the platform's `malloc`/`free`. Custom allocators are a P1 feature; defer.
 
 ## CI

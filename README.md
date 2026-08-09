@@ -20,7 +20,7 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**0.5.18.** Full OTLP/HTTP client for all three signals (traces,
+**0.5.28.** Full OTLP/HTTP client for all three signals (traces,
 metrics, logs). Features: hand-rolled protobuf encoder with
 schema-driven field tables, lock-free MPSC queue + caller-tick
 exporter, non-blocking HTTP/1.1 client with keep-alive, W3C Trace
@@ -63,13 +63,19 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
   status, sampling. Async emit + caller-tick batching with
   exponential backoff retry.
 - **Metrics**: counter, gauge, histogram, exponential histogram.
-  Synchronous flush to `/v1/metrics`.
+  Async emit (`emit_metric_move`, v0.5.28) + synchronous flush
+  fallback. Configurable aggregation temporality + is_monotonic.
 - **Logs**: structured log records with severity, body, trace
-  correlation. Synchronous flush to `/v1/logs`.
+  correlation. Async emit (`emit_log_move`, v0.5.28) + synchronous
+  flush fallback.
 - **Context propagation**: W3C Trace Context (traceparent +
-  tracestate) via callback-based carrier abstraction.
+  tracestate) + W3C Baggage via callback-based carrier abstraction.
+- **Diagnostics**: optional callback (`set_logger`) fires at notable
+  events (queue full, HTTP error, retry, drop, success).
 - **Sampler**: pluggable vtable with always_on, always_off, and
   deterministic trace_id_ratio_based built-ins.
+- **Resource attributes**: typed (string/int64/double/bool) on
+  every batch's Resource.
 - **Slab allocator**: fixed-slot memory pool with malloc fallback.
   Installable as the process-wide allocator.
 - **Zero dependencies**: no protobuf-c, no libcurl, no OpenSSL,
