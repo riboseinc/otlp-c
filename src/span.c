@@ -23,9 +23,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef OTLP_SPAN_MAX_ATTRIBUTES
 #define OTLP_SPAN_MAX_ATTRIBUTES 128
-#define OTLP_SPAN_MAX_EVENTS	  64
-#define OTLP_SPAN_MAX_LINKS	  64
+#endif
+#ifndef OTLP_SPAN_MAX_EVENTS
+#define OTLP_SPAN_MAX_EVENTS 64
+#endif
+#ifndef OTLP_SPAN_MAX_LINKS
+#define OTLP_SPAN_MAX_LINKS 64
+#endif
 
 struct otlp_span
 {

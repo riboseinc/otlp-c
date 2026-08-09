@@ -1,13 +1,19 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier-Identifier: Apache-2.0 */
 /*
- * OTLP Metrics — public API for counter, gauge, and histogram types.
+ * OTLP Metrics — public API for counter, gauge, histogram, and
+ * exponential histogram types.
  *
- * Three metric types are supported in v0.4:
- *   - Counter (OTLP Sum with is_monotonic=true, cumulative temporality)
- *   - Gauge (OTLP Gauge with a single data point)
- *   - Histogram (OTLP Histogram with explicit bucket boundaries)
+ * Four metric types are supported (v0.5.x):
+ *   - Counter (OTLP Sum; is_monotonic and aggregation_temporality
+ *     are configurable via _set_monotonic and
+ *     _set_aggregation_temporality — defaults: true, CUMULATIVE)
+ *   - Gauge (instantaneous value)
+ *   - Histogram (explicit bucket boundaries)
+ *   - ExponentialHistogram (compact bucket representation)
  *
- * ExponentialHistogram and Summary are deferred to a future version.
+ * Summary is not supported (the OpenTelemetry spec recommends
+ * Histogram or ExponentialHistogram for new code; Summary is a
+ * legacy type).
  *
  * Lifetime: caller-owned. Construct via otlp_metric_create(); free
  * via otlp_metric_free().
