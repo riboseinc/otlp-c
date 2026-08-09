@@ -8,13 +8,15 @@ non-trivial.
 Caller code builds telemetry via the public API (`include/otlp-c/`).
 Three signals are supported: traces (spans with attributes, events,
 links), metrics (counter, gauge, histogram, exponential histogram),
-and logs (structured records with trace correlation). The exporter
-batches traces by size and time via a lock-free MPSC queue, encodes
-each batch as protobuf wire bytes via schema-driven tables, and
-POSTs to an OTLP collector over non-blocking HTTP/1.1. Metrics and
-logs are flushed synchronously. A pluggable sampler decides at
-span-creation time whether to record. W3C Trace Context
-propagation is transport-agnostic via callback-based carriers.
+and logs (structured records with trace correlation). Since v0.5.28,
+ALL three signals flow through the same async pipeline: each signal
+has its own lock-free MPSC queue; `tick()` drains all three by
+priority, batches by size and time, encodes as protobuf wire bytes
+via schema-driven tables, and POSTs to an OTLP collector over
+non-blocking HTTP/1.1. One in-flight HTTP request at a time (shared
+across signals). A pluggable sampler decides at span-creation time
+whether to record. W3C Trace Context + Baggage propagation is
+transport-agnostic via callback-based carriers.
 
 ## Layered view
 
@@ -127,7 +129,7 @@ propagation is transport-agnostic via callback-based carriers.
 | `log.c` | Log record lifecycle | Wire encoding |
 | `sampler.c` | Built-in samplers (always_on/off/ratio) | Tracer integration |
 | `context.c` | Context inject/extract via carriers | HTTP headers |
-| `exporter.c` | MPSC queue, batch, retry, null-transport, metric/log flush | Encoding details |
+| `exporter.c` | 3 MPSC queues (span/metric/log), batch, retry, null-transport, diagnostics | Encoding details |
 | `exporter_otel.c` | Span batch → HTTP request builder | Queue, retry |
 | `otlp_messages.c` | Traces encoder + shared helpers (any_value, resource, scope, attributes) | Metric/log encoding |
 | `otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) | Traces/logs encoding |
