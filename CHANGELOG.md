@@ -4,6 +4,60 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.26] - 2026-08-09
+
+Configurable metric aggregation temporality + is_monotonic —
+fixes hardcoded encoder values that limited metric semantics.
+
+### Fixed — Aggregation temporality was always CUMULATIVE
+
+The OTLP encoder hardcoded `aggregation_temporality = CUMULATIVE`
+for Counter (Sum), Histogram, and ExponentialHistogram. Callers
+who needed DELTA temporality (push-based delta reporting, common
+in Prometheus-style scraping) had no way to set it. The field
+was defined in the header (`OTLP_AGG_TEMP_DELTA = 1`,
+`OTLP_AGG_TEMP_CUMULATIVE = 2`) but the metric struct didn't
+store it and the encoder never read it.
+
+Now configurable:
+
+```c
+otlp_metric_set_aggregation_temporality(m, OTLP_AGG_TEMP_DELTA);
+```
+
+Default remains CUMULATIVE (backward compatible). The setter
+validates the value is DELTA or CUMULATIVE; UNSPECIFIED is
+rejected.
+
+### Fixed — is_monotonic was always true for Counter
+
+The encoder hardcoded `is_monotonic = true` for Counter (Sum).
+Callers who needed an up/down counter (queue depth, active
+connections — metrics that can decrease) had no way to set
+`is_monotonic = false`.
+
+Now configurable:
+
+```c
+otlp_metric_set_monotonic(m, false);
+```
+
+Default remains true (backward compatible). Note: proto3 wire
+encoding omits `is_monotonic` when false (the zero value); the
+collector interprets absence as false. This is correct proto3
+semantics.
+
+### Added — Property tests
+
+Two new properties in `test_property_metrics.c` (was 6, now 8):
+
+- `prop_metrics_delta_temporality` — encodes a counter with
+  DELTA temporality; verifies field 2 (agg_temp) on the wire
+  has value 1 (DELTA).
+- `prop_metrics_non_monotonic_counter` — encodes a counter
+  with `is_monotonic = false`; verifies field 3 is ABSENT
+  (proto3 omits false/default bools).
+
 ## [0.5.25] - 2026-08-08
 
 HTTP connect/read timeout enforcement — fixes dead configuration
