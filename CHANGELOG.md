@@ -4,6 +4,46 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.33] - 2026-08-09
+
+Fixes data-loss bug in span_clone + stats gap in sync flush.
+
+### Fixed — span_clone dropped event and link attributes
+
+`otlp_span_clone` copied events with only `name` + `time` and
+links with only `trace_id` + `span_id`. Event and link
+**attributes were silently dropped**. Every `emit()` call that
+cloned a span with event/link attributes sent incomplete data
+to the collector — the attributes existed on the original span
+but were lost in the deep-copy.
+
+Fix: clone now copies event attributes via `otlp_attribute_copy_all`
+(the shared helper from v0.5.31/v0.5.32) into each event's
+`attrs[]` array. Same for link attributes.
+
+The bug existed since events/links were added to the span struct.
+Not caught earlier because the existing `prop_span_clone_copies_extras`
+test didn't add attributes to events/links (only tested name +
+time + trace_id + span_id).
+
+New regression test: `prop_span_clone_preserves_evlink_attrs` —
+adds an event with a string attribute, adds a link with a string
+attribute, clones, and verifies the clone preserves both.
+
+### Fixed — flush_metric / flush_log don't update per-signal stats
+
+The synchronous flush functions (`otlp_exporter_flush_metric`,
+`otlp_exporter_flush_log`) didn't update the per-signal stats
+counters (`emitted_metrics`, `sent_metrics`, `dropped_metrics_err`,
+`emitted_logs`, `sent_logs`, `dropped_logs_err`). Only the async
+pipeline (emit → tick → record_outcome) updated these.
+
+A caller using `flush_metric` saw `sent_metrics=0` even after
+successful sends — misleading stats.
+
+Fix: both functions now increment `emitted_metrics` / `emitted_logs`
+at entry, then `sent_*` on success or `dropped_*_err` on failure.
+
 ## [0.5.32] - 2026-08-09
 
 Code quality cleanup: decoupled internal headers + span_clone DRY
