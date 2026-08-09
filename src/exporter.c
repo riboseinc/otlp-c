@@ -495,6 +495,28 @@ otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 /* Signal kind constants (0=span, 1=metric, 2=log). */
 enum { SIGNAL_SPAN = 0, SIGNAL_METRIC = 1, SIGNAL_LOG = 2 };
 
+/* Table-driven signal descriptor. Bundles the per-signal state
+ * (queue, pending array, timer, start_post function) so tick()
+ * can iterate over all three signals in one loop instead of
+ * triplicating the drain/null-transport/POST-start/backoff logic.
+ *
+ * All pointer fields point INTO the exporter struct, so mutations
+ * through this descriptor update the exporter directly. Built once
+ * at the top of tick(); valid for the duration of the call.
+ *
+ * Adding a new signal = one more paths[] entry (OCP). */
+struct signal_path
+{
+	struct mpsc_queue      *queue;
+	void		      **pending;
+	size_t		       pending_cap;
+	size_t		      *pending_count;
+	bool		      *first_set;
+	uint64_t	      *first_mono;
+	int		       signal_kind;
+	otlp_status_t	      (*start_post)(struct otlp_exporter *e);
+};
+
 /* Clear the pending batch for whichever signal is in-flight. */
 static void
 clear_in_flight_batch(struct otlp_exporter *e)
@@ -766,166 +788,144 @@ record_outcome(struct otlp_exporter *e, int http_status)
 otlp_status_t
 otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 {
-	uint64_t deadline;
-	bool work_done;
+	uint64_t		  deadline;
+	bool			  work_done;
+	struct signal_path	  paths[3];
+	int			  s;
 
 	if (!e)
 		return OTLP_ERR_NULL;
+
+	/* Build the signal descriptor table once. All pointer fields
+	 * point into the exporter struct; mutations through paths[]
+	 * update e directly. */
+	paths[SIGNAL_SPAN] = (struct signal_path){
+		.queue = &e->queue,
+		.pending = (void **)e->pending,
+		.pending_cap = e->pending_cap,
+		.pending_count = &e->pending_count,
+		.first_set = &e->first_pending_set,
+		.first_mono = &e->first_pending_mono,
+		.signal_kind = SIGNAL_SPAN,
+		.start_post = try_start_post,
+	};
+	paths[SIGNAL_METRIC] = (struct signal_path){
+		.queue = &e->metric_queue,
+		.pending = (void **)e->metric_pending,
+		.pending_cap = e->metric_pending_cap,
+		.pending_count = &e->metric_pending_count,
+		.first_set = &e->metric_first_set,
+		.first_mono = &e->metric_first_mono,
+		.signal_kind = SIGNAL_METRIC,
+		.start_post = try_start_metric_post,
+	};
+	paths[SIGNAL_LOG] = (struct signal_path){
+		.queue = &e->log_queue,
+		.pending = (void **)e->log_pending,
+		.pending_cap = e->log_pending_cap,
+		.pending_count = &e->log_pending_count,
+		.first_set = &e->log_first_set,
+		.first_mono = &e->log_first_mono,
+		.signal_kind = SIGNAL_LOG,
+		.start_post = try_start_log_post,
+	};
+
 	deadline = now_mono_ms() + max_wait_ms;
 
 	do
 	{
 		work_done = false;
 
-		/* 1. Drain span queue into pending. */
-		while (e->pending_count < e->pending_cap)
+		/* 1. Drain all three queues into their pending arrays. */
+		for (s = 0; s < 3; s++)
 		{
-			otlp_span_t *s = mpsc_queue_pop(&e->queue);
-
-			if (!s)
-				break;
-			e->pending[e->pending_count++] = s;
-			if (!e->first_pending_set)
+			while (*paths[s].pending_count < paths[s].pending_cap)
 			{
-				e->first_pending_mono = now_mono_ms();
-				e->first_pending_set = true;
-			}
-			work_done = true;
-		}
+				void *item = mpsc_queue_pop(paths[s].queue);
 
-		/* 1a. Drain metric queue. */
-		while (e->metric_pending_count < e->metric_pending_cap)
-		{
-			otlp_metric_t *m = mpsc_queue_pop(&e->metric_queue);
-
-			if (!m)
-				break;
-			e->metric_pending[e->metric_pending_count++] = m;
-			if (!e->metric_first_set)
-			{
-				e->metric_first_mono = now_mono_ms();
-				e->metric_first_set = true;
-			}
-			work_done = true;
-		}
-
-		/* 1b. Drain log queue. */
-		while (e->log_pending_count < e->log_pending_cap)
-		{
-			otlp_log_record_t *lr = mpsc_queue_pop(&e->log_queue);
-
-			if (!lr)
-				break;
-			e->log_pending[e->log_pending_count++] = lr;
-			if (!e->log_first_set)
-			{
-				e->log_first_mono = now_mono_ms();
-				e->log_first_set = true;
-			}
-			work_done = true;
-		}
-
-		/* 1c. Null-transport fast path: try span, then metric, then
-		 * log. Respects backoff_armed so retry/backoff behavior is
-		 * testable via the null_transport status callback. */
-		if (e->null_transport && !e->backoff_armed) {
-			int http_status = 200;
-			bool have_work = false;
-
-			if (e->pending_count > 0) {
-				e->in_flight_signal = SIGNAL_SPAN;
-				e->in_flight_count = e->pending_count;
-				have_work = true;
-			} else if (e->metric_pending_count > 0) {
-				e->in_flight_signal = SIGNAL_METRIC;
-				e->in_flight_count = e->metric_pending_count;
-				have_work = true;
-			} else if (e->log_pending_count > 0) {
-				e->in_flight_signal = SIGNAL_LOG;
-				e->in_flight_count = e->log_pending_count;
-				have_work = true;
-			}
-			if (have_work) {
-				if (e->null_transport_status_fn)
-					http_status = e->null_transport_status_fn(
-					    e->null_transport_status_ctx);
-				record_outcome(e, http_status);
+				if (!item)
+					break;
+				paths[s].pending[(*paths[s].pending_count)++] =
+					item;
+				if (!*paths[s].first_set)
+				{
+					*paths[s].first_mono = now_mono_ms();
+					*paths[s].first_set  = true;
+				}
 				work_done = true;
-				continue;
 			}
 		}
 
-		/* 2. Start POST if batch ready — try span, then metric, then
-		 * log. Only one in-flight request at a time (shared across
-		 * all signals). */
+		/* 2. Null-transport: try signals by priority. */
+		if (e->null_transport && !e->backoff_armed)
+		{
+			for (s = 0; s < 3; s++)
+			{
+				if (*paths[s].pending_count > 0)
+				{
+					int http_status = 200;
+
+					e->in_flight_signal = paths[s].signal_kind;
+					e->in_flight_count =
+						*paths[s].pending_count;
+					if (e->null_transport_status_fn)
+						http_status = e
+							->null_transport_status_fn(
+							e->null_transport_status_ctx);
+					record_outcome(e, http_status);
+					work_done = true;
+					goto tick_continue;
+				}
+			}
+		}
+
+		/* 3. Start POST if batch ready (by priority). */
 		if (!e->in_flight && !e->backoff_armed)
 		{
-			bool shutdown = otlp_atomic_load_int(
-				&e->shutdown_requested,
-				OTLP_MEMORY_ORDER_RELAXED);
-			uint64_t now_ms = now_mono_ms();
+			bool	   shutdown =
+				otlp_atomic_load_int(&e->shutdown_requested,
+					OTLP_MEMORY_ORDER_RELAXED);
+			uint64_t   now_ms = now_mono_ms();
 
-			/* Span batch ready? */
-			if (e->pending_count >= e->batch_size ||
-			    (e->first_pending_set &&
-			     now_ms - e->first_pending_mono >= e->batch_ms) ||
-			    (shutdown && e->pending_count > 0))
+			for (s = 0; s < 3; s++)
 			{
-				if (try_start_post(e) == OTLP_OK)
-					work_done = true;
-			}
-			/* If span didn't start a POST, try metric. */
-			if (!e->in_flight && !e->backoff_armed &&
-			    (e->metric_pending_count >= e->batch_size ||
-			     (e->metric_first_set &&
-			      now_ms - e->metric_first_mono >= e->batch_ms) ||
-			     (shutdown && e->metric_pending_count > 0)))
-			{
-				if (try_start_metric_post(e) == OTLP_OK)
-					work_done = true;
-			}
-			/* If neither started, try log. */
-			if (!e->in_flight && !e->backoff_armed &&
-			    (e->log_pending_count >= e->batch_size ||
-			     (e->log_first_set &&
-			      now_ms - e->log_first_mono >= e->batch_ms) ||
-			     (shutdown && e->log_pending_count > 0)))
-			{
-				if (try_start_log_post(e) == OTLP_OK)
-					work_done = true;
+				if (e->in_flight || e->backoff_armed)
+					break;
+				if (*paths[s].pending_count >= e->batch_size ||
+				    (*paths[s].first_set &&
+				     now_ms - *paths[s].first_mono >=
+					     e->batch_ms) ||
+				    (shutdown &&
+				     *paths[s].pending_count > 0))
+				{
+					if (paths[s].start_post(e) == OTLP_OK)
+						work_done = true;
+				}
 			}
 		}
 
-		/* 3. Step in-flight request. */
+		/* 4. Step in-flight request. */
 		if (e->in_flight)
 		{
-			otlp_status_t st = otlp_http_request_step(e->in_flight);
-			otlp_http_req_state_t s =
+			otlp_status_t	     st = otlp_http_request_step(e->in_flight);
+			otlp_http_req_state_t s2 =
 				otlp_http_request_state(e->in_flight);
 
-			if (s == OTLP_HTTP_REQ_DONE ||
-				s == OTLP_HTTP_REQ_FAILED)
+			if (s2 == OTLP_HTTP_REQ_DONE ||
+				s2 == OTLP_HTTP_REQ_FAILED)
 			{
-				int status = (s == OTLP_HTTP_REQ_DONE)
+				int status = (s2 == OTLP_HTTP_REQ_DONE)
 					? otlp_http_request_http_status(
 						  e->in_flight)
 					: 0;
-				/* On DONE, try to keep the socket alive for
-				 * reuse on the next POST. _detach returns NULL
-				 * if the response was Connection: close or the
-				 * request wasn't in DONE state — in those cases
-				 * _free will close it. */
-				if (s == OTLP_HTTP_REQ_DONE)
+				if (s2 == OTLP_HTTP_REQ_DONE)
 					e->keepalive_sock =
 						otlp_http_request_detach_socket(
 							e->in_flight);
 				record_outcome(e, status);
 				otlp_http_request_free(e->in_flight);
-				e->in_flight = NULL;
+				e->in_flight       = NULL;
 				e->in_flight_count = 0;
-				/* If a network/server error happened and we
-				 * captured a socket, drop it (it may be in a
-				 * half-closed or inconsistent state). */
 				if (status != 0 &&
 				    (status < 200 || status >= 300) &&
 				    e->keepalive_sock)
@@ -935,55 +935,32 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 				}
 			}
 			work_done = true;
-			(void) st;
+			(void)st;
 		}
 
-		/* 4. Backoff timer. The pending batch is retained
-		 * across retries (freed in record_outcome on success
-		 * or permanent failure); re-encode + retry now. The
-		 * retry path dispatches based on which signal was last
-		 * in-flight (record_outcome arms backoff only for
-		 * transient failures, which retain the batch). */
+		/* 5. Backoff retry (table-driven via paths[]). */
 		if (e->backoff_armed && !e->in_flight &&
 			now_mono_ms() >= e->backoff_deadline_mono)
 		{
 			e->backoff_armed = false;
-			switch (e->in_flight_signal)
-			{
-				case SIGNAL_SPAN:
-					if (try_start_post(e) == OTLP_OK && e->in_flight)
-						work_done = true;
-					break;
-				case SIGNAL_METRIC:
-					if (try_start_metric_post(e) == OTLP_OK &&
-					    e->in_flight)
-						work_done = true;
-					break;
-				case SIGNAL_LOG:
-					if (try_start_log_post(e) == OTLP_OK &&
-					    e->in_flight)
-						work_done = true;
-					break;
-			}
+			paths[e->in_flight_signal].start_post(e);
+			if (e->in_flight)
+				work_done = true;
 		}
 
-		/* 5. If nothing else to do but we're waiting on backoff,
-		 * sleep briefly so the tick actually advances time toward
-		 * the deadline instead of returning immediately. */
+		/* 6. Sleep if waiting on backoff. */
 		if (!work_done && e->backoff_armed && !e->in_flight)
 		{
 #if defined(_WIN32)
-			Sleep(1); /* 1ms */
+			Sleep(1);
 #else
-			struct timespec ts = { 0, 1 * 1000 * 1000 /* 1ms */ };
+			struct timespec ts = {0, 1 * 1000 * 1000};
 			nanosleep(&ts, NULL);
 #endif
-			work_done = true;
 		}
 
-		if (!work_done)
-			break;
-	} while (now_mono_ms() < deadline);
+	tick_continue:;
+	} while (work_done && now_mono_ms() < deadline);
 
 	return OTLP_OK;
 }
