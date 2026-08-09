@@ -40,6 +40,16 @@ if(UNIX)
         COMMAND otlp_test_concurrency_stress)
     set_tests_properties(concurrency-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
 
+    # Multi-signal concurrency stress (v0.5.34): N threads emit
+    # spans + metrics + logs; main thread ticks. null_transport.
+    add_executable(otlp_test_concurrency_stress_multi
+        test_concurrency_stress_multi.c)
+    target_link_libraries(otlp_test_concurrency_stress_multi PRIVATE otlp_c Threads::Threads)
+    add_test(NAME concurrency-stress-multi
+        COMMAND otlp_test_concurrency_stress_multi)
+    set_tests_properties(concurrency-stress-multi PROPERTIES
+        LABELS "unit;stress" TIMEOUT 60)
+
     # Exporter retry test: uses null_transport mode — no echo server,
     # no threads, no timing sensitivity. Runs on all platforms.
     add_executable(otlp_test_exporter_retry test_exporter_retry.c)
