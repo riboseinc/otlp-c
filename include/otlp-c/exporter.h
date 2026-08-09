@@ -347,7 +347,36 @@ extern "C"
 	otlp_status_t otlp_exporter_flush_log(otlp_exporter_t *exp,
 		const otlp_log_record_t *log);
 
-	/* Diagnostic counters. All monotonically increasing. */
+	/* ── Async metric / log emission (v0.5.28+) ─────────────────
+	 *
+	 * These enqueue a metric/log for asynchronous batch POST via
+	 * tick(), the same pipeline spans use. The caller gives up
+	 * ownership of the metric/log (move semantics — the exporter
+	 * frees it after encoding or on drop).
+	 *
+	 * Returns:
+	 *   OTLP_OK             — enqueued; will be POSTed by tick().
+	 *   OTLP_ERR_NULL       — exp or metric/log is NULL.
+	 *   OTLP_ERR_SHUTDOWN   — shutdown() was called.
+	 *   OTLP_ERR_BUFFER_FULL — queue is full; the metric/log is
+	 *     FREED and dropped_metrics_full / dropped_logs_full is
+	 *     incremented. (Same contract as otlp_exporter_emit_move.)
+	 *
+	 * Thread-safety: safe to call from any thread (lock-free MPSC). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_emit_metric_move(otlp_exporter_t *exp,
+		otlp_metric_t *metric);
+
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_emit_log_move(otlp_exporter_t *exp,
+		otlp_log_record_t *log);
+
+	/* Diagnostic counters. All monotonically increasing.
+	 *
+	 * Span counters (emitted, sent, dropped_*) track SPANS only.
+	 * Metric and log counters (added v0.5.28) track their
+	 * respective signals. HTTP-level counters (http_2xx, http_4xx,
+	 * http_5xx, network_err) are global across all signals. */
 	typedef struct
 	{
 		uint64_t emitted; /* spans accepted by emit() */
@@ -355,10 +384,18 @@ extern "C"
 			dropped_full; /* spans dropped because queue was full */
 		uint64_t dropped_err; /* spans dropped after max_retries */
 		uint64_t sent; /* spans successfully POSTed */
-		uint64_t http_2xx; /* HTTP responses in 2xx */
-		uint64_t http_4xx; /* HTTP responses in 4xx */
-		uint64_t http_5xx; /* HTTP responses in 5xx */
-		uint64_t network_err; /* network failures before HTTP */
+		uint64_t http_2xx; /* HTTP responses in 2xx (all signals) */
+		uint64_t http_4xx; /* HTTP responses in 4xx (all signals) */
+		uint64_t http_5xx; /* HTTP responses in 5xx (all signals) */
+		uint64_t network_err; /* network failures (all signals) */
+		uint64_t emitted_metrics; /* metrics accepted by emit_metric_move */
+		uint64_t sent_metrics; /* metrics successfully POSTed */
+		uint64_t dropped_metrics_full; /* metrics dropped: queue full */
+		uint64_t dropped_metrics_err; /* metrics dropped: max retries */
+		uint64_t emitted_logs; /* logs accepted by emit_log_move */
+		uint64_t sent_logs; /* logs successfully POSTed */
+		uint64_t dropped_logs_full; /* logs dropped: queue full */
+		uint64_t dropped_logs_err; /* logs dropped: max retries */
 	} otlp_exporter_stats_t;
 
 	OTLP_C_EXPORT

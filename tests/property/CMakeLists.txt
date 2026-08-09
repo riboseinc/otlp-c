@@ -285,3 +285,15 @@ add_test(NAME property-http-timeout
 set_tests_properties(property-http-timeout PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# v0.5.28: async metric/log batching.
+add_executable(otlp_property_async_metrics test_property_async_metrics.c)
+target_link_libraries(otlp_property_async_metrics PRIVATE otlp_c)
+target_include_directories(otlp_property_async_metrics PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME property-async-metrics
+    COMMAND otlp_property_async_metrics)
+set_tests_properties(property-async-metrics PROPERTIES
+    LABELS "property;unit"
+    TIMEOUT 60)
