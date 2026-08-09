@@ -4,6 +4,58 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.31] - 2026-08-09
+
+emit_metric / emit_log (clone variants) — completes the emit API
+symmetry across all three signals.
+
+### Added — emit_metric + emit_log (deep-copy, caller keeps ownership)
+
+v0.5.28 added `emit_metric_move` / `emit_log_move` (move
+semantics — caller gives up ownership). v0.5.31 adds the clone
+counterparts:
+
+```c
+otlp_status_t otlp_exporter_emit_metric(otlp_exporter_t *exp,
+    const otlp_metric_t *metric);
+
+otlp_status_t otlp_exporter_emit_log(otlp_exporter_t *exp,
+    const otlp_log_record_t *log);
+```
+
+These deep-copy the metric/log before pushing into the MPSC
+queue. The caller keeps ownership and may reuse or free the
+original immediately. Slower than the move variant (one extra
+alloc per attribute); use when the caller needs the original
+after emit (e.g., emitting to multiple exporters).
+
+This completes the API symmetry:
+
+| Signal | Clone (keep) | Move (give up) |
+|---|---|---|
+| Span | `emit()` | `emit_move()` |
+| Metric | `emit_metric()` | `emit_metric_move()` |
+| Log | `emit_log()` | `emit_log_move()` |
+
+### Added — Internal clone functions
+
+- `otlp_metric_clone(src)` — deep-copies all metric fields
+  (name, unit, description, timestamps, attributes, value,
+  histogram bounds/counts, exp-histogram arrays, agg_temp,
+  is_monotonic).
+- `otlp_log_record_clone(src)` — deep-copies severity, body,
+  timestamps, trace_id, span_id, attributes.
+
+Both use the shared `otlp_attribute_copy_all()` helper extracted
+into `internal_util.c` (DRY — same attribute-copy logic used by
+both, available for future span_clone refactoring).
+
+### Added — Property test
+
+`prop_async_metric_emit_clone` in `test_property_async_metrics.c`:
+emit_metric (clone) + tick + verify sent_metrics=1 AND the
+original metric is still usable (caller kept ownership).
+
 ## [0.5.30] - 2026-08-09
 
 tick() DRY refactor — eliminates signal triplication introduced
