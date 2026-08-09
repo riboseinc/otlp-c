@@ -4,6 +4,47 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.29] - 2026-08-09
+
+Documentation accuracy audit — catches CLAUDE.md, architecture.md,
+and README.md up to v0.5.28 (13 releases of accumulated changes).
+
+### Fixed — CLAUDE.md stale claims
+
+CLAUDE.md (the file every contributor reads first) was last
+updated in v0.5.16. Since then, 13 releases shipped:
+
+- "All phases are complete (v0.5.15)" → updated to v0.5.28.
+- Feature list: added async metric/log batching, W3C Baggage,
+  diagnostic callback, typed Resource attributes, metric
+  temporality/is_monotonic, HTTP timeout enforcement,
+  configurable flush timeout, compile-time cap overrides.
+- Key files table: updated exporter.c (now 3 MPSC queues),
+  context.h (now includes Baggage), http_client.c (now includes
+  timeouts). Added bench/bench_emit.c.
+- Conventions: added sections on three-signal pipeline,
+  diagnostics, and per-signal stats.
+
+### Fixed — docs/architecture.md stale pipeline description
+
+- "Metrics and logs are flushed synchronously" → updated to
+  reflect v0.5.28's async pipeline for all three signals.
+- Module table: exporter.c updated from "MPSC queue" to
+  "3 MPSC queues (span/metric/log)".
+
+### Fixed — README.md stale feature list
+
+- Metrics: "Synchronous flush" → "Async emit + synchronous flush
+  fallback."
+- Logs: same update.
+- Context: added W3C Baggage.
+- Added Diagnostics, Resource attributes bullets.
+- Status banner: 0.5.18 → 0.5.28.
+
+This is the same kind of accuracy audit as v0.5.16 (CLAUDE.md)
+and v0.5.19 (policy docs) — stale claims that mislead every
+reader until fixed.
+
 ## [0.5.28] - 2026-08-09
 
 Async metric/log batching — closes the #1 architectural gap.
