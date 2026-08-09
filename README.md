@@ -20,7 +20,7 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**0.5.28.** Full OTLP/HTTP client for all three signals (traces,
+**0.5.35.** Full OTLP/HTTP client for all three signals (traces,
 metrics, logs). Features: hand-rolled protobuf encoder with
 schema-driven field tables, lock-free MPSC queue + caller-tick
 exporter, non-blocking HTTP/1.1 client with keep-alive, W3C Trace
