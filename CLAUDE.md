@@ -137,12 +137,15 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.28). The library implements:
+All phases are complete (v0.5.35). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
 - All three OTLP signals (traces, metrics, logs) with encoders
 - Span/metric/log lifecycle with events, links, attributes
-- **Async emission for ALL three signals** via MPSC queue + caller-tick
-  (v0.5.28: `emit_metric_move` / `emit_log_move` join `emit` / `emit_move`)
+- **Async emission for ALL three signals** via MPSC queue + caller-tick.
+  Each signal has both clone (`emit` / `emit_metric` / `emit_log`) and
+  move (`emit_move` / `emit_metric_move` / `emit_log_move`) variants.
+  tick() uses a table-driven `struct signal_path` descriptor for DRY
+  dispatch across all three signals (v0.5.28–v0.5.30).
 - W3C Trace Context propagation (traceparent + tracestate) +
   **W3C Baggage** (v0.5.22)
 - Resource attributes: **typed** (string/int64/double/bool, v0.5.24) +
@@ -158,6 +161,7 @@ All phases are complete (v0.5.28). The library implements:
 - ExponentialHistogram with configurable buckets
 - Null-transport mode for deterministic testing
 - Configurable flush timeout + compile-time span cap overrides
+- Per-signal stats (emitted/sent/dropped for spans, metrics, logs)
 
 When extending the library:
 - **New attribute type**: add enum value + encoder function +
