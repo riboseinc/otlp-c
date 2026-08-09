@@ -77,4 +77,8 @@ const struct otlp_attribute *otlp_metric_get_attrs(const otlp_metric_t *m, size_
 uint8_t			otlp_metric_get_agg_temp(const otlp_metric_t *m);
 bool			otlp_metric_get_is_monotonic(const otlp_metric_t *m);
 
+/* Deep-copy a metric. Returns NULL on OOM. The caller owns the
+ * result; free with otlp_metric_free. */
+otlp_metric_t *otlp_metric_clone(const otlp_metric_t *src);
+
 #endif

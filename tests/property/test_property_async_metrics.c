@@ -14,6 +14,8 @@
  */
 #include "property_harness.h"
 
+#include "../src/metric_internal.h"
+
 #include <otlp-c/exporter.h>
 #include <otlp-c/log.h>
 #include <otlp-c/metric.h>
@@ -199,6 +201,56 @@ out:
 	return ok;
 }
 
+/* emit_metric (clone variant) — caller keeps ownership. The
+ * original metric is still valid after emit; the exporter gets a
+ * deep copy. */
+static int
+prop_async_metric_emit_clone(uint64_t seed)
+{
+	otlp_exporter_opts_t  opts;
+	otlp_exporter_t      *exp;
+	otlp_metric_t        *m;
+	otlp_exporter_stats_t stats;
+	otlp_status_t        st;
+	int                   ok = 0;
+
+	(void) seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "clone-test";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	otlp_exporter_set_null_transport(exp, true);
+
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "counter", "1",
+			       "test counter", NULL, 0);
+	if (!m)
+		goto out;
+	otlp_metric_record(m, 99.0);
+	otlp_metric_mark_time(m);
+
+	/* emit_metric CLONES — m is still ours. */
+	st = otlp_exporter_emit_metric(exp, m);
+	if (st != OTLP_OK)
+		goto out;
+
+	/* Verify the original is usable after emit. */
+	if (strcmp(otlp_metric_get_name(m), "counter") != 0)
+		goto out;
+
+	otlp_exporter_tick(exp, 100);
+
+	otlp_exporter_get_stats(exp, &stats);
+	ok = (stats.emitted_metrics == 1 && stats.sent_metrics == 1);
+
+out:
+	if (m)
+		otlp_metric_free(m);
+	otlp_exporter_free(exp);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -212,6 +264,8 @@ main(void)
 				 "prop_async_spans_coexist", 5, 1);
 	failures += property_run(prop_async_metric_drop_full,
 				 "prop_async_metric_drop_full", 5, 1);
+	failures += property_run(prop_async_metric_emit_clone,
+				 "prop_async_metric_emit_clone", 5, 1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",

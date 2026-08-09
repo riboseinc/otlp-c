@@ -6,6 +6,8 @@
 #ifndef OTLP_C_INTERNAL_UTIL_H
 #define OTLP_C_INTERNAL_UTIL_H
 
+#include "span_internal.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -30,5 +32,16 @@ char	*otlp_dup_str(const char *s);
 /* Heap-allocate a copy of `len` bytes from `src`. NULL on OOM or
  * when len > 0 && src == NULL. */
 uint8_t *otlp_dup_bytes(const uint8_t *src, size_t len);
+
+/* ── Attribute copy (shared by span/metric/log clones) ────────── */
+
+/* Deep-copy `n` attributes from `src` to `dst`. dst must have at
+ * least `n` slots. On failure, partial copies are freed. Returns
+ * OTLP_OK or OTLP_ERR_NOMEM. DRY: used by otlp_metric_clone,
+ * otlp_log_record_clone (and could replace the inline copy in
+ * otlp_span_clone). */
+otlp_status_t otlp_attribute_copy_all(struct otlp_attribute *dst,
+				      const struct otlp_attribute *src,
+				      size_t n);
 
 #endif

@@ -185,3 +185,40 @@ otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n)
 		*n = lr ? lr->n_attrs : 0;
 	return lr ? lr->attrs : NULL;
 }
+
+otlp_log_record_t *
+otlp_log_record_clone(const otlp_log_record_t *src)
+{
+	struct otlp_log_record *dst;
+
+	if (!src)
+		return NULL;
+	dst = otlp_calloc(1, sizeof(*dst));
+	if (!dst)
+		return NULL;
+	dst->severity = src->severity;
+	dst->severity_text = otlp_dup_str(src->severity_text);
+	dst->body = otlp_dup_str(src->body);
+	if ((src->severity_text && !dst->severity_text) ||
+	    (src->body && !dst->body))
+		goto fail;
+	dst->timestamp = src->timestamp;
+	dst->has_timestamp = src->has_timestamp;
+	memcpy(dst->trace_id, src->trace_id, OTLP_TRACE_ID_LEN);
+	memcpy(dst->span_id, src->span_id, OTLP_SPAN_ID_LEN);
+	dst->has_trace = src->has_trace;
+
+	if (src->n_attrs > 0)
+	{
+		if (otlp_attribute_copy_all(dst->attrs, src->attrs,
+					    src->n_attrs) != OTLP_OK)
+			goto fail;
+		dst->n_attrs = src->n_attrs;
+	}
+
+	return (otlp_log_record_t *)dst;
+
+fail:
+	otlp_log_record_free((otlp_log_record_t *)dst);
+	return NULL;
+}

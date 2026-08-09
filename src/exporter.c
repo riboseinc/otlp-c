@@ -26,6 +26,8 @@
 #include "exporter_otel.h"
 #include "http_client.h"
 #include "internal_util.h"
+#include "log_internal.h"
+#include "metric_internal.h"
 #include "mpsc_queue.h"
 #include "otlp_messages.h"
 #include "platform.h"
@@ -488,6 +490,32 @@ otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 	otlp_atomic_fetch_add_u64(
 		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_exporter_emit_metric(otlp_exporter_t *e, const otlp_metric_t *metric)
+{
+	otlp_metric_t *clone;
+
+	if (!e || !metric)
+		return OTLP_ERR_NULL;
+	clone = otlp_metric_clone(metric);
+	if (!clone)
+		return OTLP_ERR_NOMEM;
+	return otlp_exporter_emit_metric_move(e, clone);
+}
+
+otlp_status_t
+otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
+{
+	otlp_log_record_t *clone;
+
+	if (!e || !log)
+		return OTLP_ERR_NULL;
+	clone = otlp_log_record_clone(log);
+	if (!clone)
+		return OTLP_ERR_NOMEM;
+	return otlp_exporter_emit_log_move(e, clone);
 }
 
 /* ── tick (single thread) ─────────────────────────────────────── */

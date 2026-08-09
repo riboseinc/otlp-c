@@ -371,6 +371,20 @@ extern "C"
 	otlp_status_t otlp_exporter_emit_log_move(otlp_exporter_t *exp,
 		otlp_log_record_t *log);
 
+	/* Same as emit_metric_move / emit_log_move but deep-copies
+	 * the metric/log first. The caller keeps ownership and may
+	 * reuse or free the original immediately. Slower than the
+	 * move variant (one extra alloc); use when the caller needs
+	 * the original after emit (e.g., emitting to multiple
+	 * exporters). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_emit_metric(otlp_exporter_t *exp,
+		const otlp_metric_t *metric);
+
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_emit_log(otlp_exporter_t *exp,
+		const otlp_log_record_t *log);
+
 	/* Diagnostic counters. All monotonically increasing.
 	 *
 	 * Span counters (emitted, sent, dropped_*) track SPANS only.
