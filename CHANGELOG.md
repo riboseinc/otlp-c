@@ -4,6 +4,47 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.30] - 2026-08-09
+
+tick() DRY refactor — eliminates signal triplication introduced
+in v0.5.28 (async metric/log batching).
+
+### Changed — tick() table-driven signal dispatch
+
+v0.5.28 added metric/log support to tick() as three parallel
+code blocks (drain, null-transport, POST start, backoff retry).
+Each block was structurally identical, differing only in which
+queue, pending array, timer, and start_post function to use.
+
+Replaced with a `struct signal_path` descriptor table:
+
+```c
+struct signal_path {
+    struct mpsc_queue *queue;
+    void **pending;
+    size_t pending_cap;
+    size_t *pending_count;
+    bool *first_set;
+    uint64_t *first_mono;
+    int signal_kind;
+    otlp_status_t (*start_post)(struct otlp_exporter *e);
+};
+```
+
+tick() builds `paths[3]` once (pointers into the exporter
+struct), then iterates:
+- Drain: one `for (s = 0; s < 3; s++)` loop replaces three
+  identical while loops.
+- Null-transport: one loop tries signals by priority.
+- POST start: one loop checks batch-ready conditions.
+- Backoff retry: `paths[in_flight_signal].start_post(e)` replaces
+  the switch statement.
+
+Net effect: ~80 lines of triplicated code reduced to ~30 lines of
+looped code. Adding a fourth signal is one `paths[]` entry, not
+another parallel block (OCP). All 33 tests pass unchanged — the
+refactor is behavior-preserving.
+
 ## [0.5.29] - 2026-08-09
 
 Documentation accuracy audit — catches CLAUDE.md, architecture.md,
