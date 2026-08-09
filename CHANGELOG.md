@@ -4,6 +4,28 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.36] - 2026-08-10
+
+CLAUDE.md + README accuracy audit — catches primary documentation
+up to v0.5.35 (6 releases since last audit in v0.5.29).
+
+### Fixed — CLAUDE.md stale claims
+
+- Version reference: v0.5.28 → v0.5.35.
+- Feature list: added emit_metric/emit_log clone variants
+  (v0.5.31), table-driven tick() signal dispatch (v0.5.30),
+  per-signal stats, span_clone event/link attribute fix
+  (v0.5.33).
+- Updated the async emission bullet to mention all 6 emit
+  variants (clone + move for each signal).
+
+### Fixed — README version banner
+
+- 0.5.28 → 0.5.35.
+
+Same accuracy audit cycle as v0.5.16 (CLAUDE.md), v0.5.19
+(policy docs), v0.5.29 (CLAUDE.md + architecture + README).
+
 ## [0.5.35] - 2026-08-09
 
 Fixes null_transport backoff-retry double-processing + adds metric/
