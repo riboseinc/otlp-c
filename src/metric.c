@@ -358,3 +358,90 @@ otlp_metric_set_monotonic(otlp_metric_t *m, bool monotonic)
 	m->is_monotonic = monotonic;
 	return OTLP_OK;
 }
+
+otlp_metric_t *
+otlp_metric_clone(const otlp_metric_t *src)
+{
+	struct otlp_metric *dst;
+
+	if (!src)
+		return NULL;
+	dst = otlp_calloc(1, sizeof(*dst));
+	if (!dst)
+		return NULL;
+	dst->type = src->type;
+	dst->name = otlp_dup_str(src->name);
+	dst->unit = otlp_dup_str(src->unit);
+	dst->description = otlp_dup_str(src->description);
+	if (!dst->name || !dst->unit || !dst->description)
+		goto fail;
+	dst->start_time = src->start_time;
+	dst->time = src->time;
+	dst->has_start = src->has_start;
+	dst->has_time = src->has_time;
+	dst->agg_temp = src->agg_temp;
+	dst->is_monotonic = src->is_monotonic;
+	dst->value = src->value;
+	dst->count = src->count;
+	dst->sum = src->sum;
+	dst->min = src->min;
+	dst->max = src->max;
+	dst->has_minmax = src->has_minmax;
+
+	/* Attributes */
+	if (src->n_attrs > 0)
+	{
+		if (otlp_attribute_copy_all(dst->attrs, src->attrs,
+					    src->n_attrs) != OTLP_OK)
+			goto fail;
+		dst->n_attrs = src->n_attrs;
+	}
+
+	/* Histogram bounds + bucket counts */
+	if (src->n_bounds > 0 && src->bounds)
+	{
+		dst->bounds = otlp_malloc(src->n_bounds * sizeof(double));
+		dst->bucket_counts = otlp_calloc(src->n_bounds + 1,
+						 sizeof(uint64_t));
+		if (!dst->bounds || !dst->bucket_counts)
+			goto fail;
+		memcpy(dst->bounds, src->bounds,
+		       src->n_bounds * sizeof(double));
+		memcpy(dst->bucket_counts, src->bucket_counts,
+		       (src->n_bounds + 1) * sizeof(uint64_t));
+		dst->n_bounds = src->n_bounds;
+	}
+
+	/* ExponentialHistogram */
+	dst->exp_scale = src->exp_scale;
+	dst->exp_zero_count = src->exp_zero_count;
+	dst->exp_pos_offset = src->exp_pos_offset;
+	dst->exp_neg_offset = src->exp_neg_offset;
+	dst->has_exp_scale = src->has_exp_scale;
+	if (src->exp_pos_n > 0 && src->exp_pos_counts)
+	{
+		dst->exp_pos_counts = otlp_calloc(src->exp_pos_n,
+						  sizeof(uint64_t));
+		if (!dst->exp_pos_counts)
+			goto fail;
+		memcpy(dst->exp_pos_counts, src->exp_pos_counts,
+		       src->exp_pos_n * sizeof(uint64_t));
+		dst->exp_pos_n = src->exp_pos_n;
+	}
+	if (src->exp_neg_n > 0 && src->exp_neg_counts)
+	{
+		dst->exp_neg_counts = otlp_calloc(src->exp_neg_n,
+						  sizeof(uint64_t));
+		if (!dst->exp_neg_counts)
+			goto fail;
+		memcpy(dst->exp_neg_counts, src->exp_neg_counts,
+		       src->exp_neg_n * sizeof(uint64_t));
+		dst->exp_neg_n = src->exp_neg_n;
+	}
+
+	return dst;
+
+fail:
+	otlp_metric_free(dst);
+	return NULL;
+}

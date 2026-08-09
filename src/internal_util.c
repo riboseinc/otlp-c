@@ -151,3 +151,64 @@ otlp_attribute_free(struct otlp_attribute *a)
 	otlp_free(a->key);
 	a->key = NULL;
 }
+
+/* ── Attribute copy ───────────────────────────────────────────── */
+
+otlp_status_t
+otlp_attribute_copy_all(struct otlp_attribute *dst,
+			const struct otlp_attribute *src,
+			size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++)
+	{
+		dst[i].key = otlp_dup_str(src[i].key);
+		if (!dst[i].key)
+			goto fail;
+		dst[i].type = src[i].type;
+		switch (src[i].type)
+		{
+			case OTLP_ATTR_STRING:
+				dst[i].v.string_val =
+					otlp_dup_str(src[i].v.string_val);
+				if (!dst[i].v.string_val)
+					goto fail;
+				break;
+			case OTLP_ATTR_INT64:
+				dst[i].v.int64_val = src[i].v.int64_val;
+				break;
+			case OTLP_ATTR_DOUBLE:
+				dst[i].v.double_val = src[i].v.double_val;
+				break;
+			case OTLP_ATTR_BOOL:
+				dst[i].v.bool_val = src[i].v.bool_val;
+				break;
+			case OTLP_ATTR_BYTES:
+				dst[i].v.bytes_val.len = src[i].v.bytes_val.len;
+				if (src[i].v.bytes_val.len > 0)
+				{
+					dst[i].v.bytes_val.data =
+						otlp_malloc(src[i].v.bytes_val.len);
+					if (!dst[i].v.bytes_val.data)
+						goto fail;
+					memcpy(dst[i].v.bytes_val.data,
+					       src[i].v.bytes_val.data,
+					       src[i].v.bytes_val.len);
+				}
+				break;
+			default:
+				break;
+		}
+	}
+	return OTLP_OK;
+
+fail:
+	/* Free partial copies. */
+	while (i > 0)
+	{
+		i--;
+		otlp_attribute_free(&dst[i]);
+	}
+	return OTLP_ERR_NOMEM;
+}
