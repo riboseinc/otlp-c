@@ -4,6 +4,46 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.32] - 2026-08-09
+
+Code quality cleanup: decoupled internal headers + span_clone DRY
+refactor + cookbook patterns for 6 releases of features.
+
+### Fixed — internal_util.h coupling
+
+`internal_util.h` included `span_internal.h` (added in v0.5.31
+for the `otlp_attribute_copy_all` declaration). This created a
+dependency from the utility layer to the span layer — every file
+including internal_util.h transitively pulled in span_internal.h.
+
+Replaced with a forward declaration (`struct otlp_attribute;`).
+The implementation file (`internal_util.c`) still includes the
+full header; only the declaration header was decoupled.
+
+### Changed — span_clone uses shared attribute-copy helper
+
+`otlp_span_clone` was rebuilt using the public API
+(`otlp_span_set_attribute_string` etc.) for each attribute — slow
+(checks capacity, searches for existing keys per call). Replaced
+with a single call to `otlp_attribute_copy_all` (the shared helper
+from v0.5.31): direct struct manipulation, ~47 lines → 7 lines.
+
+Also fixed `otlp_attribute_copy_all`: the `default: break` case
+silently corrupted ARRAY/KVLIST attributes (set type, left union
+value as zero/garbage). Now returns OTLP_ERR_NOMEM via `goto fail`
+for unsupported types — same behavior as the old span_clone (which
+returned error for ARRAY/KVLIST).
+
+### Added — Cookbook patterns for v0.5.20–v0.5.28 features
+
+6 new patterns in `docs/cookbook.md`:
+- 11. Async metrics and logs (emit_metric_move + tick).
+- 12. Production diagnostics (set_logger callback).
+- 13. Resource attributes (typed values).
+- 14. W3C Baggage propagation.
+- 15. Metric temporality and is_monotonic.
+- 16. Configurable flush timeout.
+
 ## [0.5.31] - 2026-08-09
 
 emit_metric / emit_log (clone variants) — completes the emit API
