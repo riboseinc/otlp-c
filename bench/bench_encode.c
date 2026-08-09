@@ -32,23 +32,6 @@ now_ns(void)
 }
 
 static void
-build_span_with_attrs(otlp_tracer_t *t, int n_attrs)
-{
-	otlp_span_t *s = otlp_tracer_start_span(t, "op");
-
-	for (int i = 0; i < n_attrs; i++) {
-		char k[16];
-
-		snprintf(k, sizeof(k), "k%d", i);
-		otlp_span_set_attribute_int(s, k, (int64_t)i);
-	}
-	otlp_span_mark_end(s);
-	/* Caller is responsible for free; we drop on the floor for the
-	 * bench since this is just measuring encode cost. */
-	otlp_span_free(s);
-}
-
-static void
 bench_encode(int n_spans, int n_attrs)
 {
 	otlp_tracer_t    *t = otlp_tracer_create("bench", "bench", "0");
@@ -70,7 +53,7 @@ bench_encode(int n_spans, int n_attrs)
 	otlp_pb_buf_init(&buf, 0);
 	t0 = now_ns();
 	otlp_encode_export_trace_service_request(
-	    &buf, "bench", "bench", "0",
+	    &buf, "bench", NULL, 0, "bench", "0",
 	    (const otlp_span_t *const *)spans, (size_t)n_spans);
 	t1 = now_ns();
 

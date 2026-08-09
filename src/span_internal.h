@@ -97,11 +97,14 @@ struct otlp_attr_kvlist
  * is NOT freed (it may be embedded in an array). Safe with NULL. */
 void otlp_attribute_free(struct otlp_attribute *a);
 
-/* Span.Event — opentelemetry-proto Span.Event. v0.5 supports
- * name + time only; attributes are deferred (the API stubs accept
- * no attributes either). */
-#define OTLP_EVENT_MAX_ATTRS  32
-#define OTLP_LINK_MAX_ATTRS   32
+/* Span.Event / Span.Link — each carries name/time + attributes
+ * (up to OTLP_EVENT_MAX_ATTRS / OTLP_LINK_MAX_ATTRS). */
+#ifndef OTLP_EVENT_MAX_ATTRS
+#define OTLP_EVENT_MAX_ATTRS 32
+#endif
+#ifndef OTLP_LINK_MAX_ATTRS
+#define OTLP_LINK_MAX_ATTRS 32
+#endif
 
 struct otlp_event
 {
