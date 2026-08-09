@@ -4,6 +4,30 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.34] - 2026-08-09
+
+Multi-signal concurrency stress test — validates the v0.5.28 async
+metric/log pipeline is race-free under concurrent load.
+
+### Added — Multi-signal concurrency stress test
+
+`tests/test_concurrency_stress_multi.c`: 8 threads concurrently
+emit spans, metrics, AND logs into one exporter while the main
+thread ticks. Uses null_transport for determinism.
+
+Verifies:
+- All 800 spans (8 × 100) are emitted and sent.
+- All 800 metrics are emitted and sent.
+- All 800 logs are emitted and sent.
+- Per-signal stats are correct.
+- No race conditions (TSAN-clean).
+
+The existing `test_concurrency_stress.c` only tested spans. The
+three-queue, one-in-flight, shared-backoff design from v0.5.28
+had never been stress-tested with all three signals concurrent.
+
+Test count: 33 → 34. All pass under plain, TSAN, ASAN+UBSAN.
+
 ## [0.5.33] - 2026-08-09
 
 Fixes data-loss bug in span_clone + stats gap in sync flush.
