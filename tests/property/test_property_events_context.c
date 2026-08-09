@@ -443,6 +443,65 @@ out:
 	return ok;
 }
 
+/* Regression: clone must preserve event AND link attributes.
+ * Before v0.5.33, otlp_span_clone copied events with only name +
+ * time — attributes were silently dropped (data loss). */
+static int
+prop_span_clone_preserves_evlink_attrs(uint64_t seed)
+{
+	otlp_span_t	     *span;
+	otlp_span_t	     *clone;
+	const struct otlp_event *ev;
+	const struct otlp_link  *lk;
+	size_t		      n;
+	int		      ok = 0;
+
+	(void) seed;
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+
+	/* Add event with attribute. */
+	otlp_span_add_event(span, "cache_miss", 42);
+	otlp_span_set_event_attribute_string(span, "key", "user_42");
+
+	/* Add link with attribute. */
+	{
+		uint8_t tid[16] = {1};
+		uint8_t sid[8]  = {2};
+
+		otlp_span_add_link(span, tid, sid);
+	}
+	otlp_span_set_link_attribute_string(span, "reason", "follows_from");
+
+	clone = otlp_span_clone(span);
+	if (!clone)
+		goto out;
+
+	ok = 1;
+	/* Verify event has the attribute. */
+	ev = otlp_span_get_events(clone, &n);
+	if (n != 1 || ev[0].n_attrs != 1)
+		ok = 0;
+	else if (strcmp(ev[0].attrs[0].key, "key") != 0 ||
+		 strcmp(ev[0].attrs[0].v.string_val, "user_42") != 0)
+		ok = 0;
+
+	/* Verify link has the attribute. */
+	lk = otlp_span_get_links(clone, &n);
+	if (n != 1 || lk[0].n_attrs != 1)
+		ok = 0;
+	else if (strcmp(lk[0].attrs[0].key, "reason") != 0 ||
+		 strcmp(lk[0].attrs[0].v.string_val, "follows_from") != 0)
+		ok = 0;
+
+out:
+	if (clone)
+		otlp_span_free(clone);
+	otlp_span_free(span);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -456,6 +515,8 @@ main(void)
 				 "prop_trace_state_field", 200, 1);
 	failures += property_run(prop_span_clone_copies_extras,
 				 "prop_span_clone_copies_extras", 50, 1);
+	failures += property_run(prop_span_clone_preserves_evlink_attrs,
+				 "prop_span_clone_preserves_evlink_attrs", 50, 1);
 	failures += property_run(prop_context_inject_extract,
 				 "prop_context_inject_extract", 50, 1);
 	failures += property_run(prop_context_extract_rejects_malformed,

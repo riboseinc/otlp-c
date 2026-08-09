@@ -732,6 +732,20 @@ otlp_span_clone(const otlp_span_t *src)
 			otlp_span_free(dst);
 			return NULL;
 		}
+		/* Copy event attributes (was missing — data loss bug). */
+		if (events[i].n_attrs > 0)
+		{
+			struct otlp_event *ev =
+				&dst->events[dst->n_events - 1];
+			if (otlp_attribute_copy_all(ev->attrs,
+				    events[i].attrs,
+				    events[i].n_attrs) != OTLP_OK)
+			{
+				otlp_span_free(dst);
+				return NULL;
+			}
+			ev->n_attrs = events[i].n_attrs;
+		}
 	}
 
 	links = otlp_span_get_links(src, &n_links);
@@ -744,6 +758,20 @@ otlp_span_clone(const otlp_span_t *src)
 		{
 			otlp_span_free(dst);
 			return NULL;
+		}
+		/* Copy link attributes (was missing — data loss bug). */
+		if (links[i].n_attrs > 0)
+		{
+			struct otlp_link *lnk =
+				&dst->links[dst->n_links - 1];
+			if (otlp_attribute_copy_all(lnk->attrs,
+				    links[i].attrs,
+				    links[i].n_attrs) != OTLP_OK)
+			{
+				otlp_span_free(dst);
+				return NULL;
+			}
+			lnk->n_attrs = links[i].n_attrs;
 		}
 	}
 	return dst;

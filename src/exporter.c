@@ -1120,6 +1120,8 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 
 	if (!e || !m)
 		return OTLP_ERR_NULL;
+	otlp_atomic_fetch_add_u64(
+		&e->emitted_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
 		return st;
@@ -1131,6 +1133,12 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/metrics", body.data, body.len);
 	otlp_pb_buf_free(&body);
+	if (st == OTLP_OK)
+		otlp_atomic_fetch_add_u64(
+			&e->sent_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
+	else
+		otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
+			1, OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
@@ -1143,6 +1151,8 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 
 	if (!e || !lr)
 		return OTLP_ERR_NULL;
+	otlp_atomic_fetch_add_u64(
+		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
 		return st;
@@ -1154,6 +1164,12 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/logs", body.data, body.len);
 	otlp_pb_buf_free(&body);
+	if (st == OTLP_OK)
+		otlp_atomic_fetch_add_u64(
+			&e->sent_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
+	else
+		otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
+			1, OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
