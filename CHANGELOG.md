@@ -4,6 +4,64 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.27] - 2026-08-09
+
+Header accuracy audit + emit throughput benchmark + compile-time
+span cap overrides.
+
+### Fixed — Stale metric.h header comments
+
+`include/otlp-c/metric.h` had three stale claims from the v0.4 era:
+- "Three metric types are supported in v0.4" → four types are
+  supported in v0.5.x (Counter, Gauge, Histogram,
+  ExponentialHistogram).
+- "ExponentialHistogram and Summary are deferred" →
+  ExponentialHistogram IS supported (since v0.5.x); only Summary
+  is not (the OTel spec recommends Histogram/ExpHistogram for new
+  code; Summary is legacy).
+- "Counter ... is_monotonic=true, cumulative temporality" → both
+  are now configurable (v0.5.26).
+
+Also fixed `src/span_internal.h`: claimed "v0.5 supports name +
+time only; attributes are deferred" for Span.Event, but events
+DO have attributes (up to `OTLP_EVENT_MAX_ATTRS`).
+
+### Added — Compile-time span cap overrides
+
+The span/event/link attribute caps (`OTLP_SPAN_MAX_ATTRIBUTES`,
+`OTLP_SPAN_MAX_EVENTS`, `OTLP_SPAN_MAX_LINKS`,
+`OTLP_EVENT_MAX_ATTRS`, `OTLP_LINK_MAX_ATTRS`) are now guarded
+with `#ifndef`. Callers who need more (or fewer) slots can
+override at compile time without redefinition warnings:
+
+```sh
+cmake -DCMAKE_C_FLAGS="-DOTLP_SPAN_MAX_ATTRIBUTES=256" ...
+```
+
+Defaults are unchanged (128/64/64/32/32). The `#ifndef` guard is
+the standard C pattern for compile-time configurability — OCP at
+the preprocessor level.
+
+### Added — Emit throughput benchmark
+
+`bench/bench_emit.c` — measures the full emit pipeline: span
+clone, MPSC push, tick drain, protobuf encode, null_transport
+"send". Isolates the library's internal cost from network I/O.
+
+Typical results (Apple M-series, null_transport):
+- 1000 spans, 0 attrs: ~29 μs/op, ~35K spans/sec
+- 5000 spans, 5 attrs: ~25 μs/op, ~40K spans/sec
+
+Registered in `bench/CMakeLists.txt` as `otlp_bench_emit`. Opt-in
+via `-DOTLP_C_BUILD_BENCH=ON`.
+
+### Fixed — Stale encoder call in bench_encode.c
+
+`bench_encode.c` still used the v0.5.19 encoder signature
+(`otlp_encode_export_trace_service_request` without the
+`resource_attributes` params added in v0.5.20). Fixed. Also
+removed an unused helper function (`-Wunused-function`).
+
 ## [0.5.26] - 2026-08-09
 
 Configurable metric aggregation temporality + is_monotonic —
