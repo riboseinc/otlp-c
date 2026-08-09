@@ -971,7 +971,14 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			now_mono_ms() >= e->backoff_deadline_mono)
 		{
 			e->backoff_armed = false;
-			paths[e->in_flight_signal].start_post(e);
+			/* When null_transport is enabled, skip the HTTP
+			 * retry — the next tick iteration's null-transport
+			 * path (step 2) handles the retry cleanly. Without
+			 * this check, the HTTP retry + null-transport
+			 * double-processes the batch (double-counting in
+			 * stats). */
+			if (!e->null_transport)
+				paths[e->in_flight_signal].start_post(e);
 			if (e->in_flight)
 				work_done = true;
 		}

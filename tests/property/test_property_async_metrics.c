@@ -251,6 +251,117 @@ out:
 	return ok;
 }
 
+/* Metric retry: 500 first, 200 second. Verifies the metric retry
+ * path correctly re-sends after a transient failure without
+ * double-counting (v0.5.35 null_transport backoff-retry fix). */
+static int retry_calls_metric = 0;
+static int
+retry_status_metric(void *ctx)
+{
+	(void)ctx;
+	retry_calls_metric++;
+	return retry_calls_metric == 1 ? 500 : 200;
+}
+
+static int
+prop_async_metric_retry(uint64_t seed)
+{
+	otlp_exporter_opts_t  opts;
+	otlp_exporter_t      *exp;
+	otlp_metric_t        *m;
+	otlp_exporter_stats_t stats;
+	int                   ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "retry";
+	opts.batch_size = 1;
+	opts.max_retries = 5;
+	opts.backoff_initial_ms = 50;
+	opts.backoff_max_ms = 100;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	otlp_exporter_set_null_transport(exp, true);
+	retry_calls_metric = 0;
+	otlp_exporter_set_null_transport_status_fn(exp,
+		retry_status_metric, NULL);
+
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "r", "1", "", NULL, 0);
+	if (!m)
+		goto out;
+	otlp_metric_record(m, 1.0);
+	otlp_metric_mark_time(m);
+	if (otlp_exporter_emit_metric_move(exp, m) != OTLP_OK)
+		goto out;
+
+	otlp_exporter_flush(exp);
+
+	otlp_exporter_get_stats(exp, &stats);
+	/* Sent exactly once (not double-counted). */
+	ok = (stats.emitted_metrics == 1 &&
+	      stats.sent_metrics == 1 &&
+	      stats.dropped_metrics_err == 0);
+
+out:
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+static int retry_calls_log = 0;
+static int
+retry_status_log(void *ctx)
+{
+	(void)ctx;
+	retry_calls_log++;
+	return retry_calls_log == 1 ? 503 : 200;
+}
+
+static int
+prop_async_log_retry(uint64_t seed)
+{
+	otlp_exporter_opts_t  opts;
+	otlp_exporter_t      *exp;
+	otlp_log_record_t    *lr;
+	otlp_exporter_stats_t stats;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "retry";
+	opts.batch_size = 1;
+	opts.max_retries = 5;
+	opts.backoff_initial_ms = 50;
+	opts.backoff_max_ms = 100;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	otlp_exporter_set_null_transport(exp, true);
+	retry_calls_log = 0;
+	otlp_exporter_set_null_transport_status_fn(exp,
+		retry_status_log, NULL);
+
+	lr = otlp_log_record_create(OTLP_SEVERITY_WARN, "r");
+	if (!lr)
+	{
+		otlp_exporter_free(exp);
+		return 0;
+	}
+	otlp_log_record_mark_timestamp(lr);
+	if (otlp_exporter_emit_log_move(exp, lr) != OTLP_OK)
+	{
+		otlp_exporter_free(exp);
+		return 0;
+	}
+
+	otlp_exporter_flush(exp);
+
+	otlp_exporter_get_stats(exp, &stats);
+	otlp_exporter_free(exp);
+	return (stats.emitted_logs == 1 &&
+		stats.sent_logs == 1 &&
+		stats.dropped_logs_err == 0);
+}
+
 int
 main(void)
 {
@@ -266,6 +377,10 @@ main(void)
 				 "prop_async_metric_drop_full", 5, 1);
 	failures += property_run(prop_async_metric_emit_clone,
 				 "prop_async_metric_emit_clone", 5, 1);
+	failures += property_run(prop_async_metric_retry,
+				 "prop_async_metric_retry", 3, 1);
+	failures += property_run(prop_async_log_retry,
+				 "prop_async_log_retry", 3, 1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",
