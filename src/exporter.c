@@ -72,6 +72,10 @@ struct otlp_exporter
 	/* MPSC queue of pending otlp_span_t*. */
 	struct mpsc_queue queue;
 
+	/* MPSC queues for async metric/log (v0.5.28). */
+	struct mpsc_queue metric_queue;
+	struct mpsc_queue log_queue;
+
 	/* Atomic stats + state. */
 	otlp_atomic_u64 emitted;
 	otlp_atomic_u64 dropped_full;
@@ -81,6 +85,14 @@ struct otlp_exporter
 	otlp_atomic_u64 http_4xx;
 	otlp_atomic_u64 http_5xx;
 	otlp_atomic_u64 network_err;
+	otlp_atomic_u64 emitted_metrics;
+	otlp_atomic_u64 sent_metrics;
+	otlp_atomic_u64 dropped_metrics_full;
+	otlp_atomic_u64 dropped_metrics_err;
+	otlp_atomic_u64 emitted_logs;
+	otlp_atomic_u64 sent_logs;
+	otlp_atomic_u64 dropped_logs_full;
+	otlp_atomic_u64 dropped_logs_err;
 	otlp_atomic_int shutdown_requested;
 
 	/* Optional diagnostic callback (NULL = no-op). */
@@ -94,11 +106,26 @@ struct otlp_exporter
 	bool first_pending_set;
 	uint64_t first_pending_mono;
 
+	/* Metric/log pending batches (tick-private). */
+	otlp_metric_t     **metric_pending;
+	size_t		metric_pending_cap;
+	size_t		metric_pending_count;
+	bool		metric_first_set;
+	uint64_t		metric_first_mono;
+	otlp_log_record_t **log_pending;
+	size_t		log_pending_cap;
+	size_t		log_pending_count;
+	bool		log_first_set;
+	uint64_t		log_first_mono;
+
+	/* In-flight request state. in_flight_signal identifies which
+	 * signal's batch is being POSTed (0=span, 1=metric, 2=log). */
 	otlp_http_request_t *in_flight;
-	size_t in_flight_count; /* spans in in-flight batch */
-	uint32_t attempt;
-	uint64_t backoff_deadline_mono;
-	bool backoff_armed;
+	int			 in_flight_signal;
+	size_t			 in_flight_count;
+	uint32_t		 attempt;
+	uint64_t		 backoff_deadline_mono;
+	bool			 backoff_armed;
 	/* Cached TCP connection for HTTP keep-alive. Owned by the exporter,
 	 * donated to the next in_flight request, re-acquired on success. */
 	otlp_socket_t *keepalive_sock;
@@ -190,18 +217,6 @@ free_pending_batch(otlp_span_t **pending, size_t count)
 		otlp_span_free(pending[i]);
 }
 
-/* Clear the pending batch and reset retry state. Called from
- * record_outcome on every terminal path (success, permanent-fail,
- * retry-exhausted). DRY: was duplicated 4 times. */
-static void
-clear_batch(struct otlp_exporter *e)
-{
-	free_pending_batch(e->pending, e->pending_count);
-	e->pending_count = 0;
-	e->attempt = 0;
-	e->backoff_armed = false;
-}
-
 /* ── Lifecycle ────────────────────────────────────────────────── */
 
 otlp_exporter_t *
@@ -272,10 +287,29 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (!e->pending)
 		goto fail;
 
+	e->metric_pending_cap = e->batch_size * 2;
+	e->metric_pending = otlp_malloc(
+		e->metric_pending_cap * sizeof(*e->metric_pending));
+	if (!e->metric_pending)
+		goto fail;
+
+	e->log_pending_cap = e->batch_size * 2;
+	e->log_pending = otlp_malloc(
+		e->log_pending_cap * sizeof(*e->log_pending));
+	if (!e->log_pending)
+		goto fail;
+
 	st = mpsc_queue_init(&e->queue, o.queue_capacity);
 	if (st != OTLP_OK)
 		goto fail;
+	st = mpsc_queue_init(&e->metric_queue, o.queue_capacity);
+	if (st != OTLP_OK)
+		goto fail;
+	st = mpsc_queue_init(&e->log_queue, o.queue_capacity);
+	if (st != OTLP_OK)
+		goto fail;
 
+	e->in_flight_signal = 0; /* SPAN */
 	otlp_atomic_store_int(&e->shutdown_requested, 0, OTLP_MEMORY_ORDER_RELEASE);
 	return e;
 
@@ -293,6 +327,8 @@ fail:
 		otlp_free(e->resource_attributes);
 	}
 	otlp_free(e->pending);
+	otlp_free(e->metric_pending);
+	otlp_free(e->log_pending);
 	otlp_free(e);
 	return NULL;
 }
@@ -301,14 +337,25 @@ void
 otlp_exporter_free(otlp_exporter_t *e)
 {
 	otlp_span_t *span;
+	otlp_metric_t *metric;
+	otlp_log_record_t *log;
+	size_t i;
 
 	if (!e)
 		return;
-	/* Drain the queue, freeing any un-sent spans. */
+	/* Drain the queues, freeing any un-sent items. */
 	while ((span = mpsc_queue_pop(&e->queue)) != NULL)
 		otlp_span_free(span);
-	/* Free pending batch. */
+	while ((metric = mpsc_queue_pop(&e->metric_queue)) != NULL)
+		otlp_metric_free(metric);
+	while ((log = mpsc_queue_pop(&e->log_queue)) != NULL)
+		otlp_log_record_free(log);
+	/* Free pending batches. */
 	free_pending_batch(e->pending, e->pending_count);
+	for (i = 0; i < e->metric_pending_count; i++)
+		otlp_metric_free(e->metric_pending[i]);
+	for (i = 0; i < e->log_pending_count; i++)
+		otlp_log_record_free(e->log_pending[i]);
 	/* Free in-flight request. */
 	if (e->in_flight)
 		otlp_http_request_free(e->in_flight);
@@ -316,12 +363,15 @@ otlp_exporter_free(otlp_exporter_t *e)
 	if (e->keepalive_sock)
 		otlp_socket_close(e->keepalive_sock);
 	mpsc_queue_free(&e->queue);
+	mpsc_queue_free(&e->metric_queue);
+	mpsc_queue_free(&e->log_queue);
 	otlp_free(e->pending);
+	otlp_free(e->metric_pending);
+	otlp_free(e->log_pending);
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
 	if (e->resource_attributes)
 	{
-		size_t i;
 		for (i = 0; i < e->n_resource_attributes; i++)
 		{
 			otlp_free((char *) e->resource_attributes[i].key);
@@ -388,7 +438,132 @@ otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_exporter_emit_metric_move(otlp_exporter_t *e, otlp_metric_t *metric)
+{
+	otlp_status_t st;
+
+	if (!e || !metric)
+		return OTLP_ERR_NULL;
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+		return OTLP_ERR_SHUTDOWN;
+
+	st = mpsc_queue_push(&e->metric_queue, metric);
+	if (st != OTLP_OK)
+	{
+		otlp_metric_free(metric);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_metrics_full, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_WARN,
+			 "metric dropped: queue full (size=%zu)",
+			 mpsc_queue_size(&e->metric_queue));
+		return st;
+	}
+	otlp_atomic_fetch_add_u64(
+		&e->emitted_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
+{
+	otlp_status_t st;
+
+	if (!e || !log)
+		return OTLP_ERR_NULL;
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+		return OTLP_ERR_SHUTDOWN;
+
+	st = mpsc_queue_push(&e->log_queue, log);
+	if (st != OTLP_OK)
+	{
+		otlp_log_record_free(log);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_logs_full, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_WARN,
+			 "log dropped: queue full (size=%zu)",
+			 mpsc_queue_size(&e->log_queue));
+		return st;
+	}
+	otlp_atomic_fetch_add_u64(
+		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
+	return OTLP_OK;
+}
+
 /* ── tick (single thread) ─────────────────────────────────────── */
+
+/* Signal kind constants (0=span, 1=metric, 2=log). */
+enum { SIGNAL_SPAN = 0, SIGNAL_METRIC = 1, SIGNAL_LOG = 2 };
+
+/* Clear the pending batch for whichever signal is in-flight. */
+static void
+clear_in_flight_batch(struct otlp_exporter *e)
+{
+	size_t i;
+	switch (e->in_flight_signal)
+	{
+		case SIGNAL_SPAN:
+			free_pending_batch(e->pending, e->pending_count);
+			e->pending_count = 0;
+			e->first_pending_set = false;
+			break;
+		case SIGNAL_METRIC:
+			for (i = 0; i < e->metric_pending_count; i++)
+				otlp_metric_free(e->metric_pending[i]);
+			e->metric_pending_count = 0;
+			e->metric_first_set = false;
+			break;
+		case SIGNAL_LOG:
+			for (i = 0; i < e->log_pending_count; i++)
+				otlp_log_record_free(e->log_pending[i]);
+			e->log_pending_count = 0;
+			e->log_first_set = false;
+			break;
+	}
+	/* Reset retry state for the next batch. */
+	e->attempt = 0;
+	e->backoff_armed = false;
+}
+
+static void
+add_sent_for_signal(struct otlp_exporter *e)
+{
+	switch (e->in_flight_signal)
+	{
+		case SIGNAL_SPAN:
+			otlp_atomic_fetch_add_u64(
+				&e->sent, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+		case SIGNAL_METRIC:
+			otlp_atomic_fetch_add_u64(&e->sent_metrics,
+				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+		case SIGNAL_LOG:
+			otlp_atomic_fetch_add_u64(&e->sent_logs,
+				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+	}
+}
+
+static void
+add_dropped_err_for_signal(struct otlp_exporter *e)
+{
+	switch (e->in_flight_signal)
+	{
+		case SIGNAL_SPAN:
+			otlp_atomic_fetch_add_u64(&e->dropped_err,
+				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+		case SIGNAL_METRIC:
+			otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
+				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+		case SIGNAL_LOG:
+			otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
+				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+			break;
+	}
+}
 
 static otlp_status_t
 try_start_post(struct otlp_exporter *e)
@@ -418,6 +593,7 @@ try_start_post(struct otlp_exporter *e)
 	}
 	/* The request now owns the donated socket (if any). */
 	e->keepalive_sock = NULL;
+	e->in_flight_signal = SIGNAL_SPAN;
 	e->in_flight_count = e->pending_count;
 	/* IMPORTANT: do NOT free the pending batch here. It must stay
 	 * alive until the in-flight request completes successfully or
@@ -428,9 +604,79 @@ try_start_post(struct otlp_exporter *e)
 	return OTLP_OK;
 }
 
+/* Start a POST for the metric batch. Encodes ExportMetricsServiceRequest
+ * and opens an HTTP request to /v1/metrics. The metric_pending array
+ * stays alive until record_outcome clears it. */
+static otlp_status_t
+try_start_metric_post(struct otlp_exporter *e)
+{
+	struct otlp_pb_buf    body = { 0 };
+	struct otlp_http_url  url;
+	otlp_status_t	     st;
+
+	if (e->in_flight || e->metric_pending_count == 0)
+		return OTLP_OK;
+	st = otlp_encode_export_metrics_service_request(
+		&body, e->service_name,
+		e->resource_attributes, e->n_resource_attributes,
+		NULL, NULL,
+		(const otlp_metric_t *const *) e->metric_pending,
+		e->metric_pending_count);
+	if (st != OTLP_OK)
+		return st;
+	url = e->url;
+	snprintf(url.path, sizeof(url.path), "/v1/metrics");
+	st = otlp_http_request_start(&e->in_flight, &url,
+		e->user_agent, body.data, body.len,
+		e->connect_timeout_ms, e->read_timeout_ms);
+	otlp_pb_buf_free(&body);
+	if (st != OTLP_OK)
+		return st;
+	e->in_flight_signal = SIGNAL_METRIC;
+	e->in_flight_count  = e->metric_pending_count;
+	e->metric_first_set = false;
+	return OTLP_OK;
+}
+
+/* Start a POST for the log batch. Same pattern as metrics, to /v1/logs. */
+static otlp_status_t
+try_start_log_post(struct otlp_exporter *e)
+{
+	struct otlp_pb_buf    body = { 0 };
+	struct otlp_http_url  url;
+	otlp_status_t	     st;
+
+	if (e->in_flight || e->log_pending_count == 0)
+		return OTLP_OK;
+	st = otlp_encode_export_logs_service_request(
+		&body, e->service_name,
+		e->resource_attributes, e->n_resource_attributes,
+		NULL, NULL,
+		(const otlp_log_record_t *const *) e->log_pending,
+		e->log_pending_count);
+	if (st != OTLP_OK)
+		return st;
+	url = e->url;
+	snprintf(url.path, sizeof(url.path), "/v1/logs");
+	st = otlp_http_request_start(&e->in_flight, &url,
+		e->user_agent, body.data, body.len,
+		e->connect_timeout_ms, e->read_timeout_ms);
+	otlp_pb_buf_free(&body);
+	if (st != OTLP_OK)
+		return st;
+	e->in_flight_signal = SIGNAL_LOG;
+	e->in_flight_count  = e->log_pending_count;
+	e->log_first_set    = false;
+	return OTLP_OK;
+}
+
 static void
 record_outcome(struct otlp_exporter *e, int http_status)
 {
+	const char *signal_name =
+		e->in_flight_signal == SIGNAL_METRIC ? "metrics" :
+		e->in_flight_signal == SIGNAL_LOG    ? "logs"    : "spans";
+
 	if (http_status == 0)
 	{
 		/* Network-level failure (no HTTP response received).
@@ -440,14 +686,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			otlp_atomic_fetch_add_u64(&e->dropped_err,
-				e->in_flight_count,
-				OTLP_MEMORY_ORDER_RELAXED);
+			add_dropped_err_for_signal(e);
 			otlp_log(e, OTLP_LOG_ERROR,
-				 "network error: %llu spans dropped (max retries %u)",
+				 "network error: %llu %s dropped (max retries %u)",
 				 (unsigned long long) e->in_flight_count,
-				 e->max_retries);
-			clear_batch(e);
+				 signal_name, e->max_retries);
+			clear_in_flight_batch(e);
 			return;
 		}
 		{
@@ -468,13 +712,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	{
 		otlp_atomic_fetch_add_u64(
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_atomic_fetch_add_u64(
-			&e->sent, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+		add_sent_for_signal(e);
 		otlp_log(e, OTLP_LOG_DEBUG,
-			 "batch sent: %llu spans",
-			 (unsigned long long) e->in_flight_count);
+			 "batch sent: %llu %s",
+			 (unsigned long long) e->in_flight_count, signal_name);
 		/* Success — free the pending batch (kept across retries). */
-		clear_batch(e);
+		clear_in_flight_batch(e);
 		return;
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
@@ -484,16 +727,14 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			otlp_atomic_fetch_add_u64(&e->dropped_err,
-				e->in_flight_count,
-				OTLP_MEMORY_ORDER_RELAXED);
+			add_dropped_err_for_signal(e);
 			otlp_log(e, OTLP_LOG_ERROR,
-				 "HTTP %d: %llu spans dropped (max retries %u)",
+				 "HTTP %d: %llu %s dropped (max retries %u)",
 				 http_status,
 				 (unsigned long long) e->in_flight_count,
-				 e->max_retries);
+				 signal_name, e->max_retries);
 			/* Permanent failure — free the pending batch. */
-			clear_batch(e);
+			clear_in_flight_batch(e);
 		}
 		else
 		{
@@ -513,13 +754,13 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	}
 	/* Permanent 4xx (non-429). */
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-	otlp_atomic_fetch_add_u64(
-		&e->dropped_err, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+	add_dropped_err_for_signal(e);
 	otlp_log(e, OTLP_LOG_ERROR,
-		 "HTTP %d: %llu spans dropped (permanent)",
-		 http_status, (unsigned long long) e->in_flight_count);
+		 "HTTP %d: %llu %s dropped (permanent)",
+		 http_status, (unsigned long long) e->in_flight_count,
+		 signal_name);
 	/* Permanent failure — free the pending batch. */
-	clear_batch(e);
+	clear_in_flight_batch(e);
 }
 
 otlp_status_t
@@ -536,7 +777,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 	{
 		work_done = false;
 
-		/* 1. Drain queue into pending. */
+		/* 1. Drain span queue into pending. */
 		while (e->pending_count < e->pending_cap)
 		{
 			otlp_span_t *s = mpsc_queue_pop(&e->queue);
@@ -552,36 +793,107 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			work_done = true;
 		}
 
-		/* 1b. Null-transport fast path: skip HTTP entirely.
-		 * Respects backoff_armed so retry/backoff behavior is
-		 * testable via the null_transport status callback —
-		 * without this check, the callback would fire every
-		 * tick and exhaust retries instantly. */
-		if (e->null_transport && e->pending_count > 0 &&
-		    !e->backoff_armed) {
-			int http_status = 200;
-			if (e->null_transport_status_fn)
-				http_status = e->null_transport_status_fn(
-				    e->null_transport_status_ctx);
-			e->in_flight_count = e->pending_count;
-			record_outcome(e, http_status);
+		/* 1a. Drain metric queue. */
+		while (e->metric_pending_count < e->metric_pending_cap)
+		{
+			otlp_metric_t *m = mpsc_queue_pop(&e->metric_queue);
+
+			if (!m)
+				break;
+			e->metric_pending[e->metric_pending_count++] = m;
+			if (!e->metric_first_set)
+			{
+				e->metric_first_mono = now_mono_ms();
+				e->metric_first_set = true;
+			}
 			work_done = true;
-			continue;
 		}
 
-		/* 2. Start POST if batch ready. */
-		if (!e->in_flight && !e->backoff_armed &&
-			(e->pending_count >= e->batch_size ||
-				(e->first_pending_set &&
-					now_mono_ms() - e->first_pending_mono >=
-						e->batch_ms) ||
-				(otlp_atomic_load_int(&e->shutdown_requested,
-					 OTLP_MEMORY_ORDER_RELAXED) &&
-					e->pending_count > 0)))
+		/* 1b. Drain log queue. */
+		while (e->log_pending_count < e->log_pending_cap)
 		{
-			otlp_status_t st = try_start_post(e);
-			if (st == OTLP_OK)
+			otlp_log_record_t *lr = mpsc_queue_pop(&e->log_queue);
+
+			if (!lr)
+				break;
+			e->log_pending[e->log_pending_count++] = lr;
+			if (!e->log_first_set)
+			{
+				e->log_first_mono = now_mono_ms();
+				e->log_first_set = true;
+			}
+			work_done = true;
+		}
+
+		/* 1c. Null-transport fast path: try span, then metric, then
+		 * log. Respects backoff_armed so retry/backoff behavior is
+		 * testable via the null_transport status callback. */
+		if (e->null_transport && !e->backoff_armed) {
+			int http_status = 200;
+			bool have_work = false;
+
+			if (e->pending_count > 0) {
+				e->in_flight_signal = SIGNAL_SPAN;
+				e->in_flight_count = e->pending_count;
+				have_work = true;
+			} else if (e->metric_pending_count > 0) {
+				e->in_flight_signal = SIGNAL_METRIC;
+				e->in_flight_count = e->metric_pending_count;
+				have_work = true;
+			} else if (e->log_pending_count > 0) {
+				e->in_flight_signal = SIGNAL_LOG;
+				e->in_flight_count = e->log_pending_count;
+				have_work = true;
+			}
+			if (have_work) {
+				if (e->null_transport_status_fn)
+					http_status = e->null_transport_status_fn(
+					    e->null_transport_status_ctx);
+				record_outcome(e, http_status);
 				work_done = true;
+				continue;
+			}
+		}
+
+		/* 2. Start POST if batch ready — try span, then metric, then
+		 * log. Only one in-flight request at a time (shared across
+		 * all signals). */
+		if (!e->in_flight && !e->backoff_armed)
+		{
+			bool shutdown = otlp_atomic_load_int(
+				&e->shutdown_requested,
+				OTLP_MEMORY_ORDER_RELAXED);
+			uint64_t now_ms = now_mono_ms();
+
+			/* Span batch ready? */
+			if (e->pending_count >= e->batch_size ||
+			    (e->first_pending_set &&
+			     now_ms - e->first_pending_mono >= e->batch_ms) ||
+			    (shutdown && e->pending_count > 0))
+			{
+				if (try_start_post(e) == OTLP_OK)
+					work_done = true;
+			}
+			/* If span didn't start a POST, try metric. */
+			if (!e->in_flight && !e->backoff_armed &&
+			    (e->metric_pending_count >= e->batch_size ||
+			     (e->metric_first_set &&
+			      now_ms - e->metric_first_mono >= e->batch_ms) ||
+			     (shutdown && e->metric_pending_count > 0)))
+			{
+				if (try_start_metric_post(e) == OTLP_OK)
+					work_done = true;
+			}
+			/* If neither started, try log. */
+			if (!e->in_flight && !e->backoff_armed &&
+			    (e->log_pending_count >= e->batch_size ||
+			     (e->log_first_set &&
+			      now_ms - e->log_first_mono >= e->batch_ms) ||
+			     (shutdown && e->log_pending_count > 0)))
+			{
+				if (try_start_log_post(e) == OTLP_OK)
+					work_done = true;
+			}
 		}
 
 		/* 3. Step in-flight request. */
@@ -628,13 +940,31 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 
 		/* 4. Backoff timer. The pending batch is retained
 		 * across retries (freed in record_outcome on success
-		 * or permanent failure); re-encode + retry now. */
+		 * or permanent failure); re-encode + retry now. The
+		 * retry path dispatches based on which signal was last
+		 * in-flight (record_outcome arms backoff only for
+		 * transient failures, which retain the batch). */
 		if (e->backoff_armed && !e->in_flight &&
 			now_mono_ms() >= e->backoff_deadline_mono)
 		{
 			e->backoff_armed = false;
-			if (try_start_post(e) == OTLP_OK && e->in_flight)
-				work_done = true;
+			switch (e->in_flight_signal)
+			{
+				case SIGNAL_SPAN:
+					if (try_start_post(e) == OTLP_OK && e->in_flight)
+						work_done = true;
+					break;
+				case SIGNAL_METRIC:
+					if (try_start_metric_post(e) == OTLP_OK &&
+					    e->in_flight)
+						work_done = true;
+					break;
+				case SIGNAL_LOG:
+					if (try_start_log_post(e) == OTLP_OK &&
+					    e->in_flight)
+						work_done = true;
+					break;
+			}
 		}
 
 		/* 5. If nothing else to do but we're waiting on backoff,
@@ -673,10 +1003,15 @@ otlp_exporter_flush(otlp_exporter_t *e)
 		otlp_exporter_tick(e, 100);
 		now = now_mono_ms();
 	} while ((e->pending_count > 0 || e->in_flight ||
-			 mpsc_queue_size(&e->queue) > 0) &&
+		 mpsc_queue_size(&e->queue) > 0 ||
+		 e->metric_pending_count > 0 ||
+		 mpsc_queue_size(&e->metric_queue) > 0 ||
+		 e->log_pending_count > 0 ||
+		 mpsc_queue_size(&e->log_queue) > 0) &&
 		now < deadline);
 
-	if (e->pending_count > 0 || e->in_flight)
+	if (e->pending_count > 0 || e->in_flight ||
+	    e->metric_pending_count > 0 || e->log_pending_count > 0)
 		return OTLP_ERR_NETWORK;
 	return OTLP_OK;
 }
@@ -869,5 +1204,21 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 		otlp_atomic_load_u64(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->network_err =
 		otlp_atomic_load_u64(&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted_metrics =
+		otlp_atomic_load_u64(&e->emitted_metrics, OTLP_MEMORY_ORDER_RELAXED);
+	out->sent_metrics =
+		otlp_atomic_load_u64(&e->sent_metrics, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_metrics_full =
+		otlp_atomic_load_u64(&e->dropped_metrics_full, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_metrics_err =
+		otlp_atomic_load_u64(&e->dropped_metrics_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted_logs =
+		otlp_atomic_load_u64(&e->emitted_logs, OTLP_MEMORY_ORDER_RELAXED);
+	out->sent_logs =
+		otlp_atomic_load_u64(&e->sent_logs, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_logs_full =
+		otlp_atomic_load_u64(&e->dropped_logs_full, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_logs_err =
+		otlp_atomic_load_u64(&e->dropped_logs_err, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
