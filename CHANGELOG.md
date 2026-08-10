@@ -4,6 +4,45 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.41] - 2026-08-10
+
+Move-emit leak on shutdown.
+
+### Fixed — donated span/metric/log leaked on shutdown-return path
+
+`otlp_exporter_emit_move`, `otlp_exporter_emit_metric_move`, and
+`otlp_exporter_emit_log_move` take ownership of the donated item on
+call entry. The public docstring says: "The exporter frees the
+span once it has been encoded (or dropped on shutdown)."
+
+The implementation honored this on the BUFFER_FULL path
+(`otlp_*_free` + counter increment) but NOT on the SHUTDOWN path.
+When shutdown was requested between the caller's allocation and
+the move call, the move variant returned `OTLP_ERR_SHUTDOWN`
+without freeing the donated item — leaking it.
+
+The clone-and-move wrappers (`emit_metric`, `emit_log`) inherited
+the bug: they allocated a clone, then delegated to the move
+variant, which leaked the clone on shutdown.
+
+All three move variants now free the donated item before returning
+SHUTDOWN, matching the queue-full behavior and the documented
+contract.
+
+### Added — regression properties
+
+Three new properties in `test_property_async_metrics` exercise
+the shutdown-drop path under ASAN:
+- `prop_async_span_shutdown_drop`
+- `prop_async_metric_shutdown_drop`
+- `prop_async_log_shutdown_drop`
+
+Each allocates a fresh item, calls shutdown, then calls the move
+variant and asserts SHUTDOWN return. ASAN catches the leak if the
+free is missing.
+
+37/37 tests pass. Zero warnings. ASAN clean.
+
 ## [0.5.40] - 2026-08-10
 
 MECE refactor: metric/log POST builders + keepalive reuse.
