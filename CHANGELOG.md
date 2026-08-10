@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.39] - 2026-08-10
+
+Defensive coding + batch encode benchmark.
+
+### Fixed — unchecked `otlp_pb_buf_init` returns
+
+`try_start_metric_post` and `try_start_log_post` called
+`otlp_pb_buf_init(&body, ...)` without checking the return value.
+On allocation failure, the encoder would write into a zero-cap
+buffer and the subsequent `otlp_encode_*` would return an error
+that was propagated — but the failure was reported against the
+encoder, not the allocation, making the failure path harder to
+diagnose.
+
+Both call sites now capture and return the init status directly.
+The bug had no functional impact in practice (the allocator path
+succeeded), but the failure attribution is now correct.
+
+### Added — `bench/bench_encode_batch.c`
+
+A new microbenchmark measuring batch-encode throughput at
+batch sizes 1, 16, 64, 256, 512 with 0 or 5 attributes per span.
+Catches O(n^2) regressions in the encoder and verifies the
+v0.5.38 pre-sized buffer optimization is effective.
+
+Output shows total ns, ns/span, and wire bytes per configuration.
+Linear O(n) scaling verified across the full matrix.
+
+34/34 tests pass. Zero warnings. All sanitizers green.
+
 ## [0.5.38] - 2026-08-10
 
 Pre-size encode buffers based on batch size — eliminates ~10
