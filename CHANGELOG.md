@@ -4,6 +4,59 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.43] - 2026-08-11
+
+Table-driven emit pipeline.
+
+### Changed — descriptor-based dispatch for all six emit functions
+
+The three move-variant emit functions
+(`otlp_exporter_emit_move`, `emit_metric_move`, `emit_log_move`)
+and the three clone-variant emits
+(`emit`, `emit_metric`, `emit_log`) were near-identical copies of
+each other. Each had the same shape: NULL check → shutdown check →
+queue push → on-failure free + counter + log; on-success counter.
+The only per-signal differences were the queue, the counters, the
+typed free/clone functions, and the signal name in the log
+message.
+
+Six functions × ~25 lines of triplicated logic = ~150 lines of
+near-duplicate code. That's a maintenance hazard: a behavior
+change (e.g., adding a new counter, changing log format) had to
+be applied six times.
+
+The new structure:
+
+- `struct signal_emit_path` — per-signal descriptor bundling the
+  queue pointer, emitted/dropped counter pointers, type-erased
+  `free_item` and `clone_item` function pointers, and the signal
+  name.
+- `emit_move_common(e, &path, item)` — the core of every move
+  variant. Single owner of the NULL/shutdown/push/stats logic.
+- `emit_clone_common(e, &path, item)` — the core of every clone
+  variant. Calls `emit_move_common` after cloning.
+- Six thin wrappers, one per public emit function. Each builds a
+  descriptor and delegates.
+
+### Why
+
+- **DRY.** Behavior changes touch one helper, not six functions.
+- **OCP.** Adding a fourth signal (e.g., future OTLP profiler) is
+  a one-descriptor addition, not a copy-paste of the entire
+  pipeline.
+- **MECE.** The emit pipeline now has a single owner
+  (`emit_*_common`) per concern (move vs clone). Public functions
+  are pure dispatch.
+
+Type erasure via `void *` is isolated to six tiny
+`*_void` wrappers (`span_free_void`, `metric_clone_void`, etc.).
+The wrappers keep the cast localized; the typed public functions
+retain full type safety.
+
+39/39 tests pass. ASAN clean. The diff is +145/-103 lines, with
+the net increase being descriptor + helpers; the triplicated
+logic is gone.
+
 ## [0.5.42] - 2026-08-11
 
 Clone-variant emit shutdown-before-alloc symmetry.
