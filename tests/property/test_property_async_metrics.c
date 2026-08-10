@@ -362,6 +362,110 @@ prop_async_log_retry(uint64_t seed)
 		stats.dropped_logs_err == 0);
 }
 
+/* Shutdown-drop regression: emit_move / emit_metric_move /
+ * emit_log_move after shutdown must free the donated item.
+ * Docstring contract: "the exporter frees it on drop". ASAN
+ * catches the leak if the free is missing. */
+static int
+prop_async_span_shutdown_drop(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_tracer_t       *tracer;
+	otlp_span_t         *span;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	tracer = otlp_tracer_create("drop", "drop", "1.0");
+	if (!tracer)
+		goto out;
+
+	otlp_exporter_shutdown(exp);
+
+	span = otlp_tracer_start_span(tracer, "post-shutdown");
+	if (!span)
+		goto out;
+	st = otlp_exporter_emit_move(exp, span);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	if (tracer)
+		otlp_tracer_free(tracer);
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+static int
+prop_async_metric_shutdown_drop(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_metric_t       *m;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+
+	otlp_exporter_shutdown(exp);
+
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "post-shutdown", "1",
+			       "", NULL, 0);
+	if (!m)
+		goto out;
+	otlp_metric_record(m, 1.0);
+	otlp_metric_mark_time(m);
+	st = otlp_exporter_emit_metric_move(exp, m);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+static int
+prop_async_log_shutdown_drop(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_log_record_t   *lr;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+
+	otlp_exporter_shutdown(exp);
+
+	lr = otlp_log_record_create(OTLP_SEVERITY_INFO, "post-shutdown");
+	if (!lr)
+		goto out;
+	otlp_log_record_mark_timestamp(lr);
+	st = otlp_exporter_emit_log_move(exp, lr);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	otlp_exporter_free(exp);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -381,6 +485,12 @@ main(void)
 				 "prop_async_metric_retry", 3, 1);
 	failures += property_run(prop_async_log_retry,
 				 "prop_async_log_retry", 3, 1);
+	failures += property_run(prop_async_span_shutdown_drop,
+				 "prop_async_span_shutdown_drop", 3, 1);
+	failures += property_run(prop_async_metric_shutdown_drop,
+				 "prop_async_metric_shutdown_drop", 3, 1);
+	failures += property_run(prop_async_log_shutdown_drop,
+				 "prop_async_log_shutdown_drop", 3, 1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",
