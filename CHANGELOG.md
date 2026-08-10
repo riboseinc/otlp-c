@@ -4,6 +4,45 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.42] - 2026-08-11
+
+Clone-variant emit shutdown-before-alloc symmetry.
+
+### Changed — emit_metric / emit_log check shutdown before cloning
+
+`otlp_exporter_emit` (span clone variant) has always checked
+`shutdown_requested` BEFORE calling `otlp_span_clone`. The metric
+and log equivalents cloned FIRST, then delegated to the move
+variant which re-checks shutdown and (since v0.5.41) frees the
+clone.
+
+The v0.5.41 fix made this correct (no leak) but wasteful: under
+shutdown contention, the clone is allocated and immediately freed.
+For metrics with many attributes / histogram buckets, the wasted
+deep copy is non-trivial.
+
+Both clone variants now check shutdown BEFORE cloning, mirroring
+`otlp_exporter_emit`. Behavior under shutdown is now uniform
+across all three signals: return SHUTDOWN without allocating.
+
+### Added — clone-variant shutdown regression properties
+
+Two new properties in `test_property_async_metrics`:
+- `prop_async_metric_clone_shutdown`
+- `prop_async_log_clone_shutdown`
+
+Each constructs an item, calls shutdown, then calls the clone
+variant and asserts SHUTDOWN return. ASAN-clean.
+
+The external behavior is identical with or without the symmetry
+fix (move variant frees the clone); the perf win is invisible to
+the test. The properties exist to lock in the contract that all
+three clone variants return SHUTDOWN without allocating.
+
+39/39 tests pass on Linux CI (one http-timeout test is a known
+macOS-local flake — 192.0.2.1 routing differs — passes in CI).
+ASAN clean.
+
 ## [0.5.41] - 2026-08-10
 
 Move-emit leak on shutdown.
