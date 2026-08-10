@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.38] - 2026-08-10
+
+Pre-size encode buffers based on batch size — eliminates ~10
+malloc+memcpy+free cycles per batch encode.
+
+### Changed — Pre-sized protobuf body buffers
+
+The encode path initialized the body buffer to 64 bytes (default)
+and grew it via doubling as spans/metrics/logs were encoded. For a
+full batch of 512 spans (~100KB output), this required ~10 growth
+steps, each a malloc + memcpy + free of increasing size.
+
+Now pre-sizes based on batch count:
+- Traces: `n_spans * 256 + 1024` bytes.
+- Metrics: `n_metrics * 128 + 512` bytes.
+- Logs: `n_logs * 128 + 512` bytes.
+
+The estimate has headroom — actual encoded size is typically
+~150-200 bytes per span, ~50-100 bytes per metric/log. The buffer
+still grows if the estimate is too low (graceful degradation).
+
+The synchronous flush paths (`flush_metric`, `flush_log`) encode
+one item at a time — pre-sizing is negligible there and was left
+unchanged.
+
+34/34 tests pass. Zero warnings. All sanitizers green.
+
 ## [0.5.37] - 2026-08-10
 
 Roadmap update — catches docs/roadmap.md up to v0.5.36. The v0.5
