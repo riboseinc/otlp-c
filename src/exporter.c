@@ -606,74 +606,93 @@ struct signal_path
 	otlp_status_t	      (*start_post)(struct otlp_exporter *e);
 };
 
-/* Clear the pending batch for whichever signal is in-flight. */
-static void
-clear_in_flight_batch(struct otlp_exporter *e)
+/* Per-signal descriptor for the record_outcome path. Bundles the
+ * pending batch (type-erased), the sent/dropped counters, and the
+ * signal name so outcome handling is table-driven rather than
+ * switch-on-in_flight_signal.
+ *
+ * Built once at the top of record_outcome; passed by const pointer
+ * to the helpers that need it. */
+struct signal_record_path
 {
-	size_t i;
+	void	    **pending;
+	size_t	     *pending_count;
+	bool	     *first_set;
+	void	   (*free_item)(void *);
+	otlp_atomic_u64 *sent_counter;
+	otlp_atomic_u64 *dropped_err_counter;
+	const char	      *signal_name;
+};
+
+/* Look up the record-path descriptor for the in-flight signal. */
+static struct signal_record_path
+record_path_for(struct otlp_exporter *e)
+{
 	switch (e->in_flight_signal)
 	{
-		case SIGNAL_SPAN:
-			free_pending_batch(e->pending, e->pending_count);
-			e->pending_count = 0;
-			e->first_pending_set = false;
-			break;
 		case SIGNAL_METRIC:
-			for (i = 0; i < e->metric_pending_count; i++)
-				otlp_metric_free(e->metric_pending[i]);
-			e->metric_pending_count = 0;
-			e->metric_first_set = false;
-			break;
+			return (struct signal_record_path){
+				.pending = (void **) e->metric_pending,
+				.pending_count = &e->metric_pending_count,
+				.first_set = &e->metric_first_set,
+				.free_item = metric_free_void,
+				.sent_counter = &e->sent_metrics,
+				.dropped_err_counter = &e->dropped_metrics_err,
+				.signal_name = "metrics",
+			};
 		case SIGNAL_LOG:
-			for (i = 0; i < e->log_pending_count; i++)
-				otlp_log_record_free(e->log_pending[i]);
-			e->log_pending_count = 0;
-			e->log_first_set = false;
-			break;
+			return (struct signal_record_path){
+				.pending = (void **) e->log_pending,
+				.pending_count = &e->log_pending_count,
+				.first_set = &e->log_first_set,
+				.free_item = log_free_void,
+				.sent_counter = &e->sent_logs,
+				.dropped_err_counter = &e->dropped_logs_err,
+				.signal_name = "logs",
+			};
+		case SIGNAL_SPAN:
+		default:
+			return (struct signal_record_path){
+				.pending = (void **) e->pending,
+				.pending_count = &e->pending_count,
+				.first_set = &e->first_pending_set,
+				.free_item = span_free_void,
+				.sent_counter = &e->sent,
+				.dropped_err_counter = &e->dropped_err,
+				.signal_name = "spans",
+			};
 	}
+}
+
+/* Clear the pending batch for whichever signal is in-flight. */
+static void
+clear_in_flight_batch(struct otlp_exporter *e,
+	const struct signal_record_path *p)
+{
+	size_t i;
+	for (i = 0; i < *p->pending_count; i++)
+		p->free_item(p->pending[i]);
+	*p->pending_count = 0;
+	*p->first_set = false;
 	/* Reset retry state for the next batch. */
 	e->attempt = 0;
 	e->backoff_armed = false;
 }
 
 static void
-add_sent_for_signal(struct otlp_exporter *e)
+add_sent_for_signal(const struct signal_record_path *p,
+	uint64_t in_flight_count)
 {
-	switch (e->in_flight_signal)
-	{
-		case SIGNAL_SPAN:
-			otlp_atomic_fetch_add_u64(
-				&e->sent, e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-		case SIGNAL_METRIC:
-			otlp_atomic_fetch_add_u64(&e->sent_metrics,
-				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-		case SIGNAL_LOG:
-			otlp_atomic_fetch_add_u64(&e->sent_logs,
-				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-	}
+	otlp_atomic_fetch_add_u64(
+		p->sent_counter, in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
 }
 
 static void
-add_dropped_err_for_signal(struct otlp_exporter *e)
+add_dropped_err_for_signal(const struct signal_record_path *p,
+	uint64_t in_flight_count)
 {
-	switch (e->in_flight_signal)
-	{
-		case SIGNAL_SPAN:
-			otlp_atomic_fetch_add_u64(&e->dropped_err,
-				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-		case SIGNAL_METRIC:
-			otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
-				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-		case SIGNAL_LOG:
-			otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
-				e->in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-			break;
-	}
+	otlp_atomic_fetch_add_u64(
+		p->dropped_err_counter, in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
 }
 
 static otlp_status_t
@@ -783,9 +802,8 @@ try_start_log_post(struct otlp_exporter *e)
 static void
 record_outcome(struct otlp_exporter *e, int http_status)
 {
-	const char *signal_name =
-		e->in_flight_signal == SIGNAL_METRIC ? "metrics" :
-		e->in_flight_signal == SIGNAL_LOG    ? "logs"    : "spans";
+	struct signal_record_path p = record_path_for(e);
+	uint64_t		       count = e->in_flight_count;
 
 	if (http_status == 0)
 	{
@@ -796,12 +814,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			add_dropped_err_for_signal(e);
+			add_dropped_err_for_signal(&p, count);
 			otlp_log(e, OTLP_LOG_ERROR,
 				 "network error: %llu %s dropped (max retries %u)",
-				 (unsigned long long) e->in_flight_count,
-				 signal_name, e->max_retries);
-			clear_in_flight_batch(e);
+				 (unsigned long long) count,
+				 p.signal_name, e->max_retries);
+			clear_in_flight_batch(e, &p);
 			return;
 		}
 		{
@@ -822,12 +840,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	{
 		otlp_atomic_fetch_add_u64(
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-		add_sent_for_signal(e);
+		add_sent_for_signal(&p, count);
 		otlp_log(e, OTLP_LOG_DEBUG,
 			 "batch sent: %llu %s",
-			 (unsigned long long) e->in_flight_count, signal_name);
+			 (unsigned long long) count, p.signal_name);
 		/* Success — free the pending batch (kept across retries). */
-		clear_in_flight_batch(e);
+		clear_in_flight_batch(e, &p);
 		return;
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
@@ -837,14 +855,13 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
-			add_dropped_err_for_signal(e);
+			add_dropped_err_for_signal(&p, count);
 			otlp_log(e, OTLP_LOG_ERROR,
 				 "HTTP %d: %llu %s dropped (max retries %u)",
-				 http_status,
-				 (unsigned long long) e->in_flight_count,
-				 signal_name, e->max_retries);
+				 http_status, (unsigned long long) count,
+				 p.signal_name, e->max_retries);
 			/* Permanent failure — free the pending batch. */
-			clear_in_flight_batch(e);
+			clear_in_flight_batch(e, &p);
 		}
 		else
 		{
@@ -864,13 +881,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	}
 	/* Permanent 4xx (non-429). */
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-	add_dropped_err_for_signal(e);
+	add_dropped_err_for_signal(&p, count);
 	otlp_log(e, OTLP_LOG_ERROR,
 		 "HTTP %d: %llu %s dropped (permanent)",
-		 http_status, (unsigned long long) e->in_flight_count,
-		 signal_name);
+		 http_status, (unsigned long long) count, p.signal_name);
 	/* Permanent failure — free the pending batch. */
-	clear_in_flight_batch(e);
+	clear_in_flight_batch(e, &p);
 }
 
 otlp_status_t
