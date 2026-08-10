@@ -59,6 +59,33 @@ being solid.
 | 27 | HTTP keep-alive + connection reuse | Done | #25 |
 | 42 | Slab allocator (standalone) | Done | #25 |
 
+### v0.5.18–v0.5.36 — correctness, architecture, API completion
+
+| Version | Item | PR |
+|---|---|---|
+| 0.5.18 | TSAN race fix in test infrastructure (atomic echo_server state) | #49 |
+| 0.5.19 | Policy-docs staleness audit (SECURITY.md, README, etc.) | #48 |
+| 0.5.20 | Resource attributes (string-only, additive to opts) | #50 |
+| 0.5.21 | Configurable flush_timeout_ms + multithread example + null_transport backoff fix | #51 |
+| 0.5.22 | W3C Baggage + traceparent_format_raw DRY extraction | #52 |
+| 0.5.23 | Diagnostic callback + **critical MPSC data-loss fix** (queue never enforced capacity) | #53 |
+| 0.5.24 | Typed Resource attributes (int64/double/bool) | #54 |
+| 0.5.25 | HTTP connect/read timeout enforcement (was dead config) | #55 |
+| 0.5.26 | Configurable metric temporality + is_monotonic (was hardcoded) | #56 |
+| 0.5.27 | Header audit + emit benchmark + compile-time cap overrides | #57 |
+| 0.5.28 | **Async metric/log batching** (the #1 architectural gap) | #58 |
+| 0.5.29 | Documentation accuracy audit (CLAUDE.md + architecture + README) | #59 |
+| 0.5.30 | tick() DRY refactor (table-driven struct signal_path dispatch) | #60 |
+| 0.5.31 | emit_metric / emit_log clone variants (API symmetry) | #61 |
+| 0.5.32 | Decouple internal_util.h + span_clone DRY + cookbook patterns | #62 |
+| 0.5.33 | **Fix: span_clone dropped event/link attributes** + flush stats gap | #63 |
+| 0.5.34 | Multi-signal concurrency stress test (8 threads × 3 signals, TSAN-clean) | #64 |
+| 0.5.35 | Fix: null_transport backoff-retry double-processing + metric/log retry tests | #65 |
+| 0.5.36 | CLAUDE.md + README accuracy audit | #66 |
+
+**Key metrics (v0.5.36):** 76 TODOs complete, 34 tests, 7 correctness
+bugs found and fixed, all sanitizers green, zero warnings.
+
 ## Deferred (post-1.0)
 
 These are documented in TODO.complete/ with full specs but not on
@@ -73,7 +100,7 @@ the v1.0 critical path. Reasons vary (see each file).
 
 | # | Item | Reason |
 |---|---|---|
-| 11 | FreeBSD CI | CI matrix complexity. WONTFIX for v0.x. |
+| 11 | FreeBSD CI | Best-effort: in CI matrix via vmactions/freebsd-vm (continue-on-error). |
 | 29 | Retrace otel sink | Separate project. |
 | 30 | Language bindings | Each binding is its own repo. |
 | 31 | Distro packaging | Linux distros are slow; separate effort. |
