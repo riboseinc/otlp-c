@@ -423,7 +423,12 @@ otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 	if (!e || !span)
 		return OTLP_ERR_NULL;
 	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	{
+		/* Honor the move contract: we own the span from call entry.
+		 * The docstring promises the library frees on drop. */
+		otlp_span_free(span);
 		return OTLP_ERR_SHUTDOWN;
+	}
 
 	st = mpsc_queue_push(&e->queue, span);
 	if (st != OTLP_OK)
@@ -448,7 +453,10 @@ otlp_exporter_emit_metric_move(otlp_exporter_t *e, otlp_metric_t *metric)
 	if (!e || !metric)
 		return OTLP_ERR_NULL;
 	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	{
+		otlp_metric_free(metric);
 		return OTLP_ERR_SHUTDOWN;
+	}
 
 	st = mpsc_queue_push(&e->metric_queue, metric);
 	if (st != OTLP_OK)
@@ -474,7 +482,10 @@ otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 	if (!e || !log)
 		return OTLP_ERR_NULL;
 	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	{
+		otlp_log_record_free(log);
 		return OTLP_ERR_SHUTDOWN;
+	}
 
 	st = mpsc_queue_push(&e->log_queue, log);
 	if (st != OTLP_OK)
