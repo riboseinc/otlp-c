@@ -33,7 +33,7 @@ otlp_exporter_otel_build_request(const struct otlp_http_url *url,
 	if (!url || !out)
 		return OTLP_ERR_NULL;
 
-	st = otlp_pb_buf_init(&body, 0);
+	st = otlp_pb_buf_init(&body, n_spans * 256 + 1024);
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_encode_export_trace_service_request(
