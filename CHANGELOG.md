@@ -4,6 +4,24 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.37] - 2026-08-10
+
+Roadmap update — catches docs/roadmap.md up to v0.5.36. The v0.5
+section stopped at PR #25 (v0.5.6 era); everything from v0.5.18
+through v0.5.36 (20 releases, 7 correctness fixes, async metrics/
+logs, API completion) was missing.
+
+### Fixed — docs/roadmap.md stale
+
+- Added a "v0.5.18–v0.5.36 enhancements" table with all 20
+  releases from this session (PRs #48-#66).
+- Fixed the FreeBSD CI "Out of scope" claim — FreeBSD IS in the
+  CI matrix via vmactions/freebsd-vm (best-effort, continue-on-error).
+
+This was the last stale documentation in the project. All primary
+docs (CLAUDE.md, README.md, architecture.md, cookbook.md, roadmap.md)
+are now current as of v0.5.36.
+
 ## [0.5.36] - 2026-08-10
 
 CLAUDE.md + README accuracy audit — catches primary documentation
