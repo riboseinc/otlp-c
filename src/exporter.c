@@ -510,6 +510,12 @@ otlp_exporter_emit_metric(otlp_exporter_t *e, const otlp_metric_t *metric)
 
 	if (!e || !metric)
 		return OTLP_ERR_NULL;
+	/* Shutdown check BEFORE clone — mirrors otlp_exporter_emit() and
+	 * avoids a wasted deep copy when the exporter is already
+	 * draining. The move variant re-checks and would free the clone,
+	 * but the alloc+free cycle is pure waste under contention. */
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+		return OTLP_ERR_SHUTDOWN;
 	clone = otlp_metric_clone(metric);
 	if (!clone)
 		return OTLP_ERR_NOMEM;
@@ -523,6 +529,8 @@ otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
 
 	if (!e || !log)
 		return OTLP_ERR_NULL;
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+		return OTLP_ERR_SHUTDOWN;
 	clone = otlp_log_record_clone(log);
 	if (!clone)
 		return OTLP_ERR_NOMEM;
