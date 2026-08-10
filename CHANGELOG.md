@@ -4,6 +4,52 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.44] - 2026-08-11
+
+Table-driven record_outcome.
+
+### Changed — descriptor-based dispatch for outcome handling
+
+`record_outcome` and its three helpers
+(`clear_in_flight_batch`, `add_sent_for_signal`,
+`add_dropped_err_for_signal`) each had a `switch
+(e->in_flight_signal)` with three cases. Three switches × three
+cases = 9-way dispatch spread across four functions. Adding a
+new signal required updating all four.
+
+The new structure mirrors v0.5.43's emit descriptor:
+
+- `struct signal_record_path` — per-signal descriptor: pending
+  array (type-erased), pending_count pointer, first_set pointer,
+  `free_item` fn, `sent_counter`, `dropped_err_counter`,
+  `signal_name`.
+- `record_path_for(e)` — looks up the descriptor for the
+  in-flight signal. Single switch; one location.
+- The three helpers now take `const struct signal_record_path *`
+  and don't switch internally.
+- `record_outcome` builds the descriptor once at the top and
+  passes it to each helper. The signal-name ternary at the top
+  is gone — replaced by `p.signal_name`.
+
+### Why
+
+- **DRY.** Adding a 4th signal is one case in `record_path_for`
+  plus one `signal_record_path` initializer. The helpers and
+  `record_outcome` body don't change.
+- **MECE.** Signal dispatch lives in exactly one place
+  (`record_path_for`). The helpers are signal-agnostic.
+- **Type safety.** Type erasure is isolated to the descriptor's
+  `free_item` field (already wrapped in `*_void` helpers from
+  v0.5.43).
+
+The `free_pending_batch` helper (used only by `exporter_free`)
+remains — it's not on the record_outcome path and would be
+churn to refactor for no architectural win.
+
+39/39 tests pass. ASAN clean. The diff is small (~30 lines net
+delete) but eliminates the last major switch-on-signal pattern
+in the exporter.
+
 ## [0.5.43] - 2026-08-11
 
 Table-driven emit pipeline.
