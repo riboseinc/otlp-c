@@ -622,7 +622,7 @@ try_start_post(struct otlp_exporter *e)
 
 	if (e->in_flight || e->pending_count == 0)
 		return OTLP_OK;
-	st = otlp_exporter_otel_build_request(&e->url,
+	st = otlp_exporter_otel_build_span_request(&e->url,
 		e->user_agent,
 		e->service_name,
 		e->resource_attributes,
@@ -654,37 +654,34 @@ try_start_post(struct otlp_exporter *e)
 	return OTLP_OK;
 }
 
-/* Start a POST for the metric batch. Encodes ExportMetricsServiceRequest
- * and opens an HTTP request to /v1/metrics. The metric_pending array
- * stays alive until record_outcome clears it. */
+/* Start a POST for the metric batch. Mirrors try_start_post: reuses
+ * e->keepalive_sock when available and clears it on return (the
+ * request now owns the socket). The metric_pending array stays
+ * alive until record_outcome clears it. */
 static otlp_status_t
 try_start_metric_post(struct otlp_exporter *e)
 {
-	struct otlp_pb_buf    body = { 0 };
-	struct otlp_http_url  url;
-	otlp_status_t	     st;
+	otlp_status_t st;
 
 	if (e->in_flight || e->metric_pending_count == 0)
 		return OTLP_OK;
-	st = otlp_pb_buf_init(&body, e->metric_pending_count * 128 + 512);
-	if (st != OTLP_OK)
-		return st;
-	st = otlp_encode_export_metrics_service_request(
-		&body, e->service_name,
-		e->resource_attributes, e->n_resource_attributes,
-		NULL, NULL,
+	st = otlp_exporter_otel_build_metric_request(&e->url,
+		e->user_agent,
+		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
 		(const otlp_metric_t *const *) e->metric_pending,
-		e->metric_pending_count);
+		e->metric_pending_count,
+		e->connect_timeout_ms,
+		e->read_timeout_ms,
+		e->keepalive_sock,
+		&e->in_flight);
 	if (st != OTLP_OK)
+	{
+		e->keepalive_sock = NULL;
 		return st;
-	url = e->url;
-	snprintf(url.path, sizeof(url.path), "/v1/metrics");
-	st = otlp_http_request_start(&e->in_flight, &url,
-		e->user_agent, body.data, body.len,
-		e->connect_timeout_ms, e->read_timeout_ms);
-	otlp_pb_buf_free(&body);
-	if (st != OTLP_OK)
-		return st;
+	}
+	e->keepalive_sock   = NULL;
 	e->in_flight_signal = SIGNAL_METRIC;
 	e->in_flight_count  = e->metric_pending_count;
 	e->metric_first_set = false;
@@ -695,31 +692,27 @@ try_start_metric_post(struct otlp_exporter *e)
 static otlp_status_t
 try_start_log_post(struct otlp_exporter *e)
 {
-	struct otlp_pb_buf    body = { 0 };
-	struct otlp_http_url  url;
-	otlp_status_t	     st;
+	otlp_status_t st;
 
 	if (e->in_flight || e->log_pending_count == 0)
 		return OTLP_OK;
-	st = otlp_pb_buf_init(&body, e->log_pending_count * 128 + 512);
-	if (st != OTLP_OK)
-		return st;
-	st = otlp_encode_export_logs_service_request(
-		&body, e->service_name,
-		e->resource_attributes, e->n_resource_attributes,
-		NULL, NULL,
+	st = otlp_exporter_otel_build_log_request(&e->url,
+		e->user_agent,
+		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
 		(const otlp_log_record_t *const *) e->log_pending,
-		e->log_pending_count);
+		e->log_pending_count,
+		e->connect_timeout_ms,
+		e->read_timeout_ms,
+		e->keepalive_sock,
+		&e->in_flight);
 	if (st != OTLP_OK)
+	{
+		e->keepalive_sock = NULL;
 		return st;
-	url = e->url;
-	snprintf(url.path, sizeof(url.path), "/v1/logs");
-	st = otlp_http_request_start(&e->in_flight, &url,
-		e->user_agent, body.data, body.len,
-		e->connect_timeout_ms, e->read_timeout_ms);
-	otlp_pb_buf_free(&body);
-	if (st != OTLP_OK)
-		return st;
+	}
+	e->keepalive_sock   = NULL;
 	e->in_flight_signal = SIGNAL_LOG;
 	e->in_flight_count  = e->log_pending_count;
 	e->log_first_set    = false;
