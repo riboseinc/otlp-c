@@ -666,7 +666,9 @@ try_start_metric_post(struct otlp_exporter *e)
 
 	if (e->in_flight || e->metric_pending_count == 0)
 		return OTLP_OK;
-	otlp_pb_buf_init(&body, e->metric_pending_count * 128 + 512);
+	st = otlp_pb_buf_init(&body, e->metric_pending_count * 128 + 512);
+	if (st != OTLP_OK)
+		return st;
 	st = otlp_encode_export_metrics_service_request(
 		&body, e->service_name,
 		e->resource_attributes, e->n_resource_attributes,
@@ -699,7 +701,9 @@ try_start_log_post(struct otlp_exporter *e)
 
 	if (e->in_flight || e->log_pending_count == 0)
 		return OTLP_OK;
-	otlp_pb_buf_init(&body, e->log_pending_count * 128 + 512);
+	st = otlp_pb_buf_init(&body, e->log_pending_count * 128 + 512);
+	if (st != OTLP_OK)
+		return st;
 	st = otlp_encode_export_logs_service_request(
 		&body, e->service_name,
 		e->resource_attributes, e->n_resource_attributes,
