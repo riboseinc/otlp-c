@@ -386,155 +386,197 @@ otlp_exporter_free(otlp_exporter_t *e)
 
 /* ── emit (any thread) ────────────────────────────────────────── */
 
-otlp_status_t
-otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
+/* Type-erased free / clone wrappers. Each signal's typed function
+ * is wrapped in a void*-signature helper so it can be stored in
+ * the signal_emit_path descriptor and dispatched uniformly. */
+static void
+span_free_void(void *p)
 {
-	otlp_span_t *clone;
+	otlp_span_free(p);
+}
+
+static void
+metric_free_void(void *p)
+{
+	otlp_metric_free(p);
+}
+
+static void
+log_free_void(void *p)
+{
+	otlp_log_record_free(p);
+}
+
+static void *
+span_clone_void(const void *p)
+{
+	return otlp_span_clone((const otlp_span_t *) p);
+}
+
+static void *
+metric_clone_void(const void *p)
+{
+	return otlp_metric_clone((const otlp_metric_t *) p);
+}
+
+static void *
+log_clone_void(const void *p)
+{
+	return otlp_log_record_clone((const otlp_log_record_t *) p);
+}
+
+/* Per-signal descriptor for the emit pipeline. Bundles the queue,
+ * counters, and type-erased free/clone hooks so the emit logic can
+ * be table-driven. Adding a new signal = a new descriptor + a
+ * public wrapper; the core logic doesn't change. */
+struct signal_emit_path
+{
+	struct mpsc_queue *queue;
+	otlp_atomic_u64   *emitted_counter;
+	otlp_atomic_u64   *dropped_full_counter;
+	void (*free_item)(void *);
+	void *(*clone_item)(const void *);
+	const char *signal_name;
+};
+
+/* Core of every emit_move variant. NULL + shutdown + push + stats
+ * are signal-agnostic; only the descriptor varies. */
+static otlp_status_t
+emit_move_common(struct otlp_exporter *e,
+	const struct signal_emit_path *p,
+	void *item)
+{
 	otlp_status_t st;
 
-	if (!e || !span)
+	if (!e || !item)
+		return OTLP_ERR_NULL;
+	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	{
+		/* Honor the move contract: we own the item from call entry.
+		 * The docstring promises the library frees on drop. */
+		p->free_item(item);
+		return OTLP_ERR_SHUTDOWN;
+	}
+
+	st = mpsc_queue_push(p->queue, item);
+	if (st != OTLP_OK)
+	{
+		p->free_item(item);
+		otlp_atomic_fetch_add_u64(
+			p->dropped_full_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_log(e, OTLP_LOG_WARN,
+			 "%s dropped: queue full (size=%zu)",
+			 p->signal_name, mpsc_queue_size(p->queue));
+		return st;
+	}
+	otlp_atomic_fetch_add_u64(
+		p->emitted_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
+	return OTLP_OK;
+}
+
+/* Core of every clone-variant emit. NULL + shutdown checks happen
+ * BEFORE the clone (v0.5.42 symmetry), so we never allocate under
+ * shutdown contention. The move variant's re-check catches the
+ * race between clone and shutdown. */
+static otlp_status_t
+emit_clone_common(struct otlp_exporter *e,
+	const struct signal_emit_path *p,
+	const void *item)
+{
+	void *clone;
+
+	if (!e || !item)
 		return OTLP_ERR_NULL;
 	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 		return OTLP_ERR_SHUTDOWN;
-
-	clone = otlp_span_clone(span);
+	clone = p->clone_item(item);
 	if (!clone)
 		return OTLP_ERR_NOMEM;
-	st = mpsc_queue_push(&e->queue, clone);
-	if (st != OTLP_OK)
-	{
-		otlp_span_free(clone);
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e, OTLP_LOG_WARN,
-			 "span dropped: queue full (size=%zu)",
-			 mpsc_queue_size(&e->queue));
-		return st;
-	}
-	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
-	return OTLP_OK;
+	return emit_move_common(e, p, clone);
 }
 
 otlp_status_t
 otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 {
-	otlp_status_t st;
-
-	if (!e || !span)
-		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
-	{
-		/* Honor the move contract: we own the span from call entry.
-		 * The docstring promises the library frees on drop. */
-		otlp_span_free(span);
-		return OTLP_ERR_SHUTDOWN;
-	}
-
-	st = mpsc_queue_push(&e->queue, span);
-	if (st != OTLP_OK)
-	{
-		otlp_span_free(span);
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e, OTLP_LOG_WARN,
-			 "span dropped: queue full (size=%zu)",
-			 mpsc_queue_size(&e->queue));
-		return st;
-	}
-	otlp_atomic_fetch_add_u64(&e->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
-	return OTLP_OK;
+	struct signal_emit_path p = {
+		.queue = &e->queue,
+		.emitted_counter = &e->emitted,
+		.dropped_full_counter = &e->dropped_full,
+		.free_item = span_free_void,
+		.clone_item = span_clone_void,
+		.signal_name = "span",
+	};
+	return emit_move_common(e, &p, span);
 }
 
 otlp_status_t
 otlp_exporter_emit_metric_move(otlp_exporter_t *e, otlp_metric_t *metric)
 {
-	otlp_status_t st;
-
-	if (!e || !metric)
-		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
-	{
-		otlp_metric_free(metric);
-		return OTLP_ERR_SHUTDOWN;
-	}
-
-	st = mpsc_queue_push(&e->metric_queue, metric);
-	if (st != OTLP_OK)
-	{
-		otlp_metric_free(metric);
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_metrics_full, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e, OTLP_LOG_WARN,
-			 "metric dropped: queue full (size=%zu)",
-			 mpsc_queue_size(&e->metric_queue));
-		return st;
-	}
-	otlp_atomic_fetch_add_u64(
-		&e->emitted_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
-	return OTLP_OK;
+	struct signal_emit_path p = {
+		.queue = &e->metric_queue,
+		.emitted_counter = &e->emitted_metrics,
+		.dropped_full_counter = &e->dropped_metrics_full,
+		.free_item = metric_free_void,
+		.clone_item = metric_clone_void,
+		.signal_name = "metric",
+	};
+	return emit_move_common(e, &p, metric);
 }
 
 otlp_status_t
 otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 {
-	otlp_status_t st;
+	struct signal_emit_path p = {
+		.queue = &e->log_queue,
+		.emitted_counter = &e->emitted_logs,
+		.dropped_full_counter = &e->dropped_logs_full,
+		.free_item = log_free_void,
+		.clone_item = log_clone_void,
+		.signal_name = "log",
+	};
+	return emit_move_common(e, &p, log);
+}
 
-	if (!e || !log)
-		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
-	{
-		otlp_log_record_free(log);
-		return OTLP_ERR_SHUTDOWN;
-	}
-
-	st = mpsc_queue_push(&e->log_queue, log);
-	if (st != OTLP_OK)
-	{
-		otlp_log_record_free(log);
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_logs_full, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e, OTLP_LOG_WARN,
-			 "log dropped: queue full (size=%zu)",
-			 mpsc_queue_size(&e->log_queue));
-		return st;
-	}
-	otlp_atomic_fetch_add_u64(
-		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
-	return OTLP_OK;
+otlp_status_t
+otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
+{
+	struct signal_emit_path p = {
+		.queue = &e->queue,
+		.emitted_counter = &e->emitted,
+		.dropped_full_counter = &e->dropped_full,
+		.free_item = span_free_void,
+		.clone_item = span_clone_void,
+		.signal_name = "span",
+	};
+	return emit_clone_common(e, &p, span);
 }
 
 otlp_status_t
 otlp_exporter_emit_metric(otlp_exporter_t *e, const otlp_metric_t *metric)
 {
-	otlp_metric_t *clone;
-
-	if (!e || !metric)
-		return OTLP_ERR_NULL;
-	/* Shutdown check BEFORE clone — mirrors otlp_exporter_emit() and
-	 * avoids a wasted deep copy when the exporter is already
-	 * draining. The move variant re-checks and would free the clone,
-	 * but the alloc+free cycle is pure waste under contention. */
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
-		return OTLP_ERR_SHUTDOWN;
-	clone = otlp_metric_clone(metric);
-	if (!clone)
-		return OTLP_ERR_NOMEM;
-	return otlp_exporter_emit_metric_move(e, clone);
+	struct signal_emit_path p = {
+		.queue = &e->metric_queue,
+		.emitted_counter = &e->emitted_metrics,
+		.dropped_full_counter = &e->dropped_metrics_full,
+		.free_item = metric_free_void,
+		.clone_item = metric_clone_void,
+		.signal_name = "metric",
+	};
+	return emit_clone_common(e, &p, metric);
 }
 
 otlp_status_t
 otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
 {
-	otlp_log_record_t *clone;
-
-	if (!e || !log)
-		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
-		return OTLP_ERR_SHUTDOWN;
-	clone = otlp_log_record_clone(log);
-	if (!clone)
-		return OTLP_ERR_NOMEM;
-	return otlp_exporter_emit_log_move(e, clone);
+	struct signal_emit_path p = {
+		.queue = &e->log_queue,
+		.emitted_counter = &e->emitted_logs,
+		.dropped_full_counter = &e->dropped_logs_full,
+		.free_item = log_free_void,
+		.clone_item = log_clone_void,
+		.signal_name = "log",
+	};
+	return emit_clone_common(e, &p, log);
 }
 
 /* ── tick (single thread) ─────────────────────────────────────── */
