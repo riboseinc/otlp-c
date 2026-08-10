@@ -4,6 +4,54 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.40] - 2026-08-10
+
+MECE refactor: metric/log POST builders + keepalive reuse.
+
+### Fixed — body leak in metric/log POST paths
+
+`try_start_metric_post` and `try_start_log_post` called
+`otlp_encode_export_*_service_request` after `otlp_pb_buf_init`
+succeeded. When the encoder failed mid-encode (e.g., allocation
+failure during buffer growth), the body buffer was not freed before
+return. The bug only fired under memory pressure but would manifest
+as a heap-buffer leak in long-running exporters.
+
+### Fixed — keepalive socket not reused for metrics/logs
+
+When any in-flight request completed, the keep-alive socket was
+detached and saved in `e->keepalive_sock`. The span POST path
+(`try_start_post`) reused this socket via
+`otlp_exporter_otel_build_request` → `start_with_socket`. But the
+metric and log POST paths used plain `otlp_http_request_start`,
+which always opens a fresh connection — leaving the saved socket
+orphaned until exporter free.
+
+For a workload that interleaves spans, metrics, and logs, this
+meant 3 TCP connects per batch instead of 1. On TLS-terminated
+sidecar topologies the cost is lower (no TLS handshake in the
+library) but still wasteful.
+
+Both paths now reuse the keepalive socket via the new build helpers.
+
+### Changed — symmetric build helpers per signal
+
+The span-only `otlp_exporter_otel_build_request` is renamed to
+`otlp_exporter_otel_build_span_request`, and two new siblings are
+added: `otlp_exporter_otel_build_metric_request` and
+`otlp_exporter_otel_build_log_request`. All three share a common
+`start_post_common` helper that picks `_start_with_socket` vs
+`_start` based on whether a keepalive socket is available.
+
+This achieves three things:
+- Single owner for encode-failure cleanup (the build helper, not
+  the exporter) — eliminates the body-leak class of bug.
+- Identical keepalive semantics across all three signals.
+- MECE: `exporter.c` (lifecycle) no longer inlines wire-format
+  encode logic; `exporter_otel.c` (wire-format) owns it.
+
+34/34 tests pass. Zero warnings. ASAN clean.
+
 ## [0.5.39] - 2026-08-10
 
 Defensive coding + batch encode benchmark.
