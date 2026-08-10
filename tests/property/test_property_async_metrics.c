@@ -466,6 +466,79 @@ out:
 	return ok;
 }
 
+/* Clone-variant shutdown: emit_metric / emit_log must return SHUTDOWN
+ * without cloning (v0.5.42 symmetry fix with emit()). Verifies the
+ * shutdown-before-clone check is present by asserting SHUTDOWN return
+ * — the move variant would also free a clone if one were made, so the
+ * external behavior is correct either way; the perf win is invisible
+ * to this test. */
+static int
+prop_async_metric_clone_shutdown(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_metric_t       *m;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+
+	m = otlp_metric_create(OTLP_METRIC_COUNTER, "src", "1", "", NULL, 0);
+	if (!m)
+		goto out;
+	otlp_metric_record(m, 1.0);
+	otlp_metric_mark_time(m);
+
+	otlp_exporter_shutdown(exp);
+	st = otlp_exporter_emit_metric(exp, m);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	if (m)
+		otlp_metric_free(m);
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+static int
+prop_async_log_clone_shutdown(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_log_record_t   *lr;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+
+	lr = otlp_log_record_create(OTLP_SEVERITY_INFO, "src");
+	if (!lr)
+		goto out;
+	otlp_log_record_mark_timestamp(lr);
+
+	otlp_exporter_shutdown(exp);
+	st = otlp_exporter_emit_log(exp, lr);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	if (lr)
+		otlp_log_record_free(lr);
+	otlp_exporter_free(exp);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -491,6 +564,10 @@ main(void)
 				 "prop_async_metric_shutdown_drop", 3, 1);
 	failures += property_run(prop_async_log_shutdown_drop,
 				 "prop_async_log_shutdown_drop", 3, 1);
+	failures += property_run(prop_async_metric_clone_shutdown,
+				 "prop_async_metric_clone_shutdown", 3, 1);
+	failures += property_run(prop_async_log_clone_shutdown,
+				 "prop_async_log_clone_shutdown", 3, 1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",
