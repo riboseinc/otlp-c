@@ -4,6 +4,45 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.46] - 2026-08-11
+
+Table-driven exporter free-drain + span clone-shutdown test.
+
+### Changed — descriptor-based dispatch for exporter free-path drain
+
+`otlp_exporter_free` had the last per-signal triplication in the
+exporter: three `while (mpsc_queue_pop(...)) free(...)` loops
+followed by three `for (i ...) free(pending[i])` loops. Six
+near-identical loops, two patterns, three signals.
+
+Replaced with a `signal_drain_path` descriptor + a single
+`drain_signal` helper. `exporter_free` builds a 3-element array
+of descriptors and loops. Adding a 4th signal is one entry, not
+a copy-paste of both loops.
+
+The now-orphaned `free_pending_batch` helper (single caller
+after v0.5.44 refactored the other one away) is removed.
+
+### Moved — `*_void` wrappers promoted to lifecycle section
+
+The `span_free_void`, `metric_free_void`, `log_free_void`
+wrappers were defined in the emit section but are now needed
+earlier (by the drain code in the lifecycle section). Promoted
+to just before the lifecycle section. The clone wrappers stay
+in the emit section (only emit uses them).
+
+### Added — `prop_async_span_clone_shutdown`
+
+The v0.5.42 release added `prop_async_metric_clone_shutdown` and
+`prop_async_log_clone_shutdown` but not the span equivalent —
+`otlp_exporter_emit` (span clone variant) had been doing the
+shutdown-before-clone check correctly since v0.5.x, so there
+was no fix to regression-test. Added for contract symmetry:
+all three clone variants are now locked in to return SHUTDOWN
+without leaking the clone.
+
+40/40 tests pass. ASAN clean.
+
 ## [0.5.45] - 2026-08-11
 
 Table-driven start-post pipeline.
