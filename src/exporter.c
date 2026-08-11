@@ -695,24 +695,89 @@ add_dropped_err_for_signal(const struct signal_record_path *p,
 		p->dropped_err_counter, in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
 }
 
+/* Type-erased wrappers around the typed otlp_exporter_otel_build_*
+ * functions. Each takes const void *const * items so the start-post
+ * descriptor can hold a single function-pointer type. The cast is
+ * localized here; the typed build helpers retain full type safety. */
 static otlp_status_t
-try_start_post(struct otlp_exporter *e)
+build_span_request_void(const struct otlp_http_url *url,
+	const char *user_agent, const char *service_name,
+	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
+	const void *const *items, size_t n_items,
+	uint32_t connect_to, uint32_t read_to,
+	otlp_socket_t *reuse, otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_span_request(url, user_agent,
+		service_name, res_attrs, n_res_attrs,
+		(const otlp_span_t *const *) items, n_items,
+		connect_to, read_to, reuse, out);
+}
+
+static otlp_status_t
+build_metric_request_void(const struct otlp_http_url *url,
+	const char *user_agent, const char *service_name,
+	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
+	const void *const *items, size_t n_items,
+	uint32_t connect_to, uint32_t read_to,
+	otlp_socket_t *reuse, otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_metric_request(url, user_agent,
+		service_name, res_attrs, n_res_attrs,
+		(const otlp_metric_t *const *) items, n_items,
+		connect_to, read_to, reuse, out);
+}
+
+static otlp_status_t
+build_log_request_void(const struct otlp_http_url *url,
+	const char *user_agent, const char *service_name,
+	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
+	const void *const *items, size_t n_items,
+	uint32_t connect_to, uint32_t read_to,
+	otlp_socket_t *reuse, otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_log_request(url, user_agent,
+		service_name, res_attrs, n_res_attrs,
+		(const otlp_log_record_t *const *) items, n_items,
+		connect_to, read_to, reuse, out);
+}
+
+/* Per-signal descriptor for the start-post path. Bundles the
+ * type-erased pending array, count, first_set flag, signal kind,
+ * and a build_request fn pointer so the start logic can be
+ * table-driven rather than triplicated. */
+struct signal_start_path
+{
+	const void	     *pending;
+	size_t	      pending_count;
+	bool	     *first_set;
+	int		      signal_kind;
+	otlp_status_t	  (*build_request)(const struct otlp_http_url *,
+			       const char *, const char *,
+			       const otlp_resource_attr_t *, size_t,
+			       const void *const *, size_t,
+			       uint32_t, uint32_t,
+			       otlp_socket_t *, otlp_http_request_t **);
+};
+
+/* Encode + start the HTTP POST for whichever signal's descriptor
+ * is passed. Caller pre-builds the descriptor from exporter state.
+ * On success: in_flight is set, keepalive_sock is consumed (or
+ * cleared), in_flight_signal/count are populated, first_set cleared.
+ * On failure: keepalive_sock is cleared (the build path closed it
+ * or did not take it). */
+static otlp_status_t
+try_start_post_common(struct otlp_exporter *e,
+	const struct signal_start_path *p)
 {
 	otlp_status_t st;
 
-	if (e->in_flight || e->pending_count == 0)
+	if (e->in_flight || p->pending_count == 0)
 		return OTLP_OK;
-	st = otlp_exporter_otel_build_span_request(&e->url,
-		e->user_agent,
-		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
-		(const otlp_span_t *const *) e->pending,
-		e->pending_count,
-		e->connect_timeout_ms,
-		e->read_timeout_ms,
-		e->keepalive_sock,
-		&e->in_flight);
+	st = p->build_request(&e->url, e->user_agent, e->service_name,
+		e->resource_attributes, e->n_resource_attributes,
+		(const void *const *) p->pending, p->pending_count,
+		e->connect_timeout_ms, e->read_timeout_ms,
+		e->keepalive_sock, &e->in_flight);
 	if (st != OTLP_OK)
 	{
 		/* Build failed. The donated socket (if any) was closed by
@@ -722,81 +787,55 @@ try_start_post(struct otlp_exporter *e)
 		return st;
 	}
 	/* The request now owns the donated socket (if any). */
-	e->keepalive_sock = NULL;
-	e->in_flight_signal = SIGNAL_SPAN;
-	e->in_flight_count = e->pending_count;
+	e->keepalive_sock   = NULL;
+	e->in_flight_signal = p->signal_kind;
+	e->in_flight_count  = p->pending_count;
 	/* IMPORTANT: do NOT free the pending batch here. It must stay
 	 * alive until the in-flight request completes successfully or
 	 * is permanently dropped, so retry can re-encode it. The batch
 	 * is freed in record_outcome on success / permanent-failure
 	 * paths. */
-	e->first_pending_set = false;
+	*p->first_set = false;
 	return OTLP_OK;
 }
 
-/* Start a POST for the metric batch. Mirrors try_start_post: reuses
- * e->keepalive_sock when available and clears it on return (the
- * request now owns the socket). The metric_pending array stays
- * alive until record_outcome clears it. */
+static otlp_status_t
+try_start_post(struct otlp_exporter *e)
+{
+	struct signal_start_path p = {
+		.pending = e->pending,
+		.pending_count = e->pending_count,
+		.first_set = &e->first_pending_set,
+		.signal_kind = SIGNAL_SPAN,
+		.build_request = build_span_request_void,
+	};
+	return try_start_post_common(e, &p);
+}
+
 static otlp_status_t
 try_start_metric_post(struct otlp_exporter *e)
 {
-	otlp_status_t st;
-
-	if (e->in_flight || e->metric_pending_count == 0)
-		return OTLP_OK;
-	st = otlp_exporter_otel_build_metric_request(&e->url,
-		e->user_agent,
-		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
-		(const otlp_metric_t *const *) e->metric_pending,
-		e->metric_pending_count,
-		e->connect_timeout_ms,
-		e->read_timeout_ms,
-		e->keepalive_sock,
-		&e->in_flight);
-	if (st != OTLP_OK)
-	{
-		e->keepalive_sock = NULL;
-		return st;
-	}
-	e->keepalive_sock   = NULL;
-	e->in_flight_signal = SIGNAL_METRIC;
-	e->in_flight_count  = e->metric_pending_count;
-	e->metric_first_set = false;
-	return OTLP_OK;
+	struct signal_start_path p = {
+		.pending = e->metric_pending,
+		.pending_count = e->metric_pending_count,
+		.first_set = &e->metric_first_set,
+		.signal_kind = SIGNAL_METRIC,
+		.build_request = build_metric_request_void,
+	};
+	return try_start_post_common(e, &p);
 }
 
-/* Start a POST for the log batch. Same pattern as metrics, to /v1/logs. */
 static otlp_status_t
 try_start_log_post(struct otlp_exporter *e)
 {
-	otlp_status_t st;
-
-	if (e->in_flight || e->log_pending_count == 0)
-		return OTLP_OK;
-	st = otlp_exporter_otel_build_log_request(&e->url,
-		e->user_agent,
-		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
-		(const otlp_log_record_t *const *) e->log_pending,
-		e->log_pending_count,
-		e->connect_timeout_ms,
-		e->read_timeout_ms,
-		e->keepalive_sock,
-		&e->in_flight);
-	if (st != OTLP_OK)
-	{
-		e->keepalive_sock = NULL;
-		return st;
-	}
-	e->keepalive_sock   = NULL;
-	e->in_flight_signal = SIGNAL_LOG;
-	e->in_flight_count  = e->log_pending_count;
-	e->log_first_set    = false;
-	return OTLP_OK;
+	struct signal_start_path p = {
+		.pending = e->log_pending,
+		.pending_count = e->log_pending_count,
+		.first_set = &e->log_first_set,
+		.signal_kind = SIGNAL_LOG,
+		.build_request = build_log_request_void,
+	};
+	return try_start_post_common(e, &p);
 }
 
 static void
