@@ -4,6 +4,59 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.49] - 2026-08-12
+
+ExponentialHistogram wire-format fixes.
+
+### Fixed — `ExponentialHistogramDataPoint.zero_count` wire type
+
+Schema declared `zero_count` as VARINT, but upstream
+`opentelemetry-proto` declares it as `fixed64` (so it occupies a
+predictable 8 bytes regardless of value). The encoder emitted a
+varint; spec-compliant collectors would see wire type VARINT at
+field 7 (which they expect to be FIXED64), skip the field, and
+lose the zero-bucket count.
+
+Fix: schema wire type is now FIXED64; the encoder uses
+`otlp_pb_field_fixed64`.
+
+### Fixed — `ExponentialHistogram.Buckets.bucket_counts` encoding
+
+The encoder packed `bucket_counts` entries as `fixed64` values
+(8 bytes each). Upstream declares this field as
+`repeated uint64` (varint), deliberately chosen so sparse /
+   small counts compress via varint encoding. The comment in the
+upstream proto even calls this out:
+
+> This field is expected to have many buckets, especially zeros,
+> so uint64 has been selected to ensure varint encoding.
+
+The encoder packed fixed64 values into a LEN-prefixed payload.
+Spec-compliant decoders parse the payload as concatenated
+varints — the high bits of the first 8-byte value would be
+misinterpreted as varint continuation bytes, producing garbage
+counts and consuming the entire payload as one wrong number.
+
+Fix: encoder writes `otlp_pb_varint(&packed, counts[i])` per
+entry. Packed varint format matches upstream.
+
+The wire format now matches `HistogramDataPoint.bucket_counts`
+(repeated fixed64 — different field, different proto declaration)
+only at the wire-type-2 (LEN) outer level; the inner item
+encoding differs (varint for ExpHistogram.Buckets, fixed64 for
+HistogramDataPoint), matching upstream declarations.
+
+### Added — regression property
+
+`prop_metrics_exp_histogram_field_nums` decodes an encoded
+ExponentialHistogram and verifies:
+- DataPoint{8} (positive Buckets sub-message) emits with LEN wire.
+- Inside Buckets: offset{1} VARINT (with zigzag value 10 = zigzag(5)).
+- Inside Buckets: bucket_counts{2} LEN-wire (packed varint).
+- Decodes the 3 packed varints and verifies {1, 3, 2} round-trip.
+
+41/41 tests pass. ASAN clean.
+
 ## [0.5.48] - 2026-08-11
 
 OTLP schema field-number audit — multiple correctness bugs.
