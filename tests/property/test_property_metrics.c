@@ -403,8 +403,9 @@ prop_metrics_attributes_roundtrip(uint64_t seed)
 	    !descend(buf.data, &pos, &end, 1))		/* DataPoint */
 		goto out_buf;
 
-	/* DataPoint: first attribute is at field 1, LEN sub-message (KeyValue). */
-	if (find_at_level(buf.data, pos, end, 1, &wt, &vp, &vl) &&
+	/* DataPoint: attributes at field 7, LEN sub-message (KeyValue).
+	 * Field 1 is reserved in opentelemetry-proto. */
+	if (find_at_level(buf.data, pos, end, 7, &wt, &vp, &vl) &&
 	    wt == OTLP_PB_WIRE_LEN) {
 		/* Inside KeyValue: key{1}, value{2}. Descend into value. */
 		size_t kp = vp, ke = vp + vl;
