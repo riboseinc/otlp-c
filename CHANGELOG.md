@@ -4,6 +4,62 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.45] - 2026-08-11
+
+Table-driven start-post pipeline.
+
+### Changed — descriptor-based dispatch for try_start_*_post
+
+The three start-post functions (`try_start_post`,
+`try_start_metric_post`, `try_start_log_post`) were near-identical
+copies of each other. Each had the same shape: NULL/empty check →
+call the type-specific `otlp_exporter_otel_build_*_request` → on
+failure clear keepalive_sock → on success populate
+in_flight_signal/count, clear first_set.
+
+Three functions × ~33 lines of triplicated logic = ~100 lines of
+near-duplicate code. The v0.5.40 metric/log build helpers already
+shared most of the encode logic with the span path; this release
+finishes the job on the exporter side.
+
+The new structure:
+
+- `struct signal_start_path` — per-signal descriptor: pending
+  array (type-erased), pending_count, first_set pointer,
+  signal_kind, `build_request` fn pointer.
+- `try_start_post_common(e, &path)` — single owner of the
+  NULL/empty check, build call, keepalive handling, and
+  in_flight state population.
+- Three thin wrappers (`try_start_post`,
+  `try_start_metric_post`, `try_start_log_post`) that build a
+  descriptor and delegate.
+- Three `build_*_request_void` wrappers in `exporter.c` that
+  type-erase the items parameter so all three typed build helpers
+  fit one function-pointer signature. The cast is localized to
+  these wrappers; the typed build helpers in `exporter_otel.{h,c}`
+  retain full type safety.
+
+### Why
+
+- **DRY.** Behavior changes (e.g., new keepalive policy, different
+  in_flight setup) touch one helper, not three.
+- **OCP.** Adding a 4th signal is a one-descriptor + one
+  `*_void` wrapper addition, not a copy-paste of the function.
+- **MECE.** The start-post pipeline has a single owner. The
+  typed-vs-type-erased boundary is now explicit: typed at the
+  `exporter_otel` boundary, erased inside `exporter.c`.
+
+This release completes the per-signal dispatch trilogy:
+- v0.5.43: emit pipeline (descriptor + clone/move helpers).
+- v0.5.44: record_outcome (descriptor + outcome helpers).
+- v0.5.45: start_post (descriptor + build helpers).
+
+The exporter's per-signal triplication is now fully eliminated.
+Adding a 4th signal is three descriptors + three wrappers, no
+core-logic changes.
+
+39/39 tests pass. ASAN clean.
+
 ## [0.5.44] - 2026-08-11
 
 Table-driven record_outcome.
