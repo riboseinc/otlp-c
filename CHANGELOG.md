@@ -4,6 +4,51 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.47] - 2026-08-11
+
+Two correctness fixes (audit findings).
+
+### Fixed — `otlp_attribute_copy_all` fail-path leak
+
+When an attribute's value allocation failed after its key was
+already allocated (STRING/BYTES under OOM), the cleanup loop
+freed items 0..i-1 but not the failed item i. The failed item's
+key leaked.
+
+The bug required memory pressure to trigger (so rare in practice)
+but was a real leak that ASAN/LSAN would flag if reached. The
+fail path now frees item i before the loop, leveraging
+`otlp_attribute_free`'s safe handling of partial state.
+
+### Fixed — HTTP response parser: no-Content-Length required EOF
+
+The parser returned "complete" (1) immediately upon receiving
+headers when the response had no `Content-Length`. Per RFC 7230
+§3.3.3 (7), a response without Content-Length has a body that
+extends until connection close. Returning early meant the body
+was captured as "whatever was in the buffer at header-parse time"
+— incomplete if the body was still arriving.
+
+`try_parse_response` now takes an `at_eof` flag. The no-CL case
+returns 0 (incomplete) until EOF, then returns 1 with the full
+buffered body. The Content-Length case is unchanged (CL gives
+the exact body length; EOF is irrelevant).
+
+For OTLP collectors this is theoretical (they always send
+Content-Length), but the parser is a general HTTP/1.1 client and
+the correctness gap was real for any server that omits CL.
+
+### Why no test for the no-CL fix
+
+The fix changes WHEN DONE fires (after EOF vs. after headers),
+not WHETHER. Existing tests already verify the response body is
+correctly captured. A test that distinguishes before/after would
+need to control TCP packet boundaries, which is not reliably
+possible from application code. The fix is correct by inspection
+against RFC 7230.
+
+40/40 tests pass. ASAN clean.
+
 ## [0.5.46] - 2026-08-11
 
 Table-driven exporter free-drain + span clone-shutdown test.
