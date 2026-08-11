@@ -153,14 +153,15 @@ static const struct otlp_field_spec OTLP_SPAN_FIELDS[] = {
 /* ── Status ───────────────────────────────────────────────────── */
 
 enum {
-	OTLP_STATUS_FI_CODE,
 	OTLP_STATUS_FI_MESSAGE,
+	OTLP_STATUS_FI_CODE,
 	OTLP_STATUS_FI_COUNT,
 };
 
 static const struct otlp_field_spec OTLP_STATUS_FIELDS[] = {
-	[OTLP_STATUS_FI_CODE]	 = {"code", 1, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* Field 1 is reserved in opentelemetry-proto (deprecated code enum). */
 	[OTLP_STATUS_FI_MESSAGE]	 = {"message", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_STATUS_FI_CODE]	 = {"code", 3, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
 
 /* ── KeyValue ─────────────────────────────────────────────────── */
@@ -224,16 +225,16 @@ static const struct otlp_field_spec OTLP_KVLIST_FIELDS[] = {
 /* ── Span.Event ───────────────────────────────────────────────── */
 
 enum {
-	OTLP_EVENT_FI_NAME,
 	OTLP_EVENT_FI_TIME,
+	OTLP_EVENT_FI_NAME,
 	OTLP_EVENT_FI_ATTRIBUTES,
 	OTLP_EVENT_FI_DROPPED_ATTRS,
 	OTLP_EVENT_FI_COUNT,
 };
 
 static const struct otlp_field_spec OTLP_EVENT_FIELDS[] = {
-	[OTLP_EVENT_FI_NAME]	       = {"name", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	[OTLP_EVENT_FI_TIME]	       = {"time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EVENT_FI_TIME]	       = {"time_unix_nano", 1, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_EVENT_FI_NAME]	       = {"name", 2, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_EVENT_FI_ATTRIBUTES]     = {"attributes", 3, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
 	[OTLP_EVENT_FI_DROPPED_ATTRS]  = {"dropped_attributes_count", 4, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
@@ -372,18 +373,20 @@ static const struct otlp_field_spec OTLP_HIST_FIELDS[] = {
 /* ── NumberDataPoint (oneof value: as_double=4, as_int=6) ─────── */
 
 enum {
-	OTLP_NDP_FI_ATTRIBUTES,
 	OTLP_NDP_FI_START_TIME,
 	OTLP_NDP_FI_TIME,
 	OTLP_NDP_FI_AS_DOUBLE,
+	OTLP_NDP_FI_ATTRIBUTES,
 	OTLP_NDP_FI_COUNT,
 };
 
 static const struct otlp_field_spec OTLP_NDP_FIELDS[] = {
-	[OTLP_NDP_FI_ATTRIBUTES] = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	/* Field 1 is reserved in opentelemetry-proto. */
 	[OTLP_NDP_FI_START_TIME] = {"start_time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_NDP_FI_TIME]	    = {"time_unix_nano", 3, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_NDP_FI_AS_DOUBLE] = {"as_double", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* Fields 5 (exemplars), 6 (as_int), 8 (flags) not emitted. */
+	[OTLP_NDP_FI_ATTRIBUTES] = {"attributes", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
 };
 
 /* ── HistogramDataPoint ─────────────────────────────────────────
@@ -392,29 +395,30 @@ static const struct otlp_field_spec OTLP_NDP_FIELDS[] = {
  * therefore renamed `OTLP_HDP_FI_NFIELDS` for this table only. */
 
 enum {
-	OTLP_HDP_FI_ATTRIBUTES,
 	OTLP_HDP_FI_START_TIME,
 	OTLP_HDP_FI_TIME,
 	OTLP_HDP_FI_COUNT,
 	OTLP_HDP_FI_SUM,
 	OTLP_HDP_FI_BUCKET_COUNTS,
 	OTLP_HDP_FI_EXPLICIT_BOUNDS,
+	OTLP_HDP_FI_ATTRIBUTES,
 	OTLP_HDP_FI_MIN,
 	OTLP_HDP_FI_MAX,
 	OTLP_HDP_FI_NFIELDS,
 };
 
 static const struct otlp_field_spec OTLP_HDP_FIELDS[] = {
-	[OTLP_HDP_FI_ATTRIBUTES]	    = {"attributes", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	/* Field 1 is reserved in opentelemetry-proto. */
 	[OTLP_HDP_FI_START_TIME]	    = {"start_time_unix_nano", 2, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_HDP_FI_TIME]		    = {"time_unix_nano", 3, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_HDP_FI_COUNT]		    = {"count", 4, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_ALWAYS_EMIT, false},
 	[OTLP_HDP_FI_SUM]		    = {"sum", 5, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 	[OTLP_HDP_FI_BUCKET_COUNTS]	    = {"bucket_counts", 6, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
 	[OTLP_HDP_FI_EXPLICIT_BOUNDS]	    = {"explicit_bounds", 7, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
-	/* [8] reserved */
-	[OTLP_HDP_FI_MIN]		    = {"min", 9, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
-	[OTLP_HDP_FI_MAX]		    = {"max", 10, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	/* Field 8 (exemplars) not emitted. */
+	[OTLP_HDP_FI_ATTRIBUTES]	    = {"attributes", 9, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_HDP_FI_MIN]		    = {"min", 10, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+	[OTLP_HDP_FI_MAX]		    = {"max", 11, OTLP_PB_WIRE_FIXED64, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
 
 /* ── ExponentialHistogramDataPoint ────────────────────────────── */

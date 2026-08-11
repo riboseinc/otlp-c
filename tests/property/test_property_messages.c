@@ -300,6 +300,9 @@ prop_encode_status_present(uint64_t seed)
 	uint32_t fnum;
 	int wtype;
 	int saw_status = 0;
+	int saw_message = 0;
+	int saw_code = 0;
+	int ok = 0;
 
 	(void) seed;
 	span = otlp_span_create("s");
@@ -315,21 +318,53 @@ prop_encode_status_present(uint64_t seed)
 		goto out;
 	while (pos < buf.len)
 	{
+		size_t sub_pos;
+		uint64_t sub_len;
+
 		if (decode_tag(buf.data, buf.len, &pos, &fnum, &wtype) !=
 			OTLP_OK)
 			goto out;
-		if (fnum == 15)
+		if (fnum != 15)
 		{
-			saw_status = 1;
-			break;
+			if (skip_value(buf.data, buf.len, &pos, wtype) != OTLP_OK)
+				goto out;
+			continue;
 		}
-		if (skip_value(buf.data, buf.len, &pos, wtype) != OTLP_OK)
+		/* Wire type LEN — read length and descend into Status. */
+		if (decode_varint(buf.data, buf.len, &pos, &sub_len) != OTLP_OK)
 			goto out;
+		if (wtype != OTLP_PB_WIRE_LEN)
+			goto out;
+		saw_status = 1;
+		sub_pos = pos;
+		/* Verify internal Status fields: message{2} LEN, code{3} VARINT.
+		 * Field 1 is reserved in opentelemetry-proto (v0.5.48 fix). */
+		while (sub_pos < pos + sub_len)
+		{
+			uint32_t sf;
+			int	    swt;
+
+			if (decode_tag(buf.data, pos + sub_len, &sub_pos,
+				&sf, &swt) != OTLP_OK)
+				goto out;
+			if (sf == 2 && swt == OTLP_PB_WIRE_LEN)
+				saw_message = 1;
+			else if (sf == 3 && swt == OTLP_PB_WIRE_VARINT)
+				saw_code = 1;
+			if (skip_value(buf.data, pos + sub_len, &sub_pos,
+				swt) != OTLP_OK)
+				goto out;
+		}
+		break;
 	}
+	/* Pass only if Status emitted AND its internal fields have the
+	 * correct field numbers per opentelemetry-proto. */
+	ok = saw_status && saw_message && saw_code;
+
 out:
 	otlp_pb_buf_free(&buf);
 	otlp_span_free(span);
-	return saw_status;
+	return ok;
 }
 
 /* ── main ─────────────────────────────────────────────────────── */

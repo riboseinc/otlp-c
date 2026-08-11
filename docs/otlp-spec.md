@@ -207,7 +207,7 @@ message Span {
   repeated Link links = 13;
   uint32 dropped_links_count = 14;
   Status status = 15;
-  uint32 flags = 16;
+  fixed32 flags = 16;
 }
 ```
 
@@ -247,14 +247,15 @@ Span outcome.
 
 ```proto
 message Status {
-  StatusCode code = 1;
+  reserved 1;
   string message = 2;
+  StatusCode code = 3;
 }
 ```
 
 Field | Type | Number
 ---|---|---
-`code` | enum `StatusCode` | 1
+`code` | enum `StatusCode` | 3
 `message` | string | 2
 
 #### StatusCode enum
@@ -318,7 +319,7 @@ message Link {
   string trace_state = 3;
   repeated KeyValue attributes = 4;
   uint32 dropped_attributes_count = 5;
-  uint32 flags = 6;
+  fixed32 flags = 6;
 }
 ```
 

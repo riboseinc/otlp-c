@@ -79,14 +79,11 @@ prop_events_field_roundtrip(uint64_t seed)
 	    wt != OTLP_PB_WIRE_LEN)
 		goto out_buf;
 
-	/* Inside Event: name{1} LEN + time{2} FIXED64. */
+	/* Inside Event: time{1} FIXED64 + name{2} LEN. The field order
+	 * matches opentelemetry-proto (time_unix_nano=1, name=2). */
 	sp_pos = vp;
 	sp_end = vp + vl;
 	if (!walker_find_at_level(buf.data, sp_pos, sp_end, 1, &wt, &vp, &vl) ||
-	    wt != OTLP_PB_WIRE_LEN || vl != nlen ||
-	    memcmp(buf.data + vp, name, nlen) != 0)
-		goto out_buf;
-	if (!walker_find_at_level(buf.data, sp_pos, sp_end, 2, &wt, &vp, &vl) ||
 	    wt != OTLP_PB_WIRE_FIXED64 || vl != 8)
 		goto out_buf;
 	{
@@ -96,6 +93,10 @@ prop_events_field_roundtrip(uint64_t seed)
 		if (got != 0xDEADBEEF)
 			goto out_buf;
 	}
+	if (!walker_find_at_level(buf.data, sp_pos, sp_end, 2, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_LEN || vl != nlen ||
+	    memcmp(buf.data + vp, name, nlen) != 0)
+		goto out_buf;
 	ok = 1;
 
 out_buf:
