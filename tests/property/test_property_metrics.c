@@ -550,6 +550,103 @@ out:
 	return ok;
 }
 
+/* ExpHistogram wire-format regression (v0.5.49). zero_count must
+ * emit as FIXED64 (was VARINT); positive.bucket_counts entries must
+ * be varint-packed (was fixed64-packed). Verifies the encoder
+ * matches opentelemetry-proto's Buckets { sint32 offset = 1;
+ * repeated uint64 bucket_counts = 2; }. */
+static int
+prop_metrics_exp_histogram_field_nums(uint64_t seed)
+{
+	otlp_metric_t     *m;
+	struct otlp_pb_buf buf = { 0 };
+	const otlp_metric_t *arr[1] = { NULL };
+	uint64_t	     pos_counts[3] = {1, 3, 2};
+	int		     ok = 0;
+	size_t		     pos, end, ppos, pend;
+	int		     wt;
+	size_t		     vp, vl;
+
+	(void) seed;
+	m = otlp_metric_create(OTLP_METRIC_EXP_HISTOGRAM, "eh", "", "", NULL, 0);
+	if (!m)
+		return 0;
+	/* pos_offset = 5 (non-zero so the encoder emits it; proto3 omits
+	 * zero-valued scalars by default). */
+	if (otlp_metric_set_exp_histogram(m,
+		20, 5, pos_counts, 3, 0, NULL, 0) != OTLP_OK)
+		goto out;
+	arr[0] = m;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_metrics_service_request(
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+
+	pos = 0;
+	end = buf.len;
+	if (!descend(buf.data, &pos, &end, 1)) /* ResourceMetrics */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2)) /* ScopeMetrics */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 2)) /* Metric */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 10)) /* ExponentialHistogram */
+		goto out_buf;
+	if (!descend(buf.data, &pos, &end, 1)) /* DataPoint */
+		goto out_buf;
+
+	/* Positive Buckets sub-message at field 8. */
+	if (!find_at_level(buf.data, pos, end, 8, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_LEN)
+		goto out_buf;
+	ppos = vp;
+	pend = vp + vl;
+
+	/* offset at field 1 (sint32 zigzag → VARINT). Verify zigzag(5)=10. */
+	if (!find_at_level(buf.data, ppos, pend, 1, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_VARINT)
+		goto out_buf;
+	{
+		size_t  p = vp;
+		uint64_t got;
+
+		if (decode_varint(buf.data, vp + vl, &p, &got) != OTLP_OK)
+			goto out_buf;
+		/* zigzag32(5) = 10. */
+		if (got != 10)
+			goto out_buf;
+	}
+
+	/* bucket_counts at field 2 (packed repeated uint64 → LEN). */
+	if (!find_at_level(buf.data, ppos, pend, 2, &wt, &vp, &vl) ||
+	    wt != OTLP_PB_WIRE_LEN)
+		goto out_buf;
+	{
+		/* Decode 3 varints from the packed payload. */
+		size_t  p = vp;
+		size_t  pe = vp + vl;
+		uint64_t got[3] = {0};
+		int	    n_decoded = 0;
+
+		while (p < pe && n_decoded < 3) {
+			uint64_t v;
+
+			if (decode_varint(buf.data, pe, &p, &v) != OTLP_OK)
+				goto out_buf;
+			got[n_decoded++] = v;
+		}
+		ok = (n_decoded == 3 && p == pe &&
+		      got[0] == 1 && got[1] == 3 && got[2] == 2);
+	}
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_metric_free(m);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -571,6 +668,8 @@ main(void)
 				 "prop_metrics_delta_temporality", 5, 1);
 	failures += property_run(prop_metrics_non_monotonic_counter,
 				 "prop_metrics_non_monotonic_counter", 5, 1);
+	failures += property_run(prop_metrics_exp_histogram_field_nums,
+				 "prop_metrics_exp_histogram_field_nums", 5, 1);
 
 	if (failures)
 		printf("[property] %d metrics property(ies) failed\n", failures);

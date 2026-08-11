@@ -272,7 +272,10 @@ emit_exp_histogram_buckets(struct otlp_pb_buf *parent, uint32_t field_num,
 	st = otlp_pb_field_varint(&sub, EHB_F_OFFSET, zigzag32(offset));
 	if (st != OTLP_OK)
 		goto out;
-	/* bucket_counts: packed repeated fixed64 */
+	/* bucket_counts: packed repeated uint64 (varint-encoded entries).
+	 * Different from HistogramDataPoint.bucket_counts (repeated fixed64) —
+	 * opentelemetry-proto deliberately chose uint64 here so sparse /
+	 * small counts compress well via varint. */
 	{
 		struct otlp_pb_buf packed = { 0 };
 		size_t	       i;
@@ -281,7 +284,7 @@ emit_exp_histogram_buckets(struct otlp_pb_buf *parent, uint32_t field_num,
 		if (st != OTLP_OK)
 			goto out;
 		for (i = 0; i < n; i++) {
-			st = otlp_pb_fixed64(&packed, counts[i]);
+			st = otlp_pb_varint(&packed, counts[i]);
 			if (st != OTLP_OK) {
 				otlp_pb_buf_free(&packed);
 				goto out;
@@ -349,8 +352,8 @@ emit_exp_histogram_data_point(struct otlp_pb_buf *parent, uint32_t field_num,
 			goto out;
 	}
 	if (otlp_metric_get_exp_zero_count(m) > 0) {
-		st = otlp_pb_field_varint(&sub, EHDP_F_ZERO_COUNT,
-					  otlp_metric_get_exp_zero_count(m));
+		st = otlp_pb_field_fixed64(&sub, EHDP_F_ZERO_COUNT,
+					   otlp_metric_get_exp_zero_count(m));
 		if (st != OTLP_OK)
 			goto out;
 	}
