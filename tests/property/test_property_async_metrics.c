@@ -509,14 +509,15 @@ out:
 /* Span clone-variant shutdown: otlp_exporter_emit (clone) was the
  * reference implementation that v0.5.42 made metric/log match. This
  * property locks in that all three clone variants return SHUTDOWN
- * without leaking the clone. */
+ * without leaking the clone. Unlike emit_move, emit (clone) does
+ * NOT take ownership — the caller must free the original. */
 static int
 prop_async_span_clone_shutdown(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
 	otlp_exporter_t     *exp;
 	otlp_tracer_t       *tracer;
-	otlp_span_t         *span;
+	otlp_span_t         *span = NULL;
 	otlp_status_t       st;
 	int                  ok = 0;
 
@@ -541,6 +542,9 @@ prop_async_span_clone_shutdown(uint64_t seed)
 	ok = (st == OTLP_ERR_SHUTDOWN);
 
 out:
+	/* emit (clone variant) does not take ownership — free explicitly. */
+	if (span)
+		otlp_span_free(span);
 	if (tracer)
 		otlp_tracer_free(tracer);
 	otlp_exporter_free(exp);
