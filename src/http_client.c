@@ -364,10 +364,16 @@ find_substring(const uint8_t *hay,
 
 /* Try to parse a complete response from r->resp_buf. Returns:
  *   1  — complete; http_status and body filled in.
- *   0  — incomplete; need more data.
- *  -1  — malformed. */
+ *   0  — incomplete; need more data (or, for the no-Content-Length
+ *        case, need EOF before declaring the body complete).
+ *  -1  — malformed.
+ *
+ * `at_eof` is true when the underlying socket has reached EOF. For
+ * responses with Content-Length, EOF is irrelevant (the body length
+ * is known). For responses without Content-Length, the body extends
+ * until close — we must NOT declare complete until EOF. */
 static int
-try_parse_response(struct otlp_http_request *r)
+try_parse_response(struct otlp_http_request *r, bool at_eof)
 {
 	int hdr_end_off;
 	const char *body_start;
@@ -447,12 +453,15 @@ try_parse_response(struct otlp_http_request *r)
 	}
 	else
 	{
-		/* No Content-Length; consume until EOF. The caller's
-		 * read loop detects EOF and calls us here one last time. */
+		/* No Content-Length: body extends until EOF. Without EOF,
+		 * more body bytes might still arrive — do not declare
+		 * complete. RFC 7230 §3.3.3 (7). */
+		if (!at_eof)
+			return 0;
 		r->body_ptr = (const uint8_t *) body_start;
 		r->body_len = r->resp_len - body_off;
-		/* Server sent no Content-Length and no Connection: close →
-		 * framing is ambiguous. Disable keep-alive. */
+		/* Server sent no Content-Length → framing is ambiguous.
+		 * Disable keep-alive; the connection must close. */
 		r->keepalive_eligible = false;
 	}
 	return 1;
@@ -560,7 +569,7 @@ step_reading(struct otlp_http_request *r)
 		r->last_recv_ms = mono_ms();
 	}
 
-	parsed = try_parse_response(r);
+	parsed = try_parse_response(r, false);
 	if (parsed < 0)
 		return OTLP_ERR_INVALID_RESPONSE;
 	if (parsed == 1)
@@ -568,13 +577,14 @@ step_reading(struct otlp_http_request *r)
 		r->state = OTLP_HTTP_REQ_DONE;
 		return OTLP_OK;
 	}
-	/* parsed == 0: need more data. */
+	/* parsed == 0: need more data, OR (no Content-Length) need EOF. */
 	if (otlp_socket_eof(r->sock))
 	{
-		/* Peer closed without sending a complete response.
-		 * Try one final parse — maybe it was complete and
-		 * there was just no Content-Length. */
-		if (try_parse_response(r) == 1)
+		/* Peer closed. Final parse with at_eof=true: for the
+		 * no-Content-Length case, the body is whatever was buffered
+		 * before EOF. For the Content-Length case, this re-parse
+		 * still requires the body to be fully received. */
+		if (try_parse_response(r, true) == 1)
 		{
 			r->state = OTLP_HTTP_REQ_DONE;
 			return OTLP_OK;

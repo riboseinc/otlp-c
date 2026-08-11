@@ -214,7 +214,11 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 	return OTLP_OK;
 
 fail:
-	/* Free partial copies. */
+	/* Free partial copies. The item at index i may have a key
+	 * allocated but no/partial union value (e.g., STRING/BYTES
+	 * where the value alloc just failed). otlp_attribute_free is
+	 * safe on partial state — it no-ops on NULL fields. */
+	otlp_attribute_free(&dst[i]);
 	while (i > 0)
 	{
 		i--;
