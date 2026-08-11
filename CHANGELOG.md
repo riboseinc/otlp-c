@@ -4,6 +4,75 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.48] - 2026-08-11
+
+OTLP schema field-number audit — multiple correctness bugs.
+
+### Fixed — Event field numbers swapped
+
+`Span.Event` schema had `name` at field 1 and `time_unix_nano` at
+field 2. Upstream `opentelemetry-proto` declares them the other
+way: `time_unix_nano = 1`, `name = 2`. The encoder produced
+events with swapped field numbers; spec-compliant collectors
+would skip both fields, losing the event name and timestamp.
+
+### Fixed — Status code field number
+
+`Status` schema had `code` at field 1 and `message` at field 2.
+Upstream reserves field 1 (was a deprecated enum) and uses
+`message = 2`, `code = 3`. Spans with non-default status (OK or
+ERROR) had their status code field skipped by spec-compliant
+collectors, leaving the status as UNSET.
+
+### Fixed — NumberDataPoint attributes field number
+
+`NumberDataPoint` schema had `attributes` at field 1. Upstream
+reserves field 1 and puts `attributes` at field 7. Counter/Gauge
+data points with attributes had them skipped by spec-compliant
+collectors.
+
+### Fixed — HistogramDataPoint field numbers
+
+`HistogramDataPoint` schema had `attributes` at field 1, `min`
+at field 9, `max` at field 10. Upstream reserves field 1 and
+uses `attributes = 9`, `min = 10`, `max = 11`. Histogram data
+points with attributes or min/max had those fields skipped by
+spec-compliant collectors.
+
+### Fixed — docs/otlp-spec.md spec inconsistencies
+
+- `Span.flags`: .proto snippet said `uint32`, table said
+  `fixed32`. Upstream is `fixed32`. Aligned snippet with table.
+- `Link.flags`: .proto snippet said `uint32`. Upstream is
+  `fixed32`. Fixed.
+- `Status`: snippet had `code = 1, message = 2`. Upstream is
+  `reserved 1; message = 2; code = 3`. Fixed.
+
+### Why so many bugs at once?
+
+Audit found the schema was the authoritative source for field
+numbers but had never been cross-checked against
+`opentelemetry-proto` upstream. The docs were also wrong in
+places, and the tests — written against the same wrong schema
+— were self-consistent with the bugs. Cross-checking against
+upstream surfaced four independent field-number errors in one
+pass.
+
+Each error silently produced invalid OTLP wire output. Whether
+collectors recovered depended on which fields were wrong: lost
+attributes, status, event metadata, or histogram bounds. None
+crashed the pipeline; all lost data.
+
+### Added — regression properties
+
+- `prop_encode_status_present` now descends into the Status
+  sub-message and verifies `message{2} LEN + code{3} VARINT`.
+  Previously only checked that Span emitted field 15.
+- `prop_metrics_attributes_roundtrip` updated to look for
+  attributes at field 7 (was field 1).
+
+40/40 tests pass. ASAN clean.
+
 ## [0.5.47] - 2026-08-11
 
 Two correctness fixes (audit findings).
