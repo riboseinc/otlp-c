@@ -210,16 +210,58 @@ normalize_opts(otlp_exporter_opts_t *o)
 	o->queue_capacity = round_up_pow2(o->queue_capacity);
 }
 
-static void
-free_pending_batch(otlp_span_t **pending, size_t count)
-{
-	size_t i;
+/* ── Lifecycle ────────────────────────────────────────────────── */
 
-	for (i = 0; i < count; i++)
-		otlp_span_free(pending[i]);
+/* Type-erased free / clone wrappers. Each signal's typed function
+ * is wrapped in a void*-signature helper so it can be stored in a
+ * signal-path descriptor and dispatched uniformly. Defined early
+ * so all sections (lifecycle, emit, record_outcome, start_post)
+ * can reference them. */
+static void
+span_free_void(void *p)
+{
+	otlp_span_free(p);
 }
 
-/* ── Lifecycle ────────────────────────────────────────────────── */
+static void
+metric_free_void(void *p)
+{
+	otlp_metric_free(p);
+}
+
+static void
+log_free_void(void *p)
+{
+	otlp_log_record_free(p);
+}
+
+/* Per-signal descriptor for the free-path drain. Bundles the queue
+ * (to pop un-sent items from) with the pending array (to free
+ * batched-but-not-yet-POSTed items) and the type-erased free fn.
+ *
+ * Used by otlp_exporter_free to drain all three signals in one loop
+ * instead of triplicating the drain+free_pending pair. */
+struct signal_drain_path
+{
+	struct mpsc_queue *queue;
+	void	     **pending;
+	size_t	      pending_count;
+	void	   (*free_item)(void *);
+};
+
+/* Drain one signal: pop everything from the queue and free it,
+ * then free the pending batch. */
+static void
+drain_signal(const struct signal_drain_path *p)
+{
+	void  *item;
+	size_t i;
+
+	while ((item = mpsc_queue_pop(p->queue)) != NULL)
+		p->free_item(item);
+	for (i = 0; i < p->pending_count; i++)
+		p->free_item(p->pending[i]);
+}
 
 otlp_exporter_t *
 otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
@@ -338,26 +380,34 @@ fail:
 void
 otlp_exporter_free(otlp_exporter_t *e)
 {
-	otlp_span_t *span;
-	otlp_metric_t *metric;
-	otlp_log_record_t *log;
-	size_t i;
+	struct signal_drain_path drains[3];
+	size_t		       i;
 
 	if (!e)
 		return;
-	/* Drain the queues, freeing any un-sent items. */
-	while ((span = mpsc_queue_pop(&e->queue)) != NULL)
-		otlp_span_free(span);
-	while ((metric = mpsc_queue_pop(&e->metric_queue)) != NULL)
-		otlp_metric_free(metric);
-	while ((log = mpsc_queue_pop(&e->log_queue)) != NULL)
-		otlp_log_record_free(log);
-	/* Free pending batches. */
-	free_pending_batch(e->pending, e->pending_count);
-	for (i = 0; i < e->metric_pending_count; i++)
-		otlp_metric_free(e->metric_pending[i]);
-	for (i = 0; i < e->log_pending_count; i++)
-		otlp_log_record_free(e->log_pending[i]);
+	/* Drain queues + free pending batches, all signals. The drain
+	 * is table-driven: adding a 4th signal is one entry, not a
+	 * copy-paste of the while + for pair. */
+	drains[0] = (struct signal_drain_path){
+		.queue = &e->queue,
+		.pending = (void **) e->pending,
+		.pending_count = e->pending_count,
+		.free_item = span_free_void,
+	};
+	drains[1] = (struct signal_drain_path){
+		.queue = &e->metric_queue,
+		.pending = (void **) e->metric_pending,
+		.pending_count = e->metric_pending_count,
+		.free_item = metric_free_void,
+	};
+	drains[2] = (struct signal_drain_path){
+		.queue = &e->log_queue,
+		.pending = (void **) e->log_pending,
+		.pending_count = e->log_pending_count,
+		.free_item = log_free_void,
+	};
+	for (i = 0; i < 3; i++)
+		drain_signal(&drains[i]);
 	/* Free in-flight request. */
 	if (e->in_flight)
 		otlp_http_request_free(e->in_flight);
@@ -386,27 +436,9 @@ otlp_exporter_free(otlp_exporter_t *e)
 
 /* ── emit (any thread) ────────────────────────────────────────── */
 
-/* Type-erased free / clone wrappers. Each signal's typed function
- * is wrapped in a void*-signature helper so it can be stored in
- * the signal_emit_path descriptor and dispatched uniformly. */
-static void
-span_free_void(void *p)
-{
-	otlp_span_free(p);
-}
-
-static void
-metric_free_void(void *p)
-{
-	otlp_metric_free(p);
-}
-
-static void
-log_free_void(void *p)
-{
-	otlp_log_record_free(p);
-}
-
+/* Type-erased clone wrappers. The free wrappers
+ * (span_free_void, metric_free_void, log_free_void) are defined
+ * in the Lifecycle section above; they're shared across sections. */
 static void *
 span_clone_void(const void *p)
 {

@@ -506,6 +506,47 @@ out:
 	return ok;
 }
 
+/* Span clone-variant shutdown: otlp_exporter_emit (clone) was the
+ * reference implementation that v0.5.42 made metric/log match. This
+ * property locks in that all three clone variants return SHUTDOWN
+ * without leaking the clone. */
+static int
+prop_async_span_clone_shutdown(uint64_t seed)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp;
+	otlp_tracer_t       *tracer;
+	otlp_span_t         *span;
+	otlp_status_t       st;
+	int                  ok = 0;
+
+	(void)seed;
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "drop";
+	opts.batch_size   = 1;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	tracer = otlp_tracer_create("drop", "drop", "1.0");
+	if (!tracer)
+		goto out;
+
+	span = otlp_tracer_start_span(tracer, "src");
+	if (!span)
+		goto out;
+	otlp_span_mark_end(span);
+
+	otlp_exporter_shutdown(exp);
+	st = otlp_exporter_emit(exp, span);
+	ok = (st == OTLP_ERR_SHUTDOWN);
+
+out:
+	if (tracer)
+		otlp_tracer_free(tracer);
+	otlp_exporter_free(exp);
+	return ok;
+}
+
 static int
 prop_async_log_clone_shutdown(uint64_t seed)
 {
@@ -568,6 +609,8 @@ main(void)
 				 "prop_async_metric_clone_shutdown", 3, 1);
 	failures += property_run(prop_async_log_clone_shutdown,
 				 "prop_async_log_clone_shutdown", 3, 1);
+	failures += property_run(prop_async_span_clone_shutdown,
+				 "prop_async_span_clone_shutdown", 3, 1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",
