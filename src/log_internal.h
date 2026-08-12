@@ -19,7 +19,8 @@ struct otlp_log_record {
 	bool		has_timestamp;
 	uint8_t	trace_id[OTLP_TRACE_ID_LEN];
 	uint8_t	span_id[OTLP_SPAN_ID_LEN];
-	bool		has_trace;
+	bool		has_trace_id;
+	bool		has_span_id;
 	struct otlp_attribute attrs[128];
 	size_t		n_attrs;
 };
@@ -32,6 +33,8 @@ bool			otlp_log_has_timestamp(const otlp_log_record_t *lr);
 const uint8_t	       *otlp_log_get_trace_id(const otlp_log_record_t *lr);
 const uint8_t	       *otlp_log_get_span_id(const otlp_log_record_t *lr);
 bool			otlp_log_has_trace(const otlp_log_record_t *lr);
+bool			otlp_log_has_trace_id(const otlp_log_record_t *lr);
+bool			otlp_log_has_span_id(const otlp_log_record_t *lr);
 const struct otlp_attribute *otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n);
 
 /* Deep-copy a log record. Returns NULL on OOM. The caller owns
