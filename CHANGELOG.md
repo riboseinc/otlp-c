@@ -4,6 +4,50 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.55] - 2026-08-13
+
+Resource attributes array zero-init (UB defense).
+
+### Fixed — `exporter_create` resource_attributes array uninitialized
+
+`otlp_exporter_create` allocated the resource_attributes array
+with `otlp_malloc` (uninitialized). The fail path then iterated
+every slot and called `otlp_free` on each slot's key and value
+pointers.
+
+Under OOM during attribute copy:
+- The full `n_resource_attributes` count was already set.
+- The loop ran past the failure index.
+- Uninitialized slots had garbage key/value pointers.
+- `otlp_free` on garbage pointers is undefined behavior.
+
+In practice this required memory pressure to trigger, but the UB
+was real — under ASAN it would surface as "use of uninitialized
+value" or a wild free.
+
+### Fix
+
+Switched to `otlp_calloc` so unset slots are zero-initialized
+(NULL/NULL). `otlp_free(NULL)` is a no-op, so the fail-path
+iteration is safe regardless of which slot failed.
+
+This matches the pattern already used elsewhere in the codebase:
+- `otlp_span_create` uses `otlp_malloc + memset(0)` (equivalent).
+- `otlp_metric_create`, `otlp_log_record_create` use `otlp_calloc`.
+- `mpsc_queue_init` uses `otlp_calloc`.
+
+The resource_attributes array was the only outlier.
+
+### Same class as v0.5.47
+
+This is the same bug pattern as the `otlp_attribute_copy_all`
+fail-path leak fixed in v0.5.47: a partial-init cleanup loop that
+didn't account for which item actually failed. v0.5.47 fixed the
+attribute-copy path; this release fixes the resource-attribute
+copy path in the exporter constructor.
+
+50/50 tests pass. ASAN clean.
+
 ## [0.5.54] - 2026-08-12
 
 Reject all-zero IDs at set time (W3C §3.1.1 / §3.1.2).
