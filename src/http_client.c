@@ -86,6 +86,14 @@ otlp_http_parse_url(const char *url, struct otlp_http_url *out)
 	if (!url || !out)
 		return OTLP_ERR_NULL;
 
+	/* Reject CR/LF anywhere in the URL. Without this, a caller-
+	 * controlled URL containing "\r\n" could inject arbitrary HTTP
+	 * headers into the request line / Host header (HTTP request
+	 * splitting, CWE-93). */
+	for (p = url; *p != '\0'; p++)
+		if (*p == '\r' || *p == '\n')
+			return OTLP_ERR_INVALID_ARGUMENT;
+
 	/* Accept only http://. */
 	if (strncmp(url, "http://", 7) != 0)
 		return OTLP_ERR_INVALID_ARGUMENT;
@@ -185,6 +193,17 @@ build_request(struct otlp_http_request *r,
 	char head[1024];
 	int n;
 	size_t total;
+	const char *ua = user_agent ? user_agent : "otlp-c";
+	const char *p;
+
+	/* Reject CR/LF in any field that ends up in a header line.
+	 * Without this, a caller-controlled user_agent containing
+	 * "\r\n" could inject arbitrary HTTP headers (CWE-93). The
+	 * URL is validated at parse time, but user_agent is caller-
+	 * supplied and never sanitized before this point. */
+	for (p = ua; *p != '\0'; p++)
+		if (*p == '\r' || *p == '\n')
+			return OTLP_ERR_INVALID_ARGUMENT;
 
 	/* Content-Length is always present; we don't chunk. */
 	n = snprintf(head,
@@ -198,7 +217,7 @@ build_request(struct otlp_http_request *r,
 		"\r\n",
 		url->path,
 		url->host,
-		user_agent ? user_agent : "otlp-c",
+		ua,
 		body_len);
 	if (n < 0 || (size_t) n >= sizeof(head))
 		return OTLP_ERR_OVERFLOW;
