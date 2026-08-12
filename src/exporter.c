@@ -291,8 +291,15 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (o.n_resource_attributes > 0 && o.resource_attributes)
 	{
 		size_t i;
+		/* otlp_calloc (not otlp_malloc): the fail path iterates
+		 * every slot and frees key/value pointers. If a partial
+		 * copy fails partway, slots beyond the failure index are
+		 * uninitialized — otlp_malloc leaves garbage there, and
+		 * otlp_free on garbage pointers is UB. otlp_calloc
+		 * guarantees unset slots are NULL/NULL, which otlp_free
+		 * handles as no-ops. */
 		e->resource_attributes =
-			otlp_malloc(o.n_resource_attributes *
+			otlp_calloc(o.n_resource_attributes,
 				    sizeof(*e->resource_attributes));
 		if (!e->resource_attributes)
 			goto fail;
