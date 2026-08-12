@@ -4,6 +4,61 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.51] - 2026-08-12
+
+Two defensive correctness fixes (slab + sampler).
+
+### Fixed — slab double-free undefined behavior
+
+`otlp_slab_free_ptr` had a code path that called `free(ptr)` on an
+arena pointer when the pointer was inside the arena range but the
+slot wasn't marked in-use (i.e., a double-free or invalid
+pointer). The arena is owned by the slab, not by libc, so
+calling `free()` on an arena address is undefined behavior. Under
+ASAN this surfaces as "free() on non-heap pointer"; in production
+it can corrupt the heap silently.
+
+The defensive fix is to silently no-op: if the pointer is in the
+arena but the slot isn't in-use, return without touching the
+heap. This matches the "double-free is caller UB" contract while
+avoiding UB inside the library.
+
+### Fixed — TraceIdRatioBased sampler endpoint precision
+
+The previous formula:
+```
+double scaled = (double) trace_prefix / (double) UINT64_MAX;
+if (scaled < ratio) sample;
+```
+is mathematically sound but has an off-by-one at the endpoints:
+- `ratio = 1.0`: `scaled < 1.0` is false for `trace_prefix == UINT64_MAX`, so one in 2^64 traces is incorrectly dropped.
+- `ratio = 0.0`: works (always false), but only by luck.
+
+The new code special-cases the endpoints:
+- `ratio <= 0.0`: never sample.
+- `ratio >= 1.0`: always sample.
+- Otherwise: integer comparison `trace_prefix < (uint64_t)(ratio * UINT64_MAX)`.
+
+The integer comparison matches the formula suggested by the
+OpenTelemetry specification and used by otel-cpp, otel-java, and
+otel-go for cross-SDK trace consistency at the boundary.
+
+In practice, the impact was negligible (1 missed trace per 2^64
+at ratio=1.0). The fix is more about spec-compliance and
+interop.
+
+### Added — regression properties
+
+- `prop_slab_double_free_no_crash` (slab): double-frees an arena
+  pointer and asserts no crash. Under ASAN, this catches the
+  pre-v0.5.51 UB.
+- `prop_ratio_one_samples_max_trace_id` (sampler): the all-0xFF
+  trace_id (trace_prefix == UINT64_MAX) must sample at ratio=1.0.
+- `prop_ratio_zero_drops_zero_trace_id` (sampler): the all-zero
+  trace_id (trace_prefix == 0) must drop at ratio=0.0.
+
+44/44 tests pass. ASAN clean.
+
 ## [0.5.50] - 2026-08-12
 
 LogRecord trace_id / span_id independent emission.

@@ -23,8 +23,8 @@ extern "C" {
 
 #define OTLP_C_VERSION_MAJOR 0
 #define OTLP_C_VERSION_MINOR 5
-#define OTLP_C_VERSION_PATCH 50
-#define OTLP_C_VERSION_STRING "0.5.50"
+#define OTLP_C_VERSION_PATCH 51
+#define OTLP_C_VERSION_STRING "0.5.51"
 
 #define OTLP_C_VERSION                                                            \
 	(((uint32_t)OTLP_C_VERSION_MAJOR << 24) |                                 \
