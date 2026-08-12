@@ -94,6 +94,9 @@ otlp_log_record_set_trace_id(otlp_log_record_t *lr, const uint8_t *trace_id)
 {
 	if (!lr || !trace_id)
 		return OTLP_ERR_NULL;
+	/* W3C Trace Context §3.1.1: trace-id MUST NOT be all-zero. */
+	if (otlp_id_is_all_zero(trace_id, OTLP_TRACE_ID_LEN))
+		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(lr->trace_id, trace_id, OTLP_TRACE_ID_LEN);
 	lr->has_trace_id = true;
 	return OTLP_OK;
@@ -104,6 +107,10 @@ otlp_log_record_set_span_id(otlp_log_record_t *lr, const uint8_t *span_id)
 {
 	if (!lr || !span_id)
 		return OTLP_ERR_NULL;
+	/* W3C Trace Context §3.1.2: parent-id (span-id) MUST NOT be
+	 * all-zero. */
+	if (otlp_id_is_all_zero(span_id, OTLP_SPAN_ID_LEN))
+		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(lr->span_id, span_id, OTLP_SPAN_ID_LEN);
 	lr->has_span_id = true;
 	return OTLP_OK;

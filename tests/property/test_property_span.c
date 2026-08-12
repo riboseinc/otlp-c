@@ -281,6 +281,48 @@ prop_setters_null_safe(uint64_t seed)
 	return 1;
 }
 
+/* Regression (v0.5.54): W3C Trace Context forbids all-zero trace-id
+ * and parent-id. The library now rejects them at set time so invalid
+ * IDs never reach the wire. */
+static int
+prop_setters_reject_all_zero_ids(uint64_t seed)
+{
+	otlp_span_t *span;
+	uint8_t	zeros_trace[OTLP_TRACE_ID_LEN] = {0};
+	uint8_t	zeros_span[OTLP_SPAN_ID_LEN] = {0};
+	uint8_t	good_trace[OTLP_TRACE_ID_LEN] = {1};
+	uint8_t	good_span[OTLP_SPAN_ID_LEN] = {1};
+	int	ok = 1;
+
+	(void) seed;
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+
+	if (otlp_span_set_trace_id(span, zeros_trace) !=
+	    OTLP_ERR_INVALID_ARGUMENT)
+		ok = 0;
+	if (otlp_span_set_span_id(span, zeros_span) !=
+	    OTLP_ERR_INVALID_ARGUMENT)
+		ok = 0;
+	if (otlp_span_set_parent_span_id(span, zeros_span) !=
+	    OTLP_ERR_INVALID_ARGUMENT)
+		ok = 0;
+	/* Good IDs still accepted. */
+	if (otlp_span_set_trace_id(span, good_trace) != OTLP_OK)
+		ok = 0;
+	if (otlp_span_set_span_id(span, good_span) != OTLP_OK)
+		ok = 0;
+	if (otlp_span_set_parent_span_id(span, good_span) != OTLP_OK)
+		ok = 0;
+	/* NULL still clears parent. */
+	if (otlp_span_set_parent_span_id(span, NULL) != OTLP_OK)
+		ok = 0;
+
+	otlp_span_free(span);
+	return ok;
+}
+
 /* ── main ─────────────────────────────────────────────────────── */
 
 int
@@ -302,6 +344,9 @@ main(void)
 		prop_mark_time_monotonic, "prop_mark_time_monotonic", 100, 1);
 	failures += property_run(
 		prop_setters_null_safe, "prop_setters_null_safe", 1, 1);
+	failures += property_run(
+		prop_setters_reject_all_zero_ids,
+		"prop_setters_reject_all_zero_ids", 5, 1);
 
 	if (failures)
 		printf("[property] %d span property(ies) failed\n", failures);

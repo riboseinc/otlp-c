@@ -226,3 +226,18 @@ fail:
 	}
 	return OTLP_ERR_NOMEM;
 }
+
+/* ── ID validation ────────────────────────────────────────────── */
+
+bool
+otlp_id_is_all_zero(const uint8_t *id, size_t len)
+{
+	size_t i;
+
+	if (!id || len == 0)
+		return true;
+	for (i = 0; i < len; i++)
+		if (id[i] != 0)
+			return false;
+	return true;
+}
