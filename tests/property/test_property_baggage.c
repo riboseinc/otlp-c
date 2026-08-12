@@ -207,6 +207,117 @@ prop_baggage_header_constant(uint64_t seed)
 	return strcmp(OTLP_CONTEXT_BAGGAGE_HEADER, "baggage") == 0;
 }
 
+/* Regression (v0.5.53): tracestate / baggage values containing
+ * CR/LF must be rejected at extract time. Pre-v0.5.53 the values
+ * were propagated verbatim — if the carrier was HTTP-header-
+ * based, an attacker-controlled incoming request could inject
+ * arbitrary headers into the outgoing request via the propagated
+ * tracestate/baggage (CWE-93). */
+static int
+prop_extract_rejects_crlf_tracestate(uint64_t seed)
+{
+	struct prng	     p;
+	otlp_span_t	   *span;
+	struct test_carrier  carrier = { 0 };
+	otlp_context_t       ctx_in, ctx_out;
+	uint8_t	     trace_id[16];
+	uint8_t	     span_id[8];
+
+	prng_seed(&p, seed);
+	fill_random_ids(&p, trace_id, span_id);
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+	otlp_span_set_trace_id(span, trace_id);
+	otlp_span_set_span_id(span, span_id);
+	ctx_in = otlp_context_from_span(span);
+	if (!ctx_in.has_context)
+		goto out_fail;
+	otlp_context_inject(ctx_in, carrier_set, &carrier);
+
+	/* Overwrite the tracestate entry in the carrier with one
+	 * containing a CRLF injection attempt. */
+	{
+		size_t i;
+		for (i = 0; i < carrier.n; i++) {
+			if (strcmp(carrier.entries[i].key,
+				   OTLP_CONTEXT_TRACESTATE_HEADER) == 0) {
+				snprintf(carrier.entries[i].value,
+					 sizeof(carrier.entries[i].value),
+					 "evil\r\nX-Inject: yes");
+				break;
+			}
+		}
+	}
+
+	ctx_out = otlp_context_extract(carrier_get, &carrier);
+	/* Context itself is valid (traceparent round-trip). Tracestate
+	 * must be empty (CRLF rejected). */
+	if (!ctx_out.has_context)
+		goto out_fail;
+	if (ctx_out.tracestate[0] != '\0')
+		goto out_fail;
+
+	otlp_span_free(span);
+	return 1;
+
+out_fail:
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
+prop_extract_rejects_crlf_baggage(uint64_t seed)
+{
+	struct prng	     p;
+	otlp_span_t	   *span;
+	struct test_carrier  carrier = { 0 };
+	otlp_context_t       ctx_in, ctx_out;
+	uint8_t	     trace_id[16];
+	uint8_t	     span_id[8];
+
+	prng_seed(&p, seed);
+	fill_random_ids(&p, trace_id, span_id);
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+	otlp_span_set_trace_id(span, trace_id);
+	otlp_span_set_span_id(span, span_id);
+	ctx_in = otlp_context_from_span(span);
+	if (!ctx_in.has_context)
+		goto out_fail;
+	snprintf(ctx_in.baggage, sizeof(ctx_in.baggage), "%s",
+		 "key=value");
+	otlp_context_inject(ctx_in, carrier_set, &carrier);
+
+	/* Overwrite baggage with a CRLF injection attempt. */
+	{
+		size_t i;
+		for (i = 0; i < carrier.n; i++) {
+			if (strcmp(carrier.entries[i].key,
+				   OTLP_CONTEXT_BAGGAGE_HEADER) == 0) {
+				snprintf(carrier.entries[i].value,
+					 sizeof(carrier.entries[i].value),
+					 "evil\r\nX-Inject: yes");
+				break;
+			}
+		}
+	}
+
+	ctx_out = otlp_context_extract(carrier_get, &carrier);
+	if (!ctx_out.has_context)
+		goto out_fail;
+	if (ctx_out.baggage[0] != '\0')
+		goto out_fail;
+
+	otlp_span_free(span);
+	return 1;
+
+out_fail:
+	otlp_span_free(span);
+	return 0;
+}
+
 /* DRY regression check: otlp_traceparent_format_raw produces the same
  * output as otlp_traceparent_format for a given span. */
 static int
@@ -260,6 +371,10 @@ main(void)
 				 "prop_baggage_header_constant", 1, 1);
 	failures += property_run(prop_format_raw_matches_format,
 				 "prop_format_raw_matches_format", 50, 1);
+	failures += property_run(prop_extract_rejects_crlf_tracestate,
+				 "prop_extract_rejects_crlf_tracestate", 5, 1);
+	failures += property_run(prop_extract_rejects_crlf_baggage,
+				 "prop_extract_rejects_crlf_baggage", 5, 1);
 
 	if (failures)
 		printf("[property] %d baggage property(ies) failed\n", failures);

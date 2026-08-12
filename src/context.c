@@ -22,6 +22,21 @@ const char OTLP_CONTEXT_TRACEPARENT_HEADER[] = "traceparent";
 const char OTLP_CONTEXT_TRACESTATE_HEADER[]  = "tracestate";
 const char OTLP_CONTEXT_BAGGAGE_HEADER[]     = "baggage";
 
+/* W3C tracestate / baggage values must not contain CR or LF.
+ * Without this check, an attacker-controlled incoming request
+ * could set tracestate/baggage to "\r\nX-Inject: yes" — when
+ * the context is later injected into an outgoing HTTP request,
+ * the CRLF would split into a new header line (CWE-93, header
+ * injection via propagated context). */
+static bool
+contains_crlf(const char *s)
+{
+	for (; *s != '\0'; s++)
+		if (*s == '\r' || *s == '\n')
+			return true;
+	return false;
+}
+
 otlp_context_t
 otlp_context_from_span(const otlp_span_t *span)
 {
@@ -115,11 +130,12 @@ otlp_context_extract(otlp_carrier_get_fn get,
 	ctx.sampled     = (flags & 0x01) != 0;
 	ctx.has_context = true;
 
-	/* Extract tracestate if present. */
+	/* Extract tracestate if present. Reject values containing CR/LF
+	 * (header injection defense; W3C tracestate format forbids them). */
 	{
 		const char *ts = get(carrier_ctx, OTLP_CONTEXT_TRACESTATE_HEADER);
 
-		if (ts && ts[0]) {
+		if (ts && ts[0] && !contains_crlf(ts)) {
 			size_t len = strlen(ts);
 
 			if (len >= OTLP_CONTEXT_TRACESTATE_MAX)
@@ -129,11 +145,12 @@ otlp_context_extract(otlp_carrier_get_fn get,
 		}
 	}
 
-	/* Extract baggage if present. */
+	/* Extract baggage if present. Reject values containing CR/LF
+	 * (header injection defense; W3C baggage format forbids them). */
 	{
 		const char *bg = get(carrier_ctx, OTLP_CONTEXT_BAGGAGE_HEADER);
 
-		if (bg && bg[0]) {
+		if (bg && bg[0] && !contains_crlf(bg)) {
 			size_t len = strlen(bg);
 
 			if (len >= OTLP_CONTEXT_BAGGAGE_MAX)
