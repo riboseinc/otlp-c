@@ -133,6 +133,76 @@ prop_url_default_path(uint64_t seed)
 	return 1;
 }
 
+/* Regression (v0.5.52): user_agent containing CR/LF must be
+ * rejected by otlp_http_request_start. Without this, a caller-
+ * controlled user_agent could inject arbitrary HTTP headers
+ * via build_request's snprintf into the User-Agent line. */
+static int
+prop_user_agent_rejects_crlf(uint64_t seed)
+{
+	struct otlp_http_url u;
+	otlp_http_request_t *req = NULL;
+	otlp_status_t	     st;
+
+	(void) seed;
+	if (otlp_http_parse_url("http://example.com/v1/traces", &u) != OTLP_OK)
+		return 0;
+	/* CRLF injection attempt. */
+	st = otlp_http_request_start(&req, &u, "evil\r\nX-Inject: yes",
+				     (const uint8_t *) "x", 1, 0, 0);
+	if (st != OTLP_ERR_INVALID_ARGUMENT)
+	{
+		if (req)
+			otlp_http_request_free(req);
+		return 0;
+	}
+	/* LF only. */
+	st = otlp_http_request_start(&req, &u, "evil\nX-Inject: yes",
+				     (const uint8_t *) "x", 1, 0, 0);
+	if (st != OTLP_ERR_INVALID_ARGUMENT)
+	{
+		if (req)
+			otlp_http_request_free(req);
+		return 0;
+	}
+	/* Valid user_agent still works. */
+	st = otlp_http_request_start(&req, &u, "otlp-c/0.5.52",
+				     (const uint8_t *) "x", 1, 0, 0);
+	if (st != OTLP_OK)
+		return 0;
+	if (req)
+		otlp_http_request_free(req);
+	return 1;
+}
+
+/* Regression (v0.5.52): URLs containing CR/LF must be rejected.
+ * Without this, a caller-controlled URL could inject arbitrary
+ * HTTP headers into the request line / Host header. */
+static int
+prop_url_rejects_crlf(uint64_t seed)
+{
+	struct otlp_http_url u;
+
+	(void) seed;
+	/* CRLF in host. */
+	if (otlp_http_parse_url("http://evil\r\nx/", &u) !=
+		OTLP_ERR_INVALID_ARGUMENT)
+		return 0;
+	/* CRLF in path. */
+	if (otlp_http_parse_url("http://example.com/p\r\nx", &u) !=
+		OTLP_ERR_INVALID_ARGUMENT)
+		return 0;
+	/* LF only. */
+	if (otlp_http_parse_url("http://evil\nx/", &u) !=
+		OTLP_ERR_INVALID_ARGUMENT)
+		return 0;
+	/* CR only. */
+	if (otlp_http_parse_url("http://evil\rx/", &u) !=
+		OTLP_ERR_INVALID_ARGUMENT)
+		return 0;
+	return 1;
+}
+
 /* ── main ─────────────────────────────────────────────────────── */
 
 int
@@ -152,6 +222,10 @@ main(void)
 		prop_url_default_port, "prop_url_default_port", 1, 1);
 	failures += property_run(
 		prop_url_default_path, "prop_url_default_path", 1, 1);
+	failures += property_run(
+		prop_url_rejects_crlf, "prop_url_rejects_crlf", 1, 1);
+	failures += property_run(
+		prop_user_agent_rejects_crlf, "prop_user_agent_rejects_crlf", 1, 1);
 
 	if (failures)
 		printf("[property] %d url property(ies) failed\n", failures);
