@@ -219,6 +219,35 @@ out:
 	return ok;
 }
 
+/* Regression (v0.5.51): double-free of an arena pointer must NOT
+ * call libc free() (which is UB — the arena is owned by the slab).
+ * The pre-v0.5.51 code fell through to free(ptr) on the path
+ * "in arena but slot not marked used"; ASAN would flag this as
+ * "calling free() on a non-heap pointer". */
+static int
+prop_slab_double_free_no_crash(uint64_t seed)
+{
+	otlp_slab_t    *s;
+	void           *p;
+
+	(void) seed;
+	s = otlp_slab_create(64, 4);
+	if (!s)
+		return 0;
+	p = otlp_slab_alloc(s, 16);
+	if (!p) {
+		otlp_slab_free(s);
+		return 0;
+	}
+	otlp_slab_free_ptr(s, p);
+	/* Second free of the same pointer: must be a silent no-op
+	 * (slot is already not in use). Under ASAN, the pre-v0.5.51
+	 * code would have flagged this as "free() on non-heap pointer". */
+	otlp_slab_free_ptr(s, p);
+	otlp_slab_free(s);
+	return 1;
+}
+
 int
 main(void)
 {
@@ -237,6 +266,8 @@ main(void)
 				 "prop_slab_stats_consistent", 50, 1);
 	failures += property_run(prop_slab_install_global_allocator,
 				 "prop_slab_install_global_allocator", 5, 1);
+	failures += property_run(prop_slab_double_free_no_crash,
+				 "prop_slab_double_free_no_crash", 5, 1);
 
 	if (failures)
 		printf("[property] %d slab property(ies) failed\n", failures);

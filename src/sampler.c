@@ -90,15 +90,28 @@ ratio_should_sample(const otlp_sampler_t *sampler,
 
 	(void) name;
 	(void) kind;
+	/* Endpoints: ratio <= 0 never samples, ratio >= 1 always samples.
+	 * These must be exact because the formula below has off-by-one
+	 * edge effects at the boundary (e.g., trace_prefix == UINT64_MAX
+	 * with ratio = 1.0 would not sample under pure integer compare). */
+	if (rs->ratio <= 0.0) {
+		r.decision = OTLP_SAMPLING_DECISION_NOT_RECORD;
+		return r;
+	}
+	if (rs->ratio >= 1.0) {
+		r.decision = OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED;
+		return r;
+	}
 	/* Use the first 8 bytes of trace_id as a deterministic
 	 * threshold input. Same trace_id → same decision. */
 	memcpy(&trace_prefix, trace_id, 8);
-	/* threshold = ratio * UINT64_MAX (approximate). Compare
-	 * trace_prefix against it. */
+	/* OTel-spec-suggested formula: threshold = ratio * UINT64_MAX.
+	 * Integer comparison matches the otel-cpp / otel-java / otel-go
+	 * samplers for cross-SDK trace consistency at the boundary. */
 	{
-		double scaled = (double) trace_prefix / (double) UINT64_MAX;
+		uint64_t threshold = (uint64_t)(rs->ratio * (double) UINT64_MAX);
 
-		if (scaled < rs->ratio)
+		if (trace_prefix < threshold)
 			r.decision = OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED;
 		else
 			r.decision = OTLP_SAMPLING_DECISION_NOT_RECORD;

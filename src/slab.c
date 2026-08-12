@@ -223,8 +223,13 @@ otlp_slab_free_ptr(otlp_slab_t *slab, void *ptr)
 			slab->free_stack[slab->free_top++] = i;
 			return;
 		}
-		/* Pointer is in arena range but not a valid in-use slot —
-		 * fall through to free() defensively (double-free is UB). */
+		/* Pointer is in arena range but not a valid in-use slot.
+		 * Treat as a double-free or invalid pointer — silently
+		 * ignore. Calling libc free() on an arena pointer is
+		 * undefined behavior (arena is owned by the slab, not
+		 * the libc allocator); the previous code's "defensive"
+		 * free was UB. */
+		return;
 	}
 	slab->stats.malloc_free_fallbacks++;
 	/* Use libc free directly — matches the malloc() used in the
