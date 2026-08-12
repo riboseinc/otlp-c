@@ -341,6 +341,39 @@ out:
 	return ok;
 }
 
+/* Regression (v0.5.54): W3C forbids all-zero trace-id / parent-id
+ * for log correlation too. */
+static int
+prop_logs_setters_reject_all_zero_ids(uint64_t seed)
+{
+	otlp_log_record_t  *lr;
+	uint8_t	zeros_trace[OTLP_TRACE_ID_LEN] = {0};
+	uint8_t	zeros_span[OTLP_SPAN_ID_LEN] = {0};
+	uint8_t	good_trace[OTLP_TRACE_ID_LEN] = {1};
+	uint8_t	good_span[OTLP_SPAN_ID_LEN] = {1};
+	int	ok = 1;
+
+	(void) seed;
+	lr = otlp_log_record_create(OTLP_SEVERITY_INFO, "x");
+	if (!lr)
+		return 0;
+
+	if (otlp_log_record_set_trace_id(lr, zeros_trace) !=
+	    OTLP_ERR_INVALID_ARGUMENT)
+		ok = 0;
+	if (otlp_log_record_set_span_id(lr, zeros_span) !=
+	    OTLP_ERR_INVALID_ARGUMENT)
+		ok = 0;
+	/* Good IDs still accepted. */
+	if (otlp_log_record_set_trace_id(lr, good_trace) != OTLP_OK)
+		ok = 0;
+	if (otlp_log_record_set_span_id(lr, good_span) != OTLP_OK)
+		ok = 0;
+
+	otlp_log_record_free(lr);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -360,6 +393,8 @@ main(void)
 				 "prop_logs_attributes_roundtrip", 200, 1);
 	failures += property_run(prop_logs_trace_id_only_no_zero_span_id,
 				 "prop_logs_trace_id_only_no_zero_span_id", 5, 1);
+	failures += property_run(prop_logs_setters_reject_all_zero_ids,
+				 "prop_logs_setters_reject_all_zero_ids", 5, 1);
 
 	if (failures)
 		printf("[property] %d logs property(ies) failed\n", failures);

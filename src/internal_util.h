@@ -8,6 +8,7 @@
 
 #include <otlp-c/status.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -49,5 +50,13 @@ uint8_t *otlp_dup_bytes(const uint8_t *src, size_t len);
 otlp_status_t otlp_attribute_copy_all(struct otlp_attribute *dst,
 				      const struct otlp_attribute *src,
 				      size_t n);
+
+/* ── ID validation ────────────────────────────────────────────── */
+
+/* Returns true if all `len` bytes of `id` are zero. W3C Trace
+ * Context §3.1.1/§3.1.2 forbids all-zero trace-id and parent-id;
+ * callers must reject all-zero at set time so invalid IDs don't
+ * reach the wire (where receivers reject them). */
+bool otlp_id_is_all_zero(const uint8_t *id, size_t len);
 
 #endif

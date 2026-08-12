@@ -182,6 +182,9 @@ otlp_span_set_trace_id(otlp_span_t *span, const uint8_t *trace_id)
 		return OTLP_ERR_NULL;
 	if (!trace_id)
 		return OTLP_ERR_NULL;
+	/* W3C Trace Context §3.1.1: trace-id MUST NOT be all-zero. */
+	if (otlp_id_is_all_zero(trace_id, OTLP_TRACE_ID_LEN))
+		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(span->trace_id, trace_id, OTLP_TRACE_ID_LEN);
 	return OTLP_OK;
 }
@@ -191,6 +194,10 @@ otlp_span_set_span_id(otlp_span_t *span, const uint8_t *span_id)
 {
 	if (!span || !span_id)
 		return OTLP_ERR_NULL;
+	/* W3C Trace Context §3.1.2: parent-id (span-id) MUST NOT be
+	 * all-zero. */
+	if (otlp_id_is_all_zero(span_id, OTLP_SPAN_ID_LEN))
+		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(span->span_id, span_id, OTLP_SPAN_ID_LEN);
 	return OTLP_OK;
 }
@@ -207,6 +214,10 @@ otlp_span_set_parent_span_id(otlp_span_t *span, const uint8_t *parent)
 		span->has_parent = false;
 		return OTLP_OK;
 	}
+	/* W3C Trace Context §3.1.2: parent-id MUST NOT be all-zero.
+	 * Use NULL to clear. */
+	if (otlp_id_is_all_zero(parent, OTLP_SPAN_ID_LEN))
+		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(span->parent_span_id, parent, OTLP_SPAN_ID_LEN);
 	span->has_parent = true;
 	return OTLP_OK;
