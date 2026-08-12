@@ -4,6 +4,64 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.52] - 2026-08-12
+
+HTTP header injection hardening (CWE-93).
+
+### Fixed — URL parser rejects CR/LF
+
+`otlp_http_parse_url` accepted CR (`\r`) and LF (`\n`) anywhere
+in the host or path. These are the line terminators in HTTP and
+would be written verbatim into the request line and Host header
+by `build_request`'s `snprintf`. A caller-controlled URL
+containing `\r\n` could inject arbitrary HTTP headers — HTTP
+request splitting, CWE-93.
+
+Realistic vectors:
+- A config file that interpolates user input into the OTLP
+  endpoint without sanitization.
+- A service-mesh control plane that propagates a tainted
+  endpoint from one service to another.
+
+The parser now rejects any URL containing `\r` or `\n` with
+`OTLP_ERR_INVALID_ARGUMENT`.
+
+### Fixed — build_request validates user_agent for CR/LF
+
+`build_request` interpolated the caller-supplied `user_agent`
+directly into the User-Agent header line via `snprintf`. A
+user_agent containing `\r\n` could inject arbitrary HTTP
+headers — same CWE-93 class.
+
+Realistic vectors:
+- An application that derives user_agent from runtime state
+  (process name, version string from a build system, etc.) and
+  interpolates unsanitized content.
+- A language VM binding that translates the host language's
+  string type without C-string validation.
+
+`build_request` now scans `user_agent` for `\r` or `\n` and
+returns `OTLP_ERR_INVALID_ARGUMENT` if found.
+
+### Defense in depth
+
+URL validation covers `url->host` and `url->path`. User-agent
+validation covers the remaining caller-supplied header field.
+Together they close all header-injection vectors in the
+library's outgoing POST request. None of the other headers
+(Content-Type, Content-Length, Connection) are caller-
+controlled — they're hardcoded constants or numbers.
+
+### Added — regression properties
+
+- `prop_url_rejects_crlf` — verifies the URL parser rejects
+  URLs with `\r`, `\n`, or both in host or path.
+- `prop_user_agent_rejects_crlf` — verifies
+  `otlp_http_request_start` rejects user_agent strings
+  containing CR/LF and accepts a valid user_agent.
+
+46/46 tests pass. ASAN clean.
+
 ## [0.5.51] - 2026-08-12
 
 Two defensive correctness fixes (slab + sampler).
