@@ -4,6 +4,49 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.50] - 2026-08-12
+
+LogRecord trace_id / span_id independent emission.
+
+### Fixed — asymmetric trace correlation emitted zero-fill bytes
+
+`otlp_log_record` used a single `has_trace` flag set by either
+`set_trace_id` or `set_span_id`. The encoder then unconditionally
+emitted both fields whenever `has_trace` was true.
+
+If the caller set only one ID (e.g., a log correlated to a
+trace_id without a specific span_id), the encoder emitted the
+unset member as 16 or 8 zero bytes. That's a syntactically valid
+proto `bytes` value but an invalid W3C trace_id (all-zero
+trace_id is forbidden per W3C Trace Context §3.1).
+
+Spec-compliant collectors that validate the W3C constraint
+would reject or misroute the log record.
+
+### Changed — split has_trace into has_trace_id + has_span_id
+
+The internal struct now has two independent flags. Each setter
+sets only its own flag. The encoder emits each field only when
+its own flag is set.
+
+`otlp_log_has_trace` (the public accessor) is preserved for
+compatibility and returns the OR of the two new flags — semantically
+"this record has any trace correlation". Two new internal
+accessors `otlp_log_has_trace_id` and `otlp_log_has_span_id`
+support per-field checks.
+
+### Added — regression property
+
+`prop_logs_trace_id_only_no_zero_span_id` sets only trace_id,
+encodes, and verifies:
+- Field 9 (trace_id) is present with the correct bytes.
+- Field 10 (span_id) is absent (not zero-filled).
+
+Pre-v0.5.50 would have emitted 8 zero bytes for span_id; the
+regression test locks in the new behavior.
+
+42/42 tests pass. ASAN clean.
+
 ## [0.5.49] - 2026-08-12
 
 ExponentialHistogram wire-format fixes.
