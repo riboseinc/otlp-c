@@ -173,6 +173,45 @@ prop_default_sampler_is_always_on(uint64_t seed)
 	}
 }
 
+/* Regression (v0.5.51): ratio = 1.0 must sample EVERY trace_id,
+ * including the all-0xFF trace_id (which has trace_prefix ==
+ * UINT64_MAX). The pre-v0.5.51 double-comparison code computed
+ * scaled = UINT64_MAX / UINT64_MAX = 1.0, then `scaled < 1.0`
+ * was false → NOT sampled. The endpoint short-circuit makes the
+ * boundary exact. */
+static int
+prop_ratio_one_samples_max_trace_id(uint64_t seed)
+{
+	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(1.0);
+	uint8_t	      trace_id[16];
+	otlp_sampling_result_t r;
+
+	(void) seed;
+	memset(trace_id, 0xFF, 16);
+	r = s->should_sample(
+	    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+	otlp_sampler_free(s);
+	return r.decision == OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED;
+}
+
+/* Regression (v0.5.51): ratio = 0.0 must NOT sample, including
+ * the all-zero trace_id (which has trace_prefix == 0). The
+ * endpoint short-circuit makes the boundary exact. */
+static int
+prop_ratio_zero_drops_zero_trace_id(uint64_t seed)
+{
+	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(0.0);
+	uint8_t	      trace_id[16];
+	otlp_sampling_result_t r;
+
+	(void) seed;
+	memset(trace_id, 0x00, 16);
+	r = s->should_sample(
+	    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+	otlp_sampler_free(s);
+	return r.decision == OTLP_SAMPLING_DECISION_NOT_RECORD;
+}
+
 int
 main(void)
 {
@@ -192,6 +231,10 @@ main(void)
 				 "prop_ratio_distribution", 3, 1);
 	failures += property_run(prop_default_sampler_is_always_on,
 				 "prop_default_sampler_is_always_on", 1, 1);
+	failures += property_run(prop_ratio_one_samples_max_trace_id,
+				 "prop_ratio_one_samples_max_trace_id", 1, 1);
+	failures += property_run(prop_ratio_zero_drops_zero_trace_id,
+				 "prop_ratio_zero_drops_zero_trace_id", 1, 1);
 
 	if (failures)
 		printf("[property] %d sampler property(ies) failed\n", failures);
