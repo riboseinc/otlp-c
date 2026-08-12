@@ -4,6 +4,57 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.54] - 2026-08-12
+
+Reject all-zero IDs at set time (W3C §3.1.1 / §3.1.2).
+
+### Fixed — ID setters accepted all-zero
+
+`otlp_span_set_trace_id`, `otlp_span_set_span_id`,
+`otlp_span_set_parent_span_id`, `otlp_log_record_set_trace_id`,
+and `otlp_log_record_set_span_id` all accepted an all-zero ID
+without complaint. The bytes would then be emitted on the wire
+(OTLP trace_id, parent_span_id, etc.) where spec-compliant
+receivers reject them:
+
+- W3C Trace Context §3.1.1: "trace-id ... MUST NOT be all zero."
+- W3C Trace Context §3.1.2: "parent-id ... MUST NOT be all zero."
+
+The W3C traceparent *parser* already rejected all-zero (v0.5.x),
+but the setters — which is how applications actually set IDs —
+did not. So a caller could set all-zero IDs and have them
+silently emitted to the collector.
+
+### Behavior change
+
+All five setters now return `OTLP_ERR_INVALID_ARGUMENT` when the
+input is all-zero. Callers that previously set all-zero IDs
+(which were invalid anyway) must update.
+
+To clear the parent on a span: `otlp_span_set_parent_span_id(span,
+NULL)` is still supported (sets `has_parent = false`). The all-
+zero path was never the documented clear mechanism.
+
+For trace correlation on log records: the v0.5.50 split flags
+(`has_trace_id`, `has_span_id`) let callers set just one ID. The
+all-zero validation is consistent with that — setting an ID to
+all-zero is meaningless; the caller should not set it at all.
+
+### Added — shared `otlp_id_is_all_zero` helper
+
+New internal helper in `internal_util.h` checks whether a byte
+array is all-zero. Used by all five setters (DRY).
+
+### Added — regression properties
+
+- `prop_setters_reject_all_zero_ids` (span): rejects all-zero
+  trace_id, span_id, parent_span_id; accepts non-zero; supports
+  NULL to clear parent.
+- `prop_logs_setters_reject_all_zero_ids` (logs): rejects all-
+  zero trace_id, span_id; accepts non-zero.
+
+50/50 tests pass. ASAN clean.
+
 ## [0.5.53] - 2026-08-12
 
 W3C context propagation header injection hardening.
