@@ -4,6 +4,59 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.53] - 2026-08-12
+
+W3C context propagation header injection hardening.
+
+### Fixed — `otlp_context_extract` rejected CRLF in tracestate / baggage
+
+`otlp_context_extract` copied incoming `tracestate` and `baggage`
+header values verbatim into the context struct. If an attacker-
+controlled incoming request contained a tracestate or baggage
+value with `\r\n`, the value would propagate through inject()
+into the next outgoing request's carrier callback. For HTTP-
+header-based carriers (the common case), the CRLF would split
+into a new header line — CWE-93 (HTTP request splitting via
+propagated context).
+
+The W3C Tracestate and W3C Baggage specs both forbid CR and LF
+in their value formats, so this is also a spec-compliance fix.
+
+### Defense in depth
+
+Combined with v0.5.52 (URL parser + user_agent validation), this
+closes the third header-injection vector in the library:
+
+| Vector | Source | Fixed |
+|---|---|---|
+| URL parser | caller-supplied endpoint | v0.5.52 |
+| `build_request` user_agent | caller-supplied user_agent | v0.5.52 |
+| Context propagation | attacker-supplied incoming header | **v0.5.53** |
+
+The third vector is the most dangerous because it crosses trust
+boundaries: a request from an attacker propagates header content
+into a request to a trusted backend. The library now rejects
+malformed values at extract time — extract() still succeeds
+(traceparent is preserved if valid) but tracestate/baggage are
+left empty when they contain CRLF.
+
+### Why partial rejection is correct
+
+If the carrier supplies a malicious tracestate, the right action
+is to forward the legitimate traceparent without the malicious
+tracestate. Trace correlation still works; only the vendor-
+specific state is lost. W3C explicitly allows this: receivers
+MAY truncate or drop non-conforming tracestate entries.
+
+### Added — regression properties
+
+- `prop_extract_rejects_crlf_tracestate` — pre-populates the
+  carrier with a tracestate containing `\r\nX-Inject: yes`,
+  extracts, asserts the extracted tracestate is empty.
+- `prop_extract_rejects_crlf_baggage` — same shape for baggage.
+
+48/48 tests pass. ASAN clean.
+
 ## [0.5.52] - 2026-08-12
 
 HTTP header injection hardening (CWE-93).
