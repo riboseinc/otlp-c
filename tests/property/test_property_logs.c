@@ -295,6 +295,52 @@ out:
 	return ok;
 }
 
+static int
+prop_logs_trace_id_only_no_zero_span_id(uint64_t seed)
+{
+	otlp_log_record_t  *lr;
+	struct otlp_pb_buf   buf = { 0 };
+	const otlp_log_record_t *arr[1] = { NULL };
+	uint8_t	      trace_id[16];
+	int		      ok = 0;
+	size_t		      pos, end, i;
+	int		      wt;
+	size_t		      vp, vl;
+
+	(void) seed;
+	for (i = 0; i < 16; i++)
+		trace_id[i] = (uint8_t)(i + 1);  /* non-zero pattern */
+
+	lr = otlp_log_record_create(OTLP_SEVERITY_INFO, "trace-only");
+	if (!lr)
+		return 0;
+	otlp_log_record_set_trace_id(lr, trace_id);
+	/* Deliberately do NOT set span_id — verify it's omitted, not
+	 * emitted as all-zeros. Pre-v0.5.50 had a single has_trace flag
+	 * that emitted both with span_id as 8 zero bytes. */
+	arr[0] = lr;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_logs_service_request(
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+	if (!descend_to_log_record(buf.data, buf.len, &pos, &end))
+		goto out_buf;
+
+	/* trace_id present. */
+	ok = (walker_find_at_level(buf.data, pos, end, 9, &wt, &vp, &vl) &&
+	      wt == OTLP_PB_WIRE_LEN && vl == 16 &&
+	      memcmp(buf.data + vp, trace_id, 16) == 0);
+	/* span_id absent. */
+	ok = ok && !walker_find_at_level(buf.data, pos, end, 10, &wt, &vp, &vl);
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_log_record_free(lr);
+	return ok;
+}
+
 int
 main(void)
 {
@@ -312,6 +358,8 @@ main(void)
 				 "prop_logs_trace_correlation", 50, 1);
 	failures += property_run(prop_logs_attributes_roundtrip,
 				 "prop_logs_attributes_roundtrip", 200, 1);
+	failures += property_run(prop_logs_trace_id_only_no_zero_span_id,
+				 "prop_logs_trace_id_only_no_zero_span_id", 5, 1);
 
 	if (failures)
 		printf("[property] %d logs property(ies) failed\n", failures);

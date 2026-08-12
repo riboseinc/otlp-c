@@ -95,7 +95,7 @@ otlp_log_record_set_trace_id(otlp_log_record_t *lr, const uint8_t *trace_id)
 	if (!lr || !trace_id)
 		return OTLP_ERR_NULL;
 	memcpy(lr->trace_id, trace_id, OTLP_TRACE_ID_LEN);
-	lr->has_trace = true;
+	lr->has_trace_id = true;
 	return OTLP_OK;
 }
 
@@ -105,7 +105,7 @@ otlp_log_record_set_span_id(otlp_log_record_t *lr, const uint8_t *span_id)
 	if (!lr || !span_id)
 		return OTLP_ERR_NULL;
 	memcpy(lr->span_id, span_id, OTLP_SPAN_ID_LEN);
-	lr->has_trace = true;
+	lr->has_span_id = true;
 	return OTLP_OK;
 }
 
@@ -176,7 +176,9 @@ uint64_t otlp_log_get_timestamp(const otlp_log_record_t *lr) { return lr ? lr->t
 bool otlp_log_has_timestamp(const otlp_log_record_t *lr) { return lr ? lr->has_timestamp : false; }
 const uint8_t *otlp_log_get_trace_id(const otlp_log_record_t *lr) { return lr ? lr->trace_id : NULL; }
 const uint8_t *otlp_log_get_span_id(const otlp_log_record_t *lr) { return lr ? lr->span_id : NULL; }
-bool otlp_log_has_trace(const otlp_log_record_t *lr) { return lr ? lr->has_trace : false; }
+bool otlp_log_has_trace(const otlp_log_record_t *lr) { return lr ? (lr->has_trace_id || lr->has_span_id) : false; }
+bool otlp_log_has_trace_id(const otlp_log_record_t *lr) { return lr ? lr->has_trace_id : false; }
+bool otlp_log_has_span_id(const otlp_log_record_t *lr) { return lr ? lr->has_span_id : false; }
 
 const struct otlp_attribute *
 otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n)
@@ -206,7 +208,8 @@ otlp_log_record_clone(const otlp_log_record_t *src)
 	dst->has_timestamp = src->has_timestamp;
 	memcpy(dst->trace_id, src->trace_id, OTLP_TRACE_ID_LEN);
 	memcpy(dst->span_id, src->span_id, OTLP_SPAN_ID_LEN);
-	dst->has_trace = src->has_trace;
+	dst->has_trace_id = src->has_trace_id;
+	dst->has_span_id = src->has_span_id;
 
 	if (src->n_attrs > 0)
 	{

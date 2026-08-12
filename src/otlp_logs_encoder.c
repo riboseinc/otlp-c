@@ -99,13 +99,21 @@ emit_log_record(struct otlp_pb_buf *parent, uint32_t field_num,
 	if (st != OTLP_OK)
 		goto out;
 
-	/* trace_id + span_id (bytes, fields 9/10). */
-	if (otlp_log_has_trace(lr)) {
+	/* trace_id (field 9) and span_id (field 10). The two flags
+	 * are independent so a caller can correlate to a trace_id
+	 * without a span_id (or vice versa) — unusual but valid. The
+	 * previous design used a single has_trace flag set by either
+	 * setter, which silently emitted all-zero bytes for the
+	 * unset member; that's a valid proto bytes value but an
+	 * invalid W3C trace_id. */
+	if (otlp_log_has_trace_id(lr)) {
 		st = otlp_pb_field_bytes(&sub, LOG_F_TRACE_ID,
 					 otlp_log_get_trace_id(lr),
 					 OTLP_TRACE_ID_LEN);
 		if (st != OTLP_OK)
 			goto out;
+	}
+	if (otlp_log_has_span_id(lr)) {
 		st = otlp_pb_field_bytes(&sub, LOG_F_SPAN_ID,
 					 otlp_log_get_span_id(lr),
 					 OTLP_SPAN_ID_LEN);
