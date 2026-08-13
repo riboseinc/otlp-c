@@ -20,9 +20,14 @@
  */
 #include <otlp-c/allocator.h>
 #include <otlp-c/exporter.h>
+#include <otlp-c/log.h>
+#include <otlp-c/metric.h>
 #include <otlp-c/otlp.h>
 #include <otlp-c/span.h>
+#include <otlp-c/tracer.h>
 
+#include "../src/log_internal.h"
+#include "../src/metric_internal.h"
 #include "../src/span_internal.h"
 
 #include <stdio.h>
@@ -210,6 +215,189 @@ test_span_clone_oom(void)
 	return 0;
 }
 
+/* ── Test 3: metric_create with histogram bounds ──────────────
+ *
+ * Exercises the histogram-specific allocation path in
+ * otlp_metric_create: after the basic struct + 3 strings, the
+ * histogram variant allocates bounds (malloc) + bucket_counts
+ * (calloc). A failure between these two must clean up both. */
+static int
+test_metric_create_histogram_oom(void)
+{
+	double bounds[3] = {1.0, 10.0, 100.0};
+	int leaks = 0;
+
+	otlp_set_allocator(&fail_allocator);
+
+	for (int n = 1; n <= 30; n++) {
+		otlp_metric_t *m;
+
+		reset_counters(n);
+		m = otlp_metric_create(OTLP_METRIC_HISTOGRAM, "latency",
+				       "ms", "request latency",
+				       bounds, 3);
+		if (m)
+			otlp_metric_free(m);
+
+		if (alloc_count != free_count) {
+			printf("[oom] metric_create leak at fail_at=%d: alloc=%d free=%d\n",
+			       n, alloc_count, free_count);
+			leaks++;
+		}
+	}
+
+	otlp_set_allocator(NULL);
+
+	if (leaks > 0) {
+		printf("[oom] metric_create_histogram FAIL — %d leaks\n",
+		       leaks);
+		return 1;
+	}
+	printf("[oom] metric_create_histogram PASS — 30 OOM iterations, "
+	       "no leaks\n");
+	return 0;
+}
+
+/* ── Test 4: metric_clone (full attribute + histogram + exp.hist) ──
+ *
+ * Exercises the most complex clone path: name/unit/description +
+ * attrs + bounds/bucket_counts + exp_pos_counts + exp_neg_counts.
+ * The fail path calls otlp_metric_free which must handle any
+ * partially-initialized state. */
+static int
+test_metric_clone_oom(void)
+{
+	int leaks = 0;
+
+	for (int n = 1; n <= 50; n++) {
+		otlp_metric_t *src;
+		otlp_metric_t *clone;
+		double bounds[2] = {1.0, 10.0};
+		uint64_t pos_counts[3] = {1, 2, 3};
+
+		/* Build source under default allocator. */
+		otlp_set_allocator(NULL);
+		src = otlp_metric_create(OTLP_METRIC_EXP_HISTOGRAM, "src",
+					 "", "", bounds, 2);
+		if (!src) {
+			printf("[oom] metric_clone setup failed\n");
+			return 1;
+		}
+		otlp_metric_set_attribute_string(src, "k1", "v1");
+		otlp_metric_set_attribute_int(src, "k2", 42);
+		if (otlp_metric_set_exp_histogram(src,
+			20, 0, pos_counts, 3, 0, NULL, 0) != OTLP_OK) {
+			otlp_metric_free(src);
+			return 1;
+		}
+
+		/* Clone under fail allocator. */
+		otlp_set_allocator(&fail_allocator);
+		reset_counters(n);
+		clone = otlp_metric_clone(src);
+		if (clone)
+			otlp_metric_free(clone);
+
+		if (alloc_count != free_count) {
+			printf("[oom] metric_clone leak at fail_at=%d: alloc=%d free=%d\n",
+			       n, alloc_count, free_count);
+			leaks++;
+		}
+
+		otlp_set_allocator(NULL);
+		otlp_metric_free(src);
+	}
+
+	otlp_set_allocator(NULL);
+
+	if (leaks > 0) {
+		printf("[oom] metric_clone FAIL — %d leaks\n", leaks);
+		return 1;
+	}
+	printf("[oom] metric_clone PASS — 50 OOM iterations, no leaks\n");
+	return 0;
+}
+
+/* ── Test 5: log_record_clone (severity_text + body + attrs) ─── */
+static int
+test_log_record_clone_oom(void)
+{
+	int leaks = 0;
+
+	for (int n = 1; n <= 40; n++) {
+		otlp_log_record_t *src;
+		otlp_log_record_t *clone;
+
+		otlp_set_allocator(NULL);
+		src = otlp_log_record_create(OTLP_SEVERITY_ERROR, "body");
+		if (!src) {
+			printf("[oom] log_clone setup failed\n");
+			return 1;
+		}
+		otlp_log_record_set_severity_text(src, "ERROR");
+		otlp_log_record_set_attribute_string(src, "k1", "v1");
+		otlp_log_record_set_attribute_int(src, "k2", 99);
+
+		otlp_set_allocator(&fail_allocator);
+		reset_counters(n);
+		clone = otlp_log_record_clone(src);
+		if (clone)
+			otlp_log_record_free(clone);
+
+		if (alloc_count != free_count) {
+			printf("[oom] log_clone leak at fail_at=%d: alloc=%d free=%d\n",
+			       n, alloc_count, free_count);
+			leaks++;
+		}
+
+		otlp_set_allocator(NULL);
+		otlp_log_record_free(src);
+	}
+
+	otlp_set_allocator(NULL);
+
+	if (leaks > 0) {
+		printf("[oom] log_record_clone FAIL — %d leaks\n", leaks);
+		return 1;
+	}
+	printf("[oom] log_record_clone PASS — 40 OOM iterations, "
+	       "no leaks\n");
+	return 0;
+}
+
+/* ── Test 6: tracer_create (3 string dups + struct) ─────────── */
+static int
+test_tracer_create_oom(void)
+{
+	int leaks = 0;
+
+	otlp_set_allocator(&fail_allocator);
+
+	for (int n = 1; n <= 20; n++) {
+		otlp_tracer_t *t;
+
+		reset_counters(n);
+		t = otlp_tracer_create("svc", "scope", "1.0");
+		if (t)
+			otlp_tracer_free(t);
+
+		if (alloc_count != free_count) {
+			printf("[oom] tracer_create leak at fail_at=%d: alloc=%d free=%d\n",
+			       n, alloc_count, free_count);
+			leaks++;
+		}
+	}
+
+	otlp_set_allocator(NULL);
+
+	if (leaks > 0) {
+		printf("[oom] tracer_create FAIL — %d leaks\n", leaks);
+		return 1;
+	}
+	printf("[oom] tracer_create PASS — 20 OOM iterations, no leaks\n");
+	return 0;
+}
+
 int
 main(void)
 {
@@ -217,6 +405,10 @@ main(void)
 
 	failures += test_exporter_create_oom();
 	failures += test_span_clone_oom();
+	failures += test_metric_create_histogram_oom();
+	failures += test_metric_clone_oom();
+	failures += test_log_record_clone_oom();
+	failures += test_tracer_create_oom();
 
 	if (failures)
 		printf("[oom] %d test(s) failed\n", failures);
