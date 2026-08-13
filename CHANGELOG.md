@@ -4,6 +4,63 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.57] - 2026-08-13
+
+Extended OOM test coverage to all major init paths.
+
+### Added — 4 new fail-injecting OOM tests
+
+Following v0.5.56's lead (where the fail-injecting allocator
+caught a real bug in `exporter_create`'s fail path), the test
+now covers every major init path that allocates multiple
+resources:
+
+- `test_metric_create_histogram_oom` — 30 iterations probing
+  every alloc offset in `otlp_metric_create` with histogram
+  bounds. Exercises the bounds (malloc) + bucket_counts (calloc)
+  pair where a partial-init could leak.
+- `test_metric_clone_oom` — 50 iterations probing every alloc
+  offset in `otlp_metric_clone` with attrs + bounds + exp
+  histogram pos_counts. The most complex clone path.
+- `test_log_record_clone_oom` — 40 iterations probing
+  `otlp_log_record_clone` with severity_text + body + attrs.
+- `test_tracer_create_oom` — 20 iterations probing
+  `otlp_tracer_create` (3 string dups + struct).
+
+No new bugs found — each path correctly cleans up under OOM.
+The tests now guard against future regressions across the
+init-path class.
+
+### Why this matters
+
+v0.5.56 demonstrated that fail-injecting tests can catch bugs
+that inspection misses. v0.5.57 extends the coverage so that
+the NEXT partial-init bug — in any of these paths — is caught
+automatically by CI rather than waiting for the next manual
+audit.
+
+The "test passes today" outcome is itself valuable: it confirms
+that the v0.5.47 fix (attribute_copy_all), v0.5.55 fix
+(resource_attributes), and v0.5.56 fix (mpsc_queue) are not
+isolated cases — the codebase's other init paths follow the
+same correct pattern.
+
+### Pattern summary
+
+Every multi-alloc init path now has a fail-injecting regression
+test:
+
+| Path | Allocations | Test |
+|---|---|---|
+| `otlp_exporter_create` | struct + 2 strings + attrs + 3 arrays + 3 queues | v0.5.56 |
+| `otlp_span_clone` | struct + name + attrs + events + links | v0.5.56 |
+| `otlp_metric_create` (hist) | struct + 3 strings + bounds + bucket_counts | **v0.5.57** |
+| `otlp_metric_clone` | above + attrs + exp_pos + exp_neg | **v0.5.57** |
+| `otlp_log_record_clone` | struct + 2 strings + attrs | **v0.5.57** |
+| `otlp_tracer_create` | struct + 3 strings | **v0.5.57** |
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.56] - 2026-08-13
 
 Fail-injecting allocator test + mpsc_queue cleanup leak fix.
