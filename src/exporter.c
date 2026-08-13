@@ -1183,8 +1183,18 @@ otlp_exporter_flush(otlp_exporter_t *e)
 		 mpsc_queue_size(&e->log_queue) > 0) &&
 		now < deadline);
 
+	/* The return-status check must match the loop condition. The
+	 * loop exits on "no work" OR "deadline reached"; if the
+	 * deadline was reached with items still queued (drain cap hit,
+	 * or a tight race after a POST completion cleared pending but
+	 * before the next drain), the user needs to know items remain.
+	 * Pre-v0.5.58 this check omitted the queue sizes, so flush
+	 * could silently return OK with unsent items. */
 	if (e->pending_count > 0 || e->in_flight ||
-	    e->metric_pending_count > 0 || e->log_pending_count > 0)
+	    e->metric_pending_count > 0 || e->log_pending_count > 0 ||
+	    mpsc_queue_size(&e->queue) > 0 ||
+	    mpsc_queue_size(&e->metric_queue) > 0 ||
+	    mpsc_queue_size(&e->log_queue) > 0)
 		return OTLP_ERR_NETWORK;
 	return OTLP_OK;
 }
