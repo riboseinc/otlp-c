@@ -398,6 +398,147 @@ test_tracer_create_oom(void)
 	return 0;
 }
 
+/* ── Test 7: flush_metric accounting under OOM ────────────────
+ *
+ * Regression for v0.5.59: on init or encode failure, flush_metric
+ * must still update dropped_metrics_err to preserve the invariant
+ * emitted_metrics == sent_metrics + dropped_metrics_err.
+ *
+ * Pre-v0.5.59 the init-failure path returned without updating
+ * dropped_metrics_err, breaking the invariant. */
+static int
+test_flush_metric_oom_accounting(void)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp = NULL;
+	otlp_metric_t       *src;
+	int		      bad_accounting = 0;
+
+	/* Build source metric under default allocator. */
+	src = otlp_metric_create(OTLP_METRIC_COUNTER, "m", "", "",
+				 NULL, 0);
+	if (!src) {
+		printf("[oom] flush_metric setup failed\n");
+		return 1;
+	}
+	otlp_metric_record(src, 1.0);
+	otlp_metric_mark_time(src);
+
+	/* Create the exporter under the default allocator (so it
+	 * definitely succeeds). */
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "test";
+	otlp_set_allocator(NULL);
+	exp = otlp_exporter_create(&opts);
+	if (!exp) {
+		otlp_metric_free(src);
+		return 1;
+	}
+	otlp_exporter_set_null_transport(exp, true);
+
+	/* Probe flush_metric under fail-injecting allocator. */
+	otlp_set_allocator(&fail_allocator);
+	for (int n = 1; n <= 15; n++) {
+		otlp_exporter_stats_t stats;
+		otlp_status_t	     st;
+
+		reset_counters(n);
+		st = otlp_exporter_flush_metric(exp, src);
+		otlp_exporter_get_stats(exp, &stats);
+
+		/* The invariant: emitted == sent + dropped_err.
+		 * flush_metric increments emitted at start; either
+		 * sent or dropped_err must follow. */
+		if (stats.emitted_metrics !=
+		    stats.sent_metrics + stats.dropped_metrics_err) {
+			printf("[oom] flush_metric accounting broken at "
+			       "fail_at=%d: emitted=%llu sent=%llu "
+			       "dropped=%llu (st=%d)\n",
+			       n,
+			       (unsigned long long)stats.emitted_metrics,
+			       (unsigned long long)stats.sent_metrics,
+			       (unsigned long long)stats.dropped_metrics_err,
+			       (int)st);
+			bad_accounting++;
+		}
+	}
+
+	otlp_set_allocator(NULL);
+	otlp_metric_free(src);
+	otlp_exporter_free(exp);
+
+	if (bad_accounting > 0) {
+		printf("[oom] flush_metric FAIL — %d accounting breaks\n",
+		       bad_accounting);
+		return 1;
+	}
+	printf("[oom] flush_metric PASS — 15 OOM iterations, "
+	       "accounting invariant holds\n");
+	return 0;
+}
+
+/* ── Test 8: flush_log accounting under OOM ─────────────────── */
+static int
+test_flush_log_oom_accounting(void)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t     *exp = NULL;
+	otlp_log_record_t   *src;
+	int		      bad_accounting = 0;
+
+	src = otlp_log_record_create(OTLP_SEVERITY_INFO, "body");
+	if (!src) {
+		printf("[oom] flush_log setup failed\n");
+		return 1;
+	}
+
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "test";
+	otlp_set_allocator(NULL);
+	exp = otlp_exporter_create(&opts);
+	if (!exp) {
+		otlp_log_record_free(src);
+		return 1;
+	}
+	otlp_exporter_set_null_transport(exp, true);
+
+	otlp_set_allocator(&fail_allocator);
+	for (int n = 1; n <= 15; n++) {
+		otlp_exporter_stats_t stats;
+		otlp_status_t	     st;
+
+		reset_counters(n);
+		st = otlp_exporter_flush_log(exp, src);
+		otlp_exporter_get_stats(exp, &stats);
+
+		if (stats.emitted_logs !=
+		    stats.sent_logs + stats.dropped_logs_err) {
+			printf("[oom] flush_log accounting broken at "
+			       "fail_at=%d: emitted=%llu sent=%llu "
+			       "dropped=%llu (st=%d)\n",
+			       n,
+			       (unsigned long long)stats.emitted_logs,
+			       (unsigned long long)stats.sent_logs,
+			       (unsigned long long)stats.dropped_logs_err,
+			       (int)st);
+			bad_accounting++;
+		}
+	}
+
+	otlp_set_allocator(NULL);
+	otlp_log_record_free(src);
+	otlp_exporter_free(exp);
+
+	if (bad_accounting > 0) {
+		printf("[oom] flush_log FAIL — %d accounting breaks\n",
+		       bad_accounting);
+		return 1;
+	}
+	printf("[oom] flush_log PASS — 15 OOM iterations, "
+	       "accounting invariant holds\n");
+	return 0;
+}
+
 int
 main(void)
 {
@@ -409,6 +550,8 @@ main(void)
 	failures += test_metric_clone_oom();
 	failures += test_log_record_clone_oom();
 	failures += test_tracer_create_oom();
+	failures += test_flush_metric_oom_accounting();
+	failures += test_flush_log_oom_accounting();
 
 	if (failures)
 		printf("[oom] %d test(s) failed\n", failures);
