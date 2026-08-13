@@ -4,6 +4,51 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.59] - 2026-08-13
+
+Flush accounting invariant under OOM.
+
+### Fixed — `flush_metric` / `flush_log` accounting broke under OOM
+
+Both `otlp_exporter_flush_metric` and `otlp_exporter_flush_log`
+incremented `emitted_metrics` (or `emitted_logs`) at the start
+of the call. If `otlp_pb_buf_init` subsequently failed (OOM),
+the function returned without incrementing either
+`sent_metrics` or `dropped_metrics_err`. The accounting
+invariant `emitted == sent + dropped_err` was violated.
+
+Users monitoring the counters would see `emitted > sent +
+dropped_err` and have no way to tell where the missing items
+went.
+
+Fix: on init failure, increment `dropped_metrics_err` (or
+`dropped_logs_err`) before returning. The invariant now holds
+across all paths.
+
+### Added — OOM accounting regression tests
+
+Extended `test_allocator_oom.c` with two new tests:
+
+- `test_flush_metric_oom_accounting` — probes flush_metric
+  across 15 OOM offsets; asserts `emitted == sent + dropped_err`
+  after each.
+- `test_flush_log_oom_accounting` — same shape for flush_log.
+
+These were the first tests to verify the accounting invariant
+under OOM. Without them, the v0.5.59 fix would have been
+correct-by-inspection only.
+
+### Pattern continuation
+
+This is the same "missing counter update" class as v0.5.58's
+flush return-status check. Both are accounting asymmetries
+where one path updates a counter and another doesn't. The
+v0.5.58 fix made the return-status match the loop condition;
+the v0.5.59 fix makes the init-failure path match the
+encode-failure and POST-failure paths.
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.58] - 2026-08-13
 
 Flush return-status now reflects MPSC queue state.
