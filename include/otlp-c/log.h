@@ -70,7 +70,15 @@ otlp_status_t otlp_log_record_set_timestamp(otlp_log_record_t *lr,
 OTLP_C_EXPORT
 otlp_status_t otlp_log_record_mark_timestamp(otlp_log_record_t *lr);
 
-/* Trace correlation. Pass pointers to 16-byte / 8-byte arrays. */
+/* Trace correlation. Pass pointers to 16-byte / 8-byte arrays.
+ *
+ * Each setter sets only its own flag — callers can correlate to
+ * a trace_id without a span_id (or vice versa) if needed. The
+ * encoder emits each independently on the wire.
+ *
+ * W3C Trace Context §3.1.1/§3.1.2 forbids all-zero IDs; the
+ * library returns OTLP_ERR_INVALID_ARGUMENT for all-zero input
+ * so invalid IDs never reach the wire. */
 OTLP_C_EXPORT
 otlp_status_t otlp_log_record_set_trace_id(otlp_log_record_t *lr,
 					   const uint8_t *trace_id);
