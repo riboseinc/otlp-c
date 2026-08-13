@@ -4,6 +4,54 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.61] - 2026-08-14
+
+ExponentialHistogram schema entry (DRY/MECE).
+
+### Added — `OTLP_EH_FIELDS` schema entry for ExponentialHistogram
+
+The schema table for `ExponentialHistogram` message was missing.
+The encoder emitted its `aggregation_temporality` (field 2)
+using `HIST_F_AGG_TEMP` from the `Histogram` message — which
+works because both messages have `aggregation_temporality` at
+field 2, but is a DRY/MECE violation. If `Histogram`'s field
+numbers ever diverge from `ExponentialHistogram`'s in a future
+proto revision, the encoder would silently produce wrong wire
+output.
+
+Fix: added `OTLP_EH_FIELDS` with `data_points = 1` and
+`aggregation_temporality = 2`. The encoder now uses the new
+`EH_F_AGG_TEMP` macro for `ExponentialHistogram`, matching the
+pattern already used for `Sum` and `Histogram`.
+
+### Why this matters
+
+The schema is the single source of truth for field numbers
+(`src/otlp_schema.h` is the canonical reference for all
+encoders). Each OTLP message should have its own entry, even
+when fields happen to be identical to another message's. The
+reused `HIST_F_AGG_TEMP` for two distinct message types was a
+correctness landmine — coincidentally correct today, fragile
+tomorrow.
+
+### Same class as v0.5.48
+
+v0.5.48 added missing schema entries and fixed wrong field
+numbers for Event, Status, NumberDataPoint, HistogramDataPoint.
+v0.5.61 completes the schema for the `ExponentialHistogram`
+message (the wrapping message — its data point schema was
+already present).
+
+### Added — wrapper-level agg_temp verification
+
+`prop_metrics_exp_histogram_field_nums` now verifies the
+`ExponentialHistogram` wrapper emits `aggregation_temporality`
+at field 2 (VARINT) before descending into the data point. The
+wrapper-level check was missing — only the data point fields
+were verified.
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.60] - 2026-08-13
 
 Public API docstring accuracy.
