@@ -64,20 +64,36 @@ OTLP_C_EXPORT
 void otlp_span_free(otlp_span_t *span);
 
 /* ── Identity ────────────────────────────────────────────────────
+ *
+ * W3C Trace Context §3.1.1/§3.1.2 forbids all-zero trace-id and
+ * parent-id. The library enforces this at set time — passing an
+ * all-zero buffer returns OTLP_ERR_INVALID_ARGUMENT so invalid IDs
+ * never reach the wire.
  */
 
 /* Manually set the trace ID (16 bytes). Most callers should use
- * otlp_tracer_start_span which auto-generates IDs. */
+ * otlp_tracer_start_span which auto-generates IDs.
+ *
+ * Returns OTLP_ERR_INVALID_ARGUMENT if `trace_id` is all-zero
+ * (W3C violation). */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_trace_id(otlp_span_t *span,
 				     const uint8_t *trace_id);
 
-/* Manually set the span ID (8 bytes). */
+/* Manually set the span ID (8 bytes).
+ *
+ * Returns OTLP_ERR_INVALID_ARGUMENT if `span_id` is all-zero
+ * (W3C violation). */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_span_id(otlp_span_t *span,
 				    const uint8_t *span_id);
 
-/* Set the parent span ID. Empty (8 zero bytes) for a root span. */
+/* Set the parent span ID. Pass NULL to clear the parent link
+ * (makes the span a root). Pass a non-NULL 8-byte buffer to set
+ * the parent.
+ *
+ * Returns OTLP_ERR_INVALID_ARGUMENT if `parent` is non-NULL and
+ * all-zero (W3C violation). Use NULL to clear, not all-zero. */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_parent_span_id(otlp_span_t *span,
 					   const uint8_t *parent);
@@ -85,9 +101,10 @@ otlp_status_t otlp_span_set_parent_span_id(otlp_span_t *span,
 /* ── Timing ──────────────────────────────────────────────────────
  */
 
-/* Set the start and end time. Times are nanoseconds since the Unix
- * epoch (UTC). Defaults: 0 for both; exporter refuses to emit a
- * span with start_time = 0. */
+/* Set the start/end time. Times are nanoseconds since the Unix
+ * epoch (UTC). The library emits whatever value is set, including
+ * 0. Use otlp_span_mark_start / otlp_span_mark_end to set
+ * "now" automatically. */
 OTLP_C_EXPORT
 otlp_status_t otlp_span_set_start_time(otlp_span_t *span,
 				       uint64_t unix_nano);
