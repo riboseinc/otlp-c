@@ -4,6 +4,54 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.56] - 2026-08-13
+
+Fail-injecting allocator test + mpsc_queue cleanup leak fix.
+
+### Added — fail-injecting allocator test
+
+New `test_allocator_oom.c` exercises the library's OOM cleanup
+paths by iterating a "fail at Nth allocation" probe over an
+operation that allocates multiple times. Each iteration:
+1. Installs a fail allocator that returns NULL on the Nth alloc.
+2. Runs the operation (exporter_create, span_clone).
+3. Frees any returned object.
+4. Asserts `alloc_count == free_count` (no leak).
+
+Under ASAN, double-frees and UB also surface.
+
+### Fixed — exporter_create fail path leaked mpsc_queue slots
+
+The fail-injecting allocator caught a real bug on its first run:
+`otlp_exporter_create`'s fail path freed user_agent, service_name,
+resource_attributes (and contents), pending arrays, and the
+exporter struct — but did NOT call `mpsc_queue_free` on the three
+queues. If any `mpsc_queue_init` succeeded before the failure,
+its slots allocation leaked.
+
+Sequence to trigger: OOM during the 2nd or 3rd `mpsc_queue_init`
+after the 1st succeeded. The first queue's slots are allocated
+but never freed.
+
+Fix: call `mpsc_queue_free` on all three queues in the fail path.
+`mpsc_queue_free` is safe on uninitialized queues (it checks
+`slots != NULL` before freeing).
+
+This is the same bug class as v0.5.47 (attribute_copy_all) and
+v0.5.55 (resource_attributes) — partial-init cleanup that missed
+a resource. The fail-injecting allocator closes the testability
+gap that hid this bug.
+
+### Why this release matters
+
+The previous OOM-reachable fixes (v0.5.47, v0.5.55) were
+correct-by-inspection — no test could reach the failure path.
+v0.5.56 ships the test infrastructure AND uses it to find a
+third bug in the same class. The test now guards against
+regressions in all three fixes.
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.55] - 2026-08-13
 
 Resource attributes array zero-init (UB defense).
