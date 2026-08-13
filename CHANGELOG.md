@@ -4,6 +4,61 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.58] - 2026-08-13
+
+Flush return-status now reflects MPSC queue state.
+
+### Fixed — `otlp_exporter_flush` return-status omitted queue sizes
+
+The flush loop condition checked `pending_count`, `in_flight`,
+AND `mpsc_queue_size` for all three signals. But the return-
+status check after the loop only checked `pending_count` and
+`in_flight`. If the deadline was reached with items still in
+the MPSC queues (e.g., drain cap hit, or a tight race after a
+POST completion cleared pending but before the next drain),
+flush silently returned `OTLP_OK` with unsent items.
+
+The user would see "flush succeeded" and free the exporter,
+losing the queued items.
+
+Fix: the return-status check now matches the loop condition
+exactly — it includes `mpsc_queue_size` for all three signals.
+Items remaining in queues now correctly produce
+`OTLP_ERR_NETWORK`.
+
+### When the bug manifested
+
+The race window is narrow but reachable:
+
+1. User emits many items (queue fills beyond the drain cap of
+   `batch_size * 2`).
+2. User calls `flush()` with a bounded `flush_timeout_ms`.
+3. The POST in flight completes, clearing pending.
+4. The next drain hasn't run yet.
+5. flush's deadline hits.
+6. Return check sees pending=0, in_flight=NULL — returns OK.
+7. User frees exporter. Items in queue are dropped.
+
+With the fix, step 6 sees queue_size > 0 and returns
+`OTLP_ERR_NETWORK`. The user can retry or accept the loss
+explicitly.
+
+### Why no regression test
+
+The race is timing-dependent: requires the flush deadline to
+hit in the narrow window between POST completion and the next
+drain. Reliable reproduction would require either:
+- A custom allocator hook that injects delays (intrusive).
+- A test-only knob to pause the tick loop mid-iteration
+  (invasive).
+
+The fix is correct by inspection — the return check now matches
+the loop condition exactly. Existing flush tests verify the
+happy path (no items remaining → OK) and the slow-network path
+(items in pending → NETWORK).
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.57] - 2026-08-13
 
 Extended OOM test coverage to all major init paths.
