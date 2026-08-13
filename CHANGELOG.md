@@ -4,6 +4,46 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.60] - 2026-08-13
+
+Public API docstring accuracy.
+
+### Fixed — span / log docstrings lagged behavior
+
+Several public API docstrings in `span.h` and `log.h` had
+drifted from the actual library behavior:
+
+- `otlp_span_set_parent_span_id`: claimed "Empty (8 zero bytes)
+  for a root span." Wrong post-v0.5.54 — all-zero is now
+  rejected. The doc now correctly states NULL clears the
+  parent; non-NULL all-zero returns INVALID_ARGUMENT.
+- `otlp_span_set_trace_id` / `_span_id`: didn't mention
+  all-zero rejection (added v0.5.54). Now documented.
+- `otlp_span_set_start_time` / `_end_time`: claimed "exporter
+  refuses to emit a span with start_time = 0." False — the
+  library emits whatever value is set. Doc now states this
+  accurately.
+- `otlp_log_record_set_trace_id` / `_span_id`: didn't mention
+  the v0.5.50 split (independent flags) or v0.5.54 all-zero
+  rejection. Now documented.
+
+### Why this matters
+
+API docs that lag the implementation cause integration bugs.
+A caller reading "Empty for a root span" might pass 8 zero
+bytes and get an unexpected `INVALID_ARGUMENT`. A caller
+reading "exporter refuses to emit start_time = 0" might add
+workarounds for behavior that doesn't exist.
+
+The v0.5.48-v0.5.59 audit arc fixed many bugs; this release
+catches the docs up to those fixes.
+
+### No code changes
+
+This release is documentation only. No behavior change.
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.59] - 2026-08-13
 
 Flush accounting invariant under OOM.
