@@ -67,6 +67,16 @@ add_test(NAME allocator
     COMMAND otlp_test_allocator)
 set_tests_properties(allocator PROPERTIES LABELS "unit")
 
+# Fail-injecting allocator OOM tests (v0.5.56). Exercises the
+# partial-init cleanup paths in exporter_create (v0.5.55 fix) and
+# span_clone (v0.5.47 fix) by iterating fail_at over every alloc
+# offset and asserting alloc_count == free_count after each.
+add_executable(otlp_test_allocator_oom test_allocator_oom.c)
+target_link_libraries(otlp_test_allocator_oom PRIVATE otlp_c)
+add_test(NAME allocator-oom
+    COMMAND otlp_test_allocator_oom)
+set_tests_properties(allocator-oom PROPERTIES LABELS "unit")
+
 add_subdirectory(unit)
 
 # Property tests — see property/ for the harness.

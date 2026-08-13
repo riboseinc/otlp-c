@@ -380,6 +380,13 @@ fail:
 	otlp_free(e->pending);
 	otlp_free(e->metric_pending);
 	otlp_free(e->log_pending);
+	/* mpsc_queue_free is safe on uninitialized queues (slots=NULL
+	 * → otlp_free(NULL) is a no-op). If any of the three queue
+	 * inits succeeded before the failure, its slots must be freed;
+	 * otherwise they'd leak. */
+	mpsc_queue_free(&e->queue);
+	mpsc_queue_free(&e->metric_queue);
+	mpsc_queue_free(&e->log_queue);
 	otlp_free(e);
 	return NULL;
 }
