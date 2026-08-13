@@ -370,6 +370,19 @@ static const struct otlp_field_spec OTLP_HIST_FIELDS[] = {
 	[OTLP_HIST_FI_AGG_TEMP]    = {"aggregation_temporality", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
 };
 
+/* ── ExponentialHistogram ────────────────────────────────────── */
+
+enum {
+	OTLP_EH_FI_DATA_POINTS,
+	OTLP_EH_FI_AGG_TEMP,
+	OTLP_EH_FI_COUNT,
+};
+
+static const struct otlp_field_spec OTLP_EH_FIELDS[] = {
+	[OTLP_EH_FI_DATA_POINTS] = {"data_points", 1, OTLP_PB_WIRE_LEN, OTLP_PRESENCE_DEFAULT_OMITTED, true},
+	[OTLP_EH_FI_AGG_TEMP]    = {"aggregation_temporality", 2, OTLP_PB_WIRE_VARINT, OTLP_PRESENCE_DEFAULT_OMITTED, false},
+};
+
 /* ── NumberDataPoint (oneof value: as_double=4, as_int=6) ─────── */
 
 enum {
