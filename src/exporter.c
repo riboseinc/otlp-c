@@ -1302,7 +1302,14 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		&e->emitted_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
+	{
+		/* Accounting invariant: emitted == sent + dropped_err.
+		 * Pre-v0.5.59 this path returned without updating
+		 * dropped_err, breaking the invariant under OOM. */
+		otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
+			1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
+	}
 	arr[0] = m;
 	st = otlp_encode_export_metrics_service_request(
 		&body, e->service_name,
@@ -1333,7 +1340,14 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
+	{
+		/* Accounting invariant: emitted == sent + dropped_err.
+		 * Pre-v0.5.59 this path returned without updating
+		 * dropped_err, breaking the invariant under OOM. */
+		otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
+			1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
+	}
 	arr[0] = lr;
 	st = otlp_encode_export_logs_service_request(
 		&body, e->service_name,
