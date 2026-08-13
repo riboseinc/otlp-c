@@ -42,6 +42,7 @@
 #define GAUGE_F_DATA_POINTS     OTLP_GAUGE_FIELDS[OTLP_GAUGE_FI_DATA_POINTS].number
 #define HIST_F_DATA_POINTS      OTLP_HIST_FIELDS[OTLP_HIST_FI_DATA_POINTS].number
 #define HIST_F_AGG_TEMP	       OTLP_HIST_FIELDS[OTLP_HIST_FI_AGG_TEMP].number
+#define EH_F_AGG_TEMP	       OTLP_EH_FIELDS[OTLP_EH_FI_AGG_TEMP].number
 #define NDP_F_ATTRIBUTES       OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number
 #define NDP_F_START_TIME       OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number
 #define NDP_F_TIME	       OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number
@@ -435,7 +436,7 @@ emit_kind_extra_fields(struct otlp_pb_buf *wrapper,
 		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
 					   agg_temp);
 	case OTLP_METRIC_EXP_HISTOGRAM:
-		return otlp_pb_field_varint(wrapper, HIST_F_AGG_TEMP,
+		return otlp_pb_field_varint(wrapper, EH_F_AGG_TEMP,
 					   agg_temp);
 	default:
 		return OTLP_OK;

@@ -591,6 +591,29 @@ prop_metrics_exp_histogram_field_nums(uint64_t seed)
 		goto out_buf;
 	if (!descend(buf.data, &pos, &end, 2)) /* Metric */
 		goto out_buf;
+	{
+		/* Walk the ExponentialHistogram wrapper level (oneof
+		 * field 10) before descending into the data point. The
+		 * wrapper carries aggregation_temporality at field 2
+		 * (per opentelemetry-proto). Pre-v0.5.61 the encoder
+		 * emitted this correctly via HIST_F_AGG_TEMP but the
+		 * schema had no ExpHistogram entry. */
+		size_t eh_pos = pos;
+		size_t eh_end = end;
+		int    saw_agg_temp = 0;
+		int    eh_wt = 0;
+		size_t eh_vp = 0;
+		size_t eh_vl = 0;
+
+		if (!descend(buf.data, &eh_pos, &eh_end, 10))
+			goto out_buf;
+		if (find_at_level(buf.data, eh_pos, eh_end, 2,
+				  &eh_wt, &eh_vp, &eh_vl) &&
+		    eh_wt == OTLP_PB_WIRE_VARINT)
+			saw_agg_temp = 1;
+		if (!saw_agg_temp)
+			goto out_buf;
+	}
 	if (!descend(buf.data, &pos, &end, 10)) /* ExponentialHistogram */
 		goto out_buf;
 	if (!descend(buf.data, &pos, &end, 1)) /* DataPoint */
