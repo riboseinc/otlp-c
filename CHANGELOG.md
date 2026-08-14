@@ -4,6 +4,44 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.64] - 2026-08-14
+
+Roadmap + CLAUDE.md catch-up (27 releases).
+
+### Fixed — docs/roadmap.md stopped at v0.5.36
+
+The roadmap's release table ended at v0.5.36 (v0.5.37 was a
+"roadmap update" release that itself was never recorded, and
+none of v0.5.38-v0.5.63 were added). Added a new section
+"v0.5.37–v0.5.63 — deep audit arc (wire format, security,
+memory, overflow)" with all 27 releases, their PR numbers, and
+a bug-class coverage summary.
+
+### Fixed — CLAUDE.md referenced v0.5.35
+
+Updated "All phases are complete (v0.5.35)" → v0.5.63. Added
+mentions of the v0.5.43-v0.5.46 descriptor-driven dispatch, the
+v0.5.48/49/61 schema fixes, the v0.5.52/53 header-injection
+hardening, the v0.5.54 ID validation, the v0.5.47 RFC 7230
+parser fix, the v0.5.56/57 fail-injecting allocator test
+infrastructure, the v0.5.59 accounting invariant, and the
+v0.5.62/63 integer-overflow defense.
+
+### Why this matters
+
+The roadmap and CLAUDE.md are the first things a new contributor
+reads. Both claimed the library was at v0.5.35 — missing 28
+releases of bug fixes, security hardening, and test
+infrastructure. A contributor reading "34 tests, 7 bugs fixed"
+would drastically underestimate the project's actual maturity
+(34 tests, 34+ bugs fixed).
+
+### No code changes
+
+Documentation only. Existing tests still pass.
+
+34/34 tests pass.
+
 ## [0.5.63] - 2026-08-14
 
 Integer overflow sweep (continuation of v0.5.62).
