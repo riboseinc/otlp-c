@@ -4,6 +4,58 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.66] - 2026-08-15
+
+Integration test validates events + status; CI runs it.
+
+### Added — integration test exercises events + status
+
+The integration test (`test_integration_jaeger`) emitted spans
+with only 2 attributes — it did not exercise the v0.5.48 fixes
+(Event name/time field-number swap, Status code at wrong field).
+The wire-format fixes were validated by property tests (wire-
+level decode) but not against a real collector.
+
+The test now adds an event ("cache-miss" with an attribute) and
+sets status (`OTLP_STATUS_CODE_OK`) on each span. After the
+spans appear in Jaeger, the test searches the response body for
+the event name and the status string — verifying they survived
+the full round-trip (encode → otelcol decode → Jaeger store →
+query API).
+
+### Added — CI job runs the integration test
+
+The Jaeger integration test was local-only (manual
+`docker compose up` + `OTLP_C_RUN_INTEGRATION=1`). It never ran
+in CI — a wire-format regression that passed property tests
+(verify wire bytes directly) but failed against a real collector
+would go unnoticed until someone ran the test manually.
+
+New `jaeger-integration` job in ci.yml:
+1. Build library + tests.
+2. `docker compose up -d` (otelcol + Jaeger from the existing
+   tests/integration/docker-compose.yml).
+3. Wait for Jaeger query API readiness (up to 30s).
+4. `ctest -L integration` with `OTLP_C_RUN_INTEGRATION=1`.
+5. Dump otelcol logs on failure; tear down always.
+
+This closes the gap between "wire bytes are correct per our
+decoder" and "a spec-compliant collector accepts our output".
+
+### Verification needles
+
+The test searches the Jaeger JSON response for:
+- `"cache-miss"` — Jaeger stores OTLP events as span logs with
+  the event name as a field value.
+- `"STATUS_CODE_OK"` — otelcol translates OTLP status to the
+  `otel.status_code` tag with the enum name as the value.
+
+If these needles turn out to match a different serialization,
+the CI failure will surface it and the needles can be adjusted.
+
+34/34 tests pass locally (integration still skipped without
+docker; CI validates it).
+
 ## [0.5.65] - 2026-08-14
 
 DNS behavior documentation accuracy.
