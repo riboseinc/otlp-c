@@ -4,6 +4,58 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.63] - 2026-08-14
+
+Integer overflow sweep (continuation of v0.5.62).
+
+### Fixed — remaining `count * sizeof(...)` sites without overflow checks
+
+v0.5.62 fixed the metric allocation paths. This release sweeps
+the remaining allocation sites in the codebase:
+
+- `otlp_dup_str` (`internal_util.c`): `strlen(s) + 1` could
+  overflow for a string of `SIZE_MAX` bytes. Practically
+  unreachable (no system has that much contiguous memory), but
+  the check is one line. Returns NULL on overflow.
+- `mpsc_queue_init` (`mpsc_queue.c`): `capacity * sizeof(slot)`
+  could overflow for capacity near `SIZE_MAX / sizeof(slot)`.
+  Returns `OTLP_ERR_INVALID_ARGUMENT` on overflow.
+- `otlp_exporter_create` (`exporter.c`):
+  `n_resource_attributes * sizeof(otlp_resource_attr_t)` could
+  overflow. Fails cleanly on overflow.
+
+### Fixed — `batch_size` had no upper clamp
+
+`normalize_opts` replaced only `batch_size == 0` with the
+default (512). A caller passing `SIZE_MAX` would cause
+`batch_size * 2` to wrap in the pending-array allocation.
+Added an upper clamp of `OTLP_MAX_BATCH_SIZE` (1M items per
+batch). 1M spans in one batch is ~200 MB of encoded wire
+data; callers wanting more throughput should shard across
+multiple exporters.
+
+### Allocation-site audit now complete
+
+Every `otlp_malloc` / `otlp_calloc` / `otlp_realloc` call in
+`src/` has been examined for overflow safety:
+
+| Site | Check | Fixed |
+|---|---|---|
+| metric bounds/bucket_counts | explicit overflow check | v0.5.62 |
+| metric exp_pos/exp_neg counts | explicit overflow check | v0.5.62 |
+| metric clone paths | defensive overflow check | v0.5.62 |
+| `otlp_dup_str` len+1 | explicit overflow check | **v0.5.63** |
+| `mpsc_queue_init` capacity×slot | explicit overflow check | **v0.5.63** |
+| exporter resource_attributes | explicit overflow check | **v0.5.63** |
+| exporter pending arrays | batch_size clamp | **v0.5.63** |
+| HTTP req_buf total | already overflow-checked | (pre-v0.5.47) |
+| protobuf buf growth | doubling with SIZE_MAX guard | (pre-audit) |
+| platform sock struct | constant sizeof | safe |
+| sampler struct | constant sizeof | safe |
+| span struct | constant sizeof | safe |
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.62] - 2026-08-14
 
 Integer overflow defense in metric allocation paths.
