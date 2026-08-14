@@ -155,6 +155,23 @@ main(void)
 
 	st = otlp_exporter_flush(exp);
 	assert(st == OTLP_OK);
+	{
+		otlp_exporter_stats_t stats;
+
+		otlp_exporter_get_stats(exp, &stats);
+		printf("[integration] stats: emitted=%llu sent=%llu "
+		       "dropped_err=%llu dropped_full=%llu "
+		       "http_2xx=%llu http_4xx=%llu http_5xx=%llu "
+		       "network_err=%llu\n",
+		       (unsigned long long) stats.emitted,
+		       (unsigned long long) stats.sent,
+		       (unsigned long long) stats.dropped_err,
+		       (unsigned long long) stats.dropped_full,
+		       (unsigned long long) stats.http_2xx,
+		       (unsigned long long) stats.http_4xx,
+		       (unsigned long long) stats.http_5xx,
+		       (unsigned long long) stats.network_err);
+	}
 	otlp_exporter_shutdown(exp);
 	otlp_exporter_free(exp);
 	otlp_tracer_free(tracer);
