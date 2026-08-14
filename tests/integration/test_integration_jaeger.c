@@ -190,6 +190,12 @@ main(void)
 			"?service=otlp-c-integration-test&limit=200");
 
 		st = blocking_get(url, &body, &len, &http_status);
+		if (attempt == 0 || attempt == 50)
+			printf("[integration] poll %d: st=%d http=%d len=%zu"
+			       " body[:120]=%.*s\n",
+			       attempt, (int) st, http_status, len,
+			       (int) (len < 120 ? len : 120),
+			       body ? (const char *) body : "(null)");
 		if (st == OTLP_OK && http_status == 200 && body)
 		{
 			/* Look for our test_run_id in the response
