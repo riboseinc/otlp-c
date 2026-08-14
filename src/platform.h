@@ -31,8 +31,12 @@ otlp_platform_now_mono_nano(uint64_t *out);
 typedef struct otlp_socket otlp_socket_t;
 
 /* Initiate a non-blocking connect. getaddrinfo is called
- * synchronously (one-shot per request; cached at the exporter
- * level for the process lifetime). The connect itself is
+ * synchronously on every connect — results are NOT cached at
+ * the library level (the OS resolver usually provides caching
+ * via nscd / systemd-resolved / mDNSResponder). With HTTP
+ * keep-alive the connection is reused, so DNS lookups are rare
+ * in steady state — one per initial connect plus one per
+ * reconnect after a connection failure. The connect itself is
  * non-blocking: this returns OK + sets *out to a socket in
  * CONNECTING state; the caller then drives _finish_connect.
  *
