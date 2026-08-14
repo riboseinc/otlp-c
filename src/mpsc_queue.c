@@ -53,6 +53,10 @@ mpsc_queue_init(struct mpsc_queue *q, size_t capacity)
 
 	if (!q || !is_pow2(capacity))
 		return OTLP_ERR_INVALID_ARGUMENT;
+	/* Overflow check: capacity * sizeof(slot) must not wrap. Without
+	 * this, a huge capacity produces an undersized slots array. */
+	if (capacity > SIZE_MAX / sizeof(*q->slots))
+		return OTLP_ERR_INVALID_ARGUMENT;
 
 	q->slots = otlp_calloc(capacity, sizeof(*q->slots));
 	if (!q->slots)
