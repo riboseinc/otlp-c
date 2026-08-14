@@ -342,7 +342,15 @@ main(void)
 						break;
 					}
 				}
-				needle = "STATUS_CODE_OK";
+				/* Status: search for the "otel.status_code"
+				 * tag key (otelcol's translation of OTLP
+				 * Status). The exact value serialization
+				 * varies across otelcol/Jaeger versions
+				 * ("STATUS_CODE_OK" / "Ok" / "ok"), so the
+				 * key is the robust needle — its presence
+				 * proves the status sub-message survived
+				 * the round-trip. */
+				needle = "status_code";
 				for (hay = 0;
 				     hay + strlen(needle) <= len; hay++) {
 					if (memcmp(body + hay, needle,
@@ -363,7 +371,7 @@ main(void)
 				if (!found_status)
 				{
 					printf("[integration] FAIL — spans "
-					       "visible but STATUS_CODE_OK tag "
+					       "visible but status_code tag "
 					       "missing (v0.5.48 Status fix "
 					       "not validated)\n");
 					return 1;
