@@ -77,6 +77,14 @@ otlp_metric_create(otlp_metric_type_t type, const char *name,
 	if (!m->name || !m->unit || !m->description)
 		goto fail;
 	if (type == OTLP_METRIC_HISTOGRAM && histogram_bounds && histogram_n_bounds > 0) {
+		/* Overflow check: histogram_n_bounds * sizeof(double) and
+		 * (histogram_n_bounds + 1) * sizeof(uint64_t) must not
+		 * wrap. Without this, a huge count produces an undersized
+		 * allocation and the subsequent memcpy reads/writes OOB. */
+		if (histogram_n_bounds > SIZE_MAX / sizeof(double))
+			goto fail;
+		if (histogram_n_bounds >= SIZE_MAX / sizeof(uint64_t))
+			goto fail;
 		m->bounds = otlp_malloc(histogram_n_bounds * sizeof(double));
 		m->bucket_counts = otlp_calloc(histogram_n_bounds + 1, sizeof(uint64_t));
 		if (!m->bounds || !m->bucket_counts)
@@ -262,6 +270,8 @@ otlp_metric_set_exp_histogram(otlp_metric_t *m,
 	m->exp_scale = scale;
 	m->has_exp_scale = true;
 	if (pos_n > 0 && pos_counts) {
+		if (pos_n > SIZE_MAX / sizeof(uint64_t))
+			return OTLP_ERR_INVALID_ARGUMENT;
 		m->exp_pos_offset = pos_offset;
 		otlp_free(m->exp_pos_counts);
 		m->exp_pos_counts = otlp_malloc(pos_n * sizeof(uint64_t));
@@ -271,6 +281,8 @@ otlp_metric_set_exp_histogram(otlp_metric_t *m,
 		m->exp_pos_n = pos_n;
 	}
 	if (neg_n > 0 && neg_counts) {
+		if (neg_n > SIZE_MAX / sizeof(uint64_t))
+			return OTLP_ERR_INVALID_ARGUMENT;
 		m->exp_neg_offset = neg_offset;
 		otlp_free(m->exp_neg_counts);
 		m->exp_neg_counts = otlp_malloc(neg_n * sizeof(uint64_t));
@@ -397,9 +409,13 @@ otlp_metric_clone(const otlp_metric_t *src)
 		dst->n_attrs = src->n_attrs;
 	}
 
-	/* Histogram bounds + bucket counts */
+	/* Histogram bounds + bucket counts. src was validated at
+	 * create but a defensive overflow check is cheap. */
 	if (src->n_bounds > 0 && src->bounds)
 	{
+		if (src->n_bounds > SIZE_MAX / sizeof(double) ||
+		    src->n_bounds >= SIZE_MAX / sizeof(uint64_t))
+			goto fail;
 		dst->bounds = otlp_malloc(src->n_bounds * sizeof(double));
 		dst->bucket_counts = otlp_calloc(src->n_bounds + 1,
 						 sizeof(uint64_t));
@@ -420,6 +436,8 @@ otlp_metric_clone(const otlp_metric_t *src)
 	dst->has_exp_scale = src->has_exp_scale;
 	if (src->exp_pos_n > 0 && src->exp_pos_counts)
 	{
+		if (src->exp_pos_n > SIZE_MAX / sizeof(uint64_t))
+			goto fail;
 		dst->exp_pos_counts = otlp_calloc(src->exp_pos_n,
 						  sizeof(uint64_t));
 		if (!dst->exp_pos_counts)
@@ -430,6 +448,8 @@ otlp_metric_clone(const otlp_metric_t *src)
 	}
 	if (src->exp_neg_n > 0 && src->exp_neg_counts)
 	{
+		if (src->exp_neg_n > SIZE_MAX / sizeof(uint64_t))
+			goto fail;
 		dst->exp_neg_counts = otlp_calloc(src->exp_neg_n,
 						  sizeof(uint64_t));
 		if (!dst->exp_neg_counts)

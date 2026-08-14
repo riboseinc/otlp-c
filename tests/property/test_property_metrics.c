@@ -670,6 +670,45 @@ out:
 	return ok;
 }
 
+/* Regression (v0.5.62): integer overflow in metric size
+ * calculations. A caller-supplied count that would cause
+ * count * sizeof(...) to wrap must be rejected. */
+static int
+prop_metric_rejects_overflow_sizes(uint64_t seed)
+{
+	double   dummy_bounds[1] = {1.0};
+	uint64_t dummy_counts[1] = {1};
+	otlp_metric_t *m;
+	otlp_status_t  st;
+
+	(void) seed;
+
+	/* Histogram with SIZE_MAX bounds → overflow in bounds
+	 * allocation. Must return NULL. */
+	m = otlp_metric_create(OTLP_METRIC_HISTOGRAM, "h", "", "",
+			       dummy_bounds, (size_t) -1);
+	if (m) {
+		otlp_metric_free(m);
+		return 0;
+	}
+
+	/* ExpHistogram setter with SIZE_MAX pos counts → overflow.
+	 * Must return INVALID_ARGUMENT. */
+	m = otlp_metric_create(OTLP_METRIC_EXP_HISTOGRAM, "eh", "", "",
+			       NULL, 0);
+	if (!m)
+		return 0;
+	st = otlp_metric_set_exp_histogram(m, 20, 0,
+					   dummy_counts, (size_t) -1,
+					   0, NULL, 0);
+	if (st != OTLP_ERR_INVALID_ARGUMENT) {
+		otlp_metric_free(m);
+		return 0;
+	}
+	otlp_metric_free(m);
+	return 1;
+}
+
 int
 main(void)
 {
@@ -693,6 +732,8 @@ main(void)
 				 "prop_metrics_non_monotonic_counter", 5, 1);
 	failures += property_run(prop_metrics_exp_histogram_field_nums,
 				 "prop_metrics_exp_histogram_field_nums", 5, 1);
+	failures += property_run(prop_metric_rejects_overflow_sizes,
+				 "prop_metric_rejects_overflow_sizes", 1, 1);
 
 	if (failures)
 		printf("[property] %d metrics property(ies) failed\n", failures);
