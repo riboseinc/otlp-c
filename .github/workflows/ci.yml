@@ -231,3 +231,49 @@ jobs:
           cmake -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           ctest --test-dir build --build-config Release --output-on-failure
+
+  # End-to-end integration against a real otelcol + Jaeger.
+  # Validates the wire-format fixes (v0.5.48 Event/Status field
+  # numbers, v0.5.49 ExpHistogram wire types, v0.5.50 LogRecord
+  # trace correlation) against a spec-compliant collector — the
+  # property tests verify the wire bytes directly, but this job
+  # verifies the full round-trip: encode → POST → otelcol decode
+  # → Jaeger store → query API.
+  jaeger-integration:
+    name: Jaeger integration (otelcol end-to-end)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Build library + tests
+        run: |
+          cmake -B build -G Ninja -DOTLP_C_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Start otelcol + Jaeger
+        working-directory: tests/integration
+        run: |
+          docker compose up -d
+          # Wait for both services to be healthy (up to 30s).
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:16686/api/services > /dev/null 2>&1; then
+              echo "Jaeger ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Jaeger did not become ready in 30s"
+          docker compose logs
+          exit 1
+      - name: Run integration test
+        env:
+          OTLP_C_RUN_INTEGRATION: "1"
+        run: ctest --test-dir build -L integration --output-on-failure
+      - name: Dump otelcol logs on failure
+        if: failure()
+        working-directory: tests/integration
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        working-directory: tests/integration
+        run: docker compose down -v

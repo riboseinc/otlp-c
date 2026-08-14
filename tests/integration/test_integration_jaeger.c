@@ -140,6 +140,14 @@ main(void)
 		assert(s != NULL);
 		otlp_span_set_attribute_string(s, "test_run_id", run_id);
 		otlp_span_set_attribute_int(s, "i", (int64_t) i);
+		/* Exercise the v0.5.48 fixes end-to-end: events (field
+		 * numbers were swapped pre-fix) and status (code was at
+		 * the wrong field pre-fix). If the collector rejects or
+		 * drops these fields, the span won't appear complete in
+		 * Jaeger and the substring assertions below will fail. */
+		otlp_span_add_event(s, "cache-miss", 0);
+		otlp_span_set_event_attribute_string(s, "key", "user_42");
+		otlp_span_set_status(s, OTLP_STATUS_CODE_OK, NULL);
 		st = otlp_exporter_emit(exp, s);
 		assert(st == OTLP_OK);
 		otlp_span_free(s);
@@ -186,10 +194,54 @@ main(void)
 				}
 			if (found)
 			{
-				printf("[integration] PASS — span with "
-				       "test_run_id=%s visible in Jaeger\n",
-					run_id);
+				/* v0.5.48 end-to-end validation: verify the
+				 * event name and status survive the round-trip
+				 * (encode → otelcol decode → Jaeger store →
+				 * query). Events appear as span logs; status
+				 * appears as the "otel.status_code" tag. */
+				bool found_event = false;
+				bool found_status = false;
+				const char *needle;
+
+				needle = "cache-miss";
+				for (hay = 0;
+				     hay + strlen(needle) <= len; hay++) {
+					if (memcmp(body + hay, needle,
+						   strlen(needle)) == 0) {
+						found_event = true;
+						break;
+					}
+				}
+				needle = "STATUS_CODE_OK";
+				for (hay = 0;
+				     hay + strlen(needle) <= len; hay++) {
+					if (memcmp(body + hay, needle,
+						   strlen(needle)) == 0) {
+						found_status = true;
+						break;
+					}
+				}
 				free(body);
+				if (!found_event)
+				{
+					printf("[integration] FAIL — spans "
+					       "visible but event 'cache-miss' "
+					       "missing (v0.5.48 Event fix not "
+					       "validated)\n");
+					return 1;
+				}
+				if (!found_status)
+				{
+					printf("[integration] FAIL — spans "
+					       "visible but STATUS_CODE_OK tag "
+					       "missing (v0.5.48 Status fix "
+					       "not validated)\n");
+					return 1;
+				}
+				printf("[integration] PASS — span with "
+				       "test_run_id=%s + event + status "
+				       "visible in Jaeger\n",
+					run_id);
 				return 0;
 			}
 			free(body);
