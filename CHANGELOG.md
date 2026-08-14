@@ -4,6 +4,51 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.65] - 2026-08-14
+
+DNS behavior documentation accuracy.
+
+### Fixed — `platform.h` claimed DNS results were cached (they are not)
+
+The `otlp_socket_connect` docstring claimed getaddrinfo results
+were "cached at the exporter level for the process lifetime."
+No such caching exists — every connect does a fresh getaddrinfo.
+The claim was aspirational (from the original design plan) but
+never implemented.
+
+A reader might assume DNS latency is a one-time cost and design
+their tick-loop thread accordingly. In reality, every reconnect
+(initial connect, or reconnect after a connection failure)
+performs a blocking getaddrinfo that can take seconds on slow
+or broken DNS.
+
+Fix: the comment now accurately describes the behavior — no
+library-level caching, rely on the OS resolver (nscd /
+systemd-resolved / mDNSResponder), DNS lookups are rare in
+steady state thanks to HTTP keep-alive.
+
+### Added — public DNS note in `exporter.h`
+
+The exporter's public docstring now documents the blocking-DNS
+behavior: the first tick() that opens a connection (and any
+reconnect) performs a blocking getaddrinfo. Callers whose tick
+thread cannot tolerate this latency should resolve the
+collector's hostname to an IP before constructing the endpoint,
+or run tick() from a thread that can block briefly.
+
+### Comment-accuracy sweep
+
+Scanned all internal headers for strong claims ("cached",
+"always", "never", "guaranteed", "thread-safe"):
+- platform.h "never spawns threads, never takes locks" —
+  verified accurate (no pthread_mutex / CreateMutex anywhere).
+- exporter.c "Cached TCP connection for HTTP keep-alive" —
+  verified accurate (keepalive_sock is real).
+- platform.h DNS caching claim — **false, fixed in this
+  release**.
+
+34/34 tests pass.
+
 ## [0.5.64] - 2026-08-14
 
 Roadmap + CLAUDE.md catch-up (27 releases).
