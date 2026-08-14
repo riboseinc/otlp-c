@@ -11,6 +11,16 @@
  * controls — its event loop, a periodic timer, a worker, etc. See
  * docs/deployment.md for embedding patterns.
  *
+ * DNS note: the first tick() that opens a connection (and any
+ * tick() that reconnects after a connection failure) performs a
+ * blocking getaddrinfo() call. This can take up to several
+ * seconds on a network with slow/broken DNS. If the caller's
+ * thread cannot tolerate this latency, resolve the collector's
+ * hostname to an IP address before constructing the exporter's
+ * endpoint, or run tick() from a thread that can block briefly.
+ * The library does not cache DNS results (the OS resolver
+ * usually does).
+ *
  * Thread-safety: emit() is safe to call from any thread. tick(),
  * flush(), shutdown(), free(), and get_stats() are NOT — the caller
  * must serialise them (typically by always calling from the same
