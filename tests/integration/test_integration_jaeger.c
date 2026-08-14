@@ -16,6 +16,7 @@
 #include <otlp-c/version.h>
 
 #include "../src/http_client.h"
+#include "../src/platform.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -24,9 +25,12 @@
 #include <string.h>
 #include <time.h>
 
-/* Tiny blocking HTTP client for the Jaeger query (test-only). The
- * main library is non-blocking + caller-tick; the test wants a
- * one-shot sync call. We re-use otlp_http_request_t and busy-loop. */
+/* Tiny blocking raw-socket HTTP GET for the Jaeger query (test-only).
+ *
+ * Why not otlp_http_request_t: the library's client is POST-only
+ * (OTLP only ever POSTs). Jaeger's query API rejects POST with 405
+ * Method Not Allowed. This helper hand-builds a GET over the
+ * platform socket layer and blocks until EOF (Connection: close). */
 static otlp_status_t
 blocking_get(const char *url_str,
 	uint8_t **body_out,
@@ -34,57 +38,160 @@ blocking_get(const char *url_str,
 	int *status_out)
 {
 	struct otlp_http_url url;
-	otlp_http_request_t *req = NULL;
+	otlp_socket_t *sock = NULL;
 	otlp_status_t st;
+	char req[512];
+	size_t req_len;
+	size_t cap = 1024 * 1024;
+	size_t len = 0;
+	uint8_t *buf;
+	int i;
 
 	st = otlp_http_parse_url(url_str, &url);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_http_request_start(&req, &url, "otlp-c/test", NULL, 0, 0, 0);
+
+	req_len = (size_t) snprintf(req, sizeof(req),
+		"GET %s HTTP/1.1\r\n"
+		"Host: %s\r\n"
+		"User-Agent: otlp-c/test\r\n"
+		"Connection: close\r\n"
+		"\r\n",
+		url.path, url.host);
+	if (req_len == 0 || req_len >= sizeof(req))
+		return OTLP_ERR_OVERFLOW;
+
+	st = otlp_socket_connect(&sock, url.host, url.port);
 	if (st != OTLP_OK)
 		return st;
-	for (int i = 0; i < 100000; i++)
+
+	buf = malloc(cap);
+	if (!buf)
 	{
-		otlp_http_req_state_t s;
-
-		(void) otlp_http_request_step(req);
-		s = otlp_http_request_state(req);
-		if (s == OTLP_HTTP_REQ_DONE)
-		{
-			const uint8_t *p;
-			size_t n;
-
-			p = otlp_http_request_body(req, &n);
-			*status_out = otlp_http_request_http_status(req);
-			if (n > 0)
-			{
-				*body_out = malloc(n);
-				if (!*body_out)
-				{
-					otlp_http_request_free(req);
-					return OTLP_ERR_NOMEM;
-				}
-				memcpy(*body_out, p, n);
-				*len_out = n;
-			}
-			else
-			{
-				*body_out = NULL;
-				*len_out = 0;
-			}
-			otlp_http_request_free(req);
-			return OTLP_OK;
-		}
-		if (s == OTLP_HTTP_REQ_FAILED)
-		{
-			otlp_http_request_free(req);
-			return OTLP_ERR_NETWORK;
-		}
-		struct timespec ts = { 0, 1000 * 1000 /* 1ms */ };
-		nanosleep(&ts, NULL);
+		otlp_socket_close(sock);
+		return OTLP_ERR_NOMEM;
 	}
-	otlp_http_request_free(req);
-	return OTLP_ERR_TIMEOUT;
+
+	/* Blocking write loop (test-only; the socket is non-blocking
+	 * so we spin with a short sleep until fully written). */
+	{
+		size_t sent = 0;
+
+		for (i = 0; i < 100000 && sent < req_len; i++)
+		{
+			size_t n = 0;
+
+			st = otlp_socket_write(sock,
+				(const uint8_t *) req + sent,
+				req_len - sent, &n);
+			if (st == OTLP_OK)
+				sent += n;
+			else if (st != OTLP_ERR_WOULDBLOCK)
+			{
+				free(buf);
+				otlp_socket_close(sock);
+				return st;
+			}
+			if (sent < req_len)
+			{
+				struct timespec ts = { 0, 1000 * 1000 };
+				nanosleep(&ts, NULL);
+			}
+		}
+		if (sent < req_len)
+		{
+			free(buf);
+			otlp_socket_close(sock);
+			return OTLP_ERR_TIMEOUT;
+		}
+	}
+
+	/* Blocking read loop until EOF (Connection: close). */
+	for (i = 0; i < 100000; i++)
+	{
+		size_t n = 0;
+
+		st = otlp_socket_read(sock, buf + len, cap - len, &n);
+		if (st == OTLP_OK)
+		{
+			if (n == 0)
+				break; /* EOF */
+			len += n;
+			if (len == cap)
+			{
+				/* Response too large; cap it. */
+				break;
+			}
+		}
+		else if (st == OTLP_ERR_WOULDBLOCK)
+		{
+			struct timespec ts = { 0, 1000 * 1000 };
+			nanosleep(&ts, NULL);
+		}
+		else
+			break; /* error */
+	}
+	otlp_socket_close(sock);
+
+	/* Parse status line: "HTTP/1.1 NNN ..." */
+	if (len < 12 || memcmp(buf, "HTTP/", 5) != 0)
+	{
+		free(buf);
+		return OTLP_ERR_INVALID_RESPONSE;
+	}
+	{
+		const uint8_t *p = buf + 5;
+
+		while (p < buf + len && *p != ' ')
+			p++;
+		p++;
+		if (p + 3 > buf + len ||
+		    p[0] < '0' || p[0] > '9' ||
+		    p[1] < '0' || p[1] > '9' ||
+		    p[2] < '0' || p[2] > '9')
+		{
+			free(buf);
+			return OTLP_ERR_INVALID_RESPONSE;
+		}
+		*status_out = (p[0] - '0') * 100 + (p[1] - '0') * 10 + (p[2] - '0');
+	}
+
+	/* Find body (after \r\n\r\n) and return a copy. The needles
+	 * the caller searches for never appear in headers, so a
+	 * simple split is sufficient. */
+	{
+		uint8_t *hdr_end = NULL;
+
+		for (size_t k = 0; k + 3 < len; k++)
+		{
+			if (buf[k] == '\r' && buf[k + 1] == '\n' &&
+			    buf[k + 2] == '\r' && buf[k + 3] == '\n')
+			{
+				hdr_end = buf + k + 4;
+				break;
+			}
+		}
+		if (!hdr_end)
+		{
+			free(buf);
+			return OTLP_ERR_INVALID_RESPONSE;
+		}
+		*len_out = (size_t) (buf + len - hdr_end);
+		if (*len_out > 0)
+		{
+			*body_out = malloc(*len_out);
+			if (!*body_out)
+			{
+				free(buf);
+				return OTLP_ERR_NOMEM;
+			}
+			memcpy(*body_out, hdr_end, *len_out);
+		}
+		else
+			*body_out = NULL;
+	}
+	free(buf);
+	return OTLP_OK;
 }
 
 static char *
