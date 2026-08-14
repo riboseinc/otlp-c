@@ -83,6 +83,8 @@ otlp_dup_str(const char *s)
 	if (!s)
 		return NULL;
 	len = strlen(s);
+	if (len == SIZE_MAX)
+		return NULL;  /* len + 1 would overflow */
 	out = otlp_malloc(len + 1);
 	if (!out)
 		return NULL;

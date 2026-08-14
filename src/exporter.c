@@ -45,6 +45,12 @@
 
 #define OTLP_DEFAULT_ENDPOINT "http://localhost:4318/v1/traces"
 #define OTLP_DEFAULT_BATCH_SIZE 512
+/* Upper clamp for caller-supplied batch_size. Prevents
+ * batch_size * 2 * sizeof(ptr) from overflowing size_t in the
+ * pending-array allocation. 1M items per batch is already
+ * enormous (~200 MB of encoded wire data); callers wanting
+ * more should shard across multiple exporters. */
+#define OTLP_MAX_BATCH_SIZE (1024u * 1024u)
 #define OTLP_DEFAULT_BATCH_MS 100
 #define OTLP_DEFAULT_MAX_RETRIES 5
 #define OTLP_DEFAULT_BACKOFF_INIT_MS 1000
@@ -189,6 +195,8 @@ normalize_opts(otlp_exporter_opts_t *o)
 		o->service_name = "";
 	if (o->batch_size == 0)
 		o->batch_size = OTLP_DEFAULT_BATCH_SIZE;
+	if (o->batch_size > OTLP_MAX_BATCH_SIZE)
+		o->batch_size = OTLP_MAX_BATCH_SIZE;
 	if (o->batch_ms == 0)
 		o->batch_ms = OTLP_DEFAULT_BATCH_MS;
 	if (o->max_retries == 0)
@@ -291,6 +299,11 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (o.n_resource_attributes > 0 && o.resource_attributes)
 	{
 		size_t i;
+		/* Overflow check before the count * sizeof multiplication.
+		 * See the v0.5.62/63 integer-overflow audit. */
+		if (o.n_resource_attributes >
+		    SIZE_MAX / sizeof(*e->resource_attributes))
+			goto fail;
 		/* otlp_calloc (not otlp_malloc): the fail path iterates
 		 * every slot and frees key/value pointers. If a partial
 		 * copy fails partway, slots beyond the failure index are
