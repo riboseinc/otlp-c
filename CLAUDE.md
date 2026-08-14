@@ -137,23 +137,31 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.35). The library implements:
+All phases are complete (v0.5.63). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
+  (every OTLP message has its own field-spec entry — v0.5.48/49/61
+  fixed 10 field-number/wire-type bugs found by cross-checking
+  against upstream opentelemetry-proto)
 - All three OTLP signals (traces, metrics, logs) with encoders
 - Span/metric/log lifecycle with events, links, attributes
 - **Async emission for ALL three signals** via MPSC queue + caller-tick.
   Each signal has both clone (`emit` / `emit_metric` / `emit_log`) and
   move (`emit_move` / `emit_metric_move` / `emit_log_move`) variants.
   tick() uses a table-driven `struct signal_path` descriptor for DRY
-  dispatch across all three signals (v0.5.28–v0.5.30).
+  dispatch across all three signals (v0.5.28–v0.5.30). The emit,
+  record_outcome, start_post, and free-drain paths are all
+  descriptor-driven (v0.5.43–v0.5.46).
 - W3C Trace Context propagation (traceparent + tracestate) +
-  **W3C Baggage** (v0.5.22)
+  **W3C Baggage** (v0.5.22); ID setters reject all-zero (v0.5.54);
+  context extract rejects CRLF in tracestate/baggage (v0.5.53)
 - Resource attributes: **typed** (string/int64/double/bool, v0.5.24) +
   configurable aggregation temporality + is_monotonic (v0.5.26)
 - Sampler interface (always_on / always_off / trace_id_ratio_based)
 - Lock-free MPSC queue + caller-tick exporter (no library threads)
 - Non-blocking HTTP/1.1 client with keep-alive +
-  **connect/read timeout enforcement** (v0.5.25)
+  **connect/read timeout enforcement** (v0.5.25) +
+  **no-Content-Length handling per RFC 7230** (v0.5.47) +
+  **header-injection hardening at all vectors** (v0.5.52/53: CWE-93)
 - **Diagnostic callback** for production observability (v0.5.23):
   `otlp_exporter_set_logger()` fires at 7 events (queue full, retry,
   drop, success, etc.)
@@ -161,7 +169,13 @@ All phases are complete (v0.5.35). The library implements:
 - ExponentialHistogram with configurable buckets
 - Null-transport mode for deterministic testing
 - Configurable flush timeout + compile-time span cap overrides
-- Per-signal stats (emitted/sent/dropped for spans, metrics, logs)
+- Per-signal stats (emitted/sent/dropped for spans, metrics, logs) +
+  **accounting invariant holds under OOM** (v0.5.59)
+- **Fail-injecting allocator test infrastructure** (v0.5.56/57):
+  every multi-alloc init path is probed at each OOM offset; catches
+  partial-init cleanup leaks and accounting violations automatically
+- **Integer-overflow defense at all allocation sites** (v0.5.62/63:
+  CWE-190): every `count * sizeof(...)` has an explicit check
 
 When extending the library:
 - **New attribute type**: add enum value + encoder function +

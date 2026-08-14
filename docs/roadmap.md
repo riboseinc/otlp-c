@@ -86,6 +86,52 @@ being solid.
 **Key metrics (v0.5.36):** 76 TODOs complete, 34 tests, 7 correctness
 bugs found and fixed, all sanitizers green, zero warnings.
 
+### v0.5.37–v0.5.63 — deep audit arc (wire format, security, memory, overflow)
+
+| Version | Item | PR |
+|---|---|---|
+| 0.5.37 | Roadmap update (docs catch-up to v0.5.36) | #67 |
+| 0.5.38 | Pre-sized encode buffers (perf: ~10 fewer growth cycles per batch) | #68 |
+| 0.5.39 | `otlp_pb_buf_init` return checks + batch-encode benchmark | #69 |
+| 0.5.40 | **Fix: metric/log body leak on encode fail** + keepalive reuse + MECE refactor (exporter_otel build helpers) | #70 |
+| 0.5.41 | **Fix: move-emit leaked donated item on shutdown-return** | #71 |
+| 0.5.42 | Clone-variant emit shutdown-before-alloc symmetry | #72 |
+| 0.5.43 | Table-driven emit pipeline (descriptor + shared helpers) | #73 |
+| 0.5.44 | Table-driven `record_outcome` (descriptor + signal-agnostic helpers) | #74 |
+| 0.5.45 | Table-driven `try_start_post` (descriptor + build-request wrappers) | #75 |
+| 0.5.46 | Table-driven exporter free-drain + span clone-shutdown test | #76 |
+| 0.5.47 | **Fix: `otlp_attribute_copy_all` fail-path leak** + HTTP no-Content-Length parser fix (RFC 7230) | #77 |
+| 0.5.48 | **Fix: 4 OTLP schema field-number bugs** (Event name/time swap, Status.code=1→3, NDP attrs=1→7, HDP attrs/min/max) | #78 |
+| 0.5.49 | **Fix: 2 ExpHistogram wire types** (zero_count VARINT→FIXED64, bucket_counts fixed64→varint) | #79 |
+| 0.5.50 | **Fix: LogRecord asymmetric trace correlation** emitted zero-fill trace_id (W3C violation) | #80 |
+| 0.5.51 | **Fix: slab double-free UB** (free on arena pointer) + sampler endpoint precision | #81 |
+| 0.5.52 | **Fix: HTTP header injection (CWE-93)** — URL parser + user_agent CR/LF | #82 |
+| 0.5.53 | **Fix: context propagation CRLF injection (CWE-93)** — tracestate/baggage | #83 |
+| 0.5.54 | **Fix: 5 ID setters accepted all-zero (W3C §3.1.1/§3.1.2)** | #84 |
+| 0.5.55 | **Fix: resource_attributes used `malloc` (fail path iterated garbage)** | #85 |
+| 0.5.56 | **Fail-injecting allocator test + fix: mpsc_queue cleanup leak in exporter_create fail path** | #86 |
+| 0.5.57 | Extended OOM tests to all init paths (140 new iterations) | #87 |
+| 0.5.58 | **Fix: flush return-status omitted queue-size checks** (silent data loss) | #88 |
+| 0.5.59 | **Fix: flush_metric/flush_log accounting broke under OOM** (`emitted != sent + dropped_err`) | #89 |
+| 0.5.60 | Span/log docstring accuracy (post-audit catch-up) | #90 |
+| 0.5.61 | ExponentialHistogram schema entry (DRY/MECE — was reusing Histogram's) | #91 |
+| 0.5.62 | **Fix: integer overflow in metric allocations (CWE-190→CWE-787)** | #92 |
+| 0.5.63 | **Fix: integer overflow sweep — all remaining allocation sites** (dup_str, mpsc_queue, resource_attrs, batch_size clamp) | #93 |
+
+**Key metrics (v0.5.63):** 103 TODOs complete, 34 tests, **34+ distinct
+bugs found and fixed**, all sanitizers green, zero warnings.
+
+**Bug-class coverage in the v0.5.47–v0.5.63 arc:**
+- Wire format: 10 bugs (schema field numbers, wire types).
+- W3C spec: 3 bugs (trace correlation, ID validation).
+- Memory safety: 4 bugs (partial-init cleanup, slab double-free).
+- Security: 4 bugs (CWE-93 header injection at 3 vectors).
+- Accounting: 3 bugs (return-status, counter invariants under OOM).
+- Integer overflow: 8+ sites (CWE-190).
+- Test infrastructure: fail-injecting allocator across 8 init/flush paths.
+- Schema completeness: every OTLP message has its own field-spec table.
+- Documentation: public API docstrings aligned with post-audit behavior.
+
 ## Deferred (post-1.0)
 
 These are documented in TODO.complete/ with full specs but not on
