@@ -4,6 +4,44 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.62] - 2026-08-14
+
+Integer overflow defense in metric allocation paths.
+
+### Fixed — `count * sizeof(...)` multiplication could overflow
+
+`otlp_metric_create` (histogram path), `otlp_metric_set_exp_histogram`,
+and `otlp_metric_clone` all multiplied caller-supplied counts by
+`sizeof(double)` or `sizeof(uint64_t)` without overflow checks. A
+malicious or buggy caller passing `SIZE_MAX` as the count would
+cause the multiplication to wrap to a small value, producing an
+undersized allocation. The subsequent `memcpy` would then read/write
+out of bounds — heap buffer overflow.
+
+Affected paths:
+- `otlp_metric_create` with `histogram_n_bounds` near `SIZE_MAX`:
+  `histogram_n_bounds * sizeof(double)` wraps; `histogram_n_bounds + 1`
+  wraps to 0 in the bucket_counts calloc.
+- `otlp_metric_set_exp_histogram` with `pos_n` or `neg_n` near
+  `SIZE_MAX`: `pos_n * sizeof(uint64_t)` wraps.
+- `otlp_metric_clone` (defensive): same checks for the cloned
+  bounds/counts, even though src was validated at create time.
+
+Fix: explicit overflow check (`count > SIZE_MAX / sizeof(...)`)
+before each multiplication. On overflow, the function returns NULL
+(create) or `OTLP_ERR_INVALID_ARGUMENT` (set_exp_histogram) or
+falls through to `goto fail` (clone).
+
+### Added — `prop_metric_rejects_overflow_sizes`
+
+Property test verifies that `otlp_metric_create` with
+`histogram_n_bounds = SIZE_MAX` returns NULL, and
+`otlp_metric_set_exp_histogram` with `pos_n = SIZE_MAX` returns
+`INVALID_ARGUMENT`. Both pre-v0.5.62 would have proceeded to
+allocate a wrapped-size buffer.
+
+34/34 tests pass. ASAN clean.
+
 ## [0.5.61] - 2026-08-14
 
 ExponentialHistogram schema entry (DRY/MECE).
