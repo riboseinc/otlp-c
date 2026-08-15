@@ -11,6 +11,8 @@
  *   OTLP_C_RUN_INTEGRATION=1 ctest --test-dir build -L integration
  */
 #include <otlp-c/exporter.h>
+#include <otlp-c/log.h>
+#include <otlp-c/metric.h>
 #include <otlp-c/span.h>
 #include <otlp-c/tracer.h>
 #include <otlp-c/version.h>
@@ -258,6 +260,54 @@ main(void)
 		st = otlp_exporter_emit(exp, s);
 		assert(st == OTLP_OK);
 		otlp_span_free(s);
+	}
+
+	/* Metrics: emit a counter via the synchronous flush path.
+	 * A 2xx from otelcol proves the ExportMetricsServiceRequest
+	 * was accepted by the collector's real protobuf parser —
+	 * end-to-end validation of the metrics encoder (NumberDataPoint
+	 * field numbers, Sum envelope, attributes). */
+	{
+		otlp_metric_t *m = otlp_metric_create(
+			OTLP_METRIC_COUNTER, "integration_requests_total",
+			"1", "integration test counter", NULL, 0);
+
+		assert(m != NULL);
+		otlp_metric_record(m, 1.0);
+		otlp_metric_mark_time(m);
+		otlp_metric_set_attribute_string(m, "test_run_id", run_id);
+		st = otlp_exporter_flush_metric(exp, m);
+		if (st != OTLP_OK)
+		{
+			printf("[integration] FAIL — flush_metric returned %d "
+			       "(metrics encoder rejected by collector)\n",
+			       (int) st);
+			return 1;
+		}
+		otlp_metric_free(m);
+	}
+
+	/* Logs: emit a log record with trace correlation via the
+	 * synchronous flush path. A 2xx from otelcol proves the
+	 * ExportLogsServiceRequest was accepted — end-to-end
+	 * validation of the logs encoder (LogRecord fields, severity,
+	 * body AnyValue, attributes). */
+	{
+		otlp_log_record_t *lr = otlp_log_record_create(
+			OTLP_SEVERITY_INFO, "integration log body");
+
+		assert(lr != NULL);
+		otlp_log_record_mark_timestamp(lr);
+		otlp_log_record_set_attribute_string(lr, "test_run_id", run_id);
+		st = otlp_exporter_flush_log(exp, lr);
+		if (st != OTLP_OK)
+		{
+			printf("[integration] FAIL — flush_log returned %d "
+			       "(logs encoder rejected by collector)\n",
+			       (int) st);
+			return 1;
+		}
+		otlp_log_record_free(lr);
 	}
 
 	st = otlp_exporter_flush(exp);

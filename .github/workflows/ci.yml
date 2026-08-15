@@ -269,6 +269,37 @@ jobs:
         env:
           OTLP_C_RUN_INTEGRATION: "1"
         run: ctest --test-dir build -L integration --output-on-failure
+      - name: Verify metrics + logs received by otelcol
+        working-directory: tests/integration
+        run: |
+          # The test's flush_metric/flush_log assert a 2xx from
+          # otelcol (the collector parsed our protobuf). This step
+          # additionally greps the debug-exporter output to confirm
+          # the metric name and log body arrived intact — the batch
+          # processor may hold them for up to 5s, so retry.
+          for i in $(seq 1 15); do
+            if docker compose logs otelcol | grep -q "integration_requests_total"; then
+              echo "metric received by otelcol (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "metric 'integration_requests_total' not found in otelcol logs"
+          docker compose logs otelcol | tail -50
+          exit 1
+      - name: Verify log record received by otelcol
+        working-directory: tests/integration
+        run: |
+          for i in $(seq 1 15); do
+            if docker compose logs otelcol | grep -q "integration log body"; then
+              echo "log record received by otelcol (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "log 'integration log body' not found in otelcol logs"
+          docker compose logs otelcol | tail -50
+          exit 1
       - name: Dump otelcol logs on failure
         if: failure()
         working-directory: tests/integration
