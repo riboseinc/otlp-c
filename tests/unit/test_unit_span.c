@@ -3,12 +3,33 @@
 // Unit tests for the span lifecycle. Complements the property tests
 // with specific known-answer assertions for each public setter.
 
+#include "../../src/span_internal.h"
+
 #include <otlp-c/span.h>
 #include <otlp-c/tracer.h>
 
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+
+/* Regression guard (v0.5.68): sizeof(struct otlp_span) must stay
+ * small. Pre-v0.5.68 the embedded events[64]/links[64] arrays each
+ * carried inline attrs[32] arrays, making the struct ~139KB —
+ * every span create/clone allocated and zeroed 139KB, dominating
+ * the emit path (~30μs/span; ~650K spans/s after the fix).
+ * Event/link attrs are now lazily heap-allocated pointers. If a
+ * change pushes the struct past this budget, re-measure the emit
+ * benchmark before accepting it. */
+static int test_span_struct_size(void)
+{
+	/* 8.8KB at v0.5.68 (span attrs inline: 4KB; event/link
+	 * headers: ~4.6KB). 16KB is a generous ceiling that still
+	 * catches a return to inline-array growth. */
+	assert(otlp_span_struct_size() <= 16 * 1024);
+	printf("[unit-span] sizeof(otlp_span)=%zu bytes\n",
+	       otlp_span_struct_size());
+	return 0;
+}
 
 static int test_span_create_free(void)
 {
@@ -188,6 +209,7 @@ int main(void)
 {
 	int failures = 0;
 
+	failures += test_span_struct_size();
 	failures += test_span_create_free();
 	failures += test_span_set_name();
 	failures += test_span_attribute_string();
@@ -205,7 +227,7 @@ int main(void)
 	if (failures)
 		printf("[unit-span] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-span] PASS (13 tests)\n");
+		printf("[unit-span] PASS (14 tests)\n");
 
 	return failures ? 1 : 0;
 }

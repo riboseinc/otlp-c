@@ -38,10 +38,8 @@ bench(int n_spans, int n_attrs)
 	otlp_exporter_opts_t opts;
 	otlp_exporter_t     *exp;
 	otlp_tracer_t       *tracer;
-	otlp_span_t         *tmpl;
 	uint64_t             t0, t1, elapsed_ns;
-	double               ns_per_op;
-	double               spans_per_sec;
+	double               ns_clone, ns_move;
 	int                  i, j;
 
 	memset(&opts, 0, sizeof(opts));
@@ -60,33 +58,59 @@ bench(int n_spans, int n_attrs)
 
 	tracer = otlp_tracer_create("bench", "bench", "1.0");
 
-	/* Build a template span with n_attrs attributes. */
-	tmpl = otlp_tracer_start_span(tracer, "operation");
-	for (j = 0; j < n_attrs; j++)
+	/* Pass 1: emit (clone + queue + tick). Each emit deep-copies
+	 * the span, so this measures the full cost a caller using the
+	 * clone API pays per span. */
 	{
-		char k[16];
-		snprintf(k, sizeof(k), "key%d", j);
-		otlp_span_set_attribute_int(tmpl, k, (int64_t) j);
-	}
-	otlp_span_mark_end(tmpl);
+		otlp_span_t *tmpl = otlp_tracer_start_span(tracer, "operation");
 
-	t0 = now_ns();
-	for (i = 0; i < n_spans; i++)
+		for (j = 0; j < n_attrs; j++)
+		{
+			char k[16];
+			snprintf(k, sizeof(k), "key%d", j);
+			otlp_span_set_attribute_int(tmpl, k, (int64_t) j);
+		}
+		otlp_span_mark_end(tmpl);
+
+		t0 = now_ns();
+		for (i = 0; i < n_spans; i++)
+			otlp_exporter_emit(exp, tmpl);
+		otlp_exporter_flush(exp);
+		t1 = now_ns();
+		ns_clone = (double) (t1 - t0) / (double) n_spans;
+		otlp_span_free(tmpl);
+	}
+
+	/* Pass 2: emit_move (queue + tick only, no clone). The span
+	 * is built fresh per iteration (the move variant takes
+	 * ownership), so start_span cost is included — but no deep
+	 * copy of a fully-populated template. The clone-vs-move delta
+	 * is the deep-copy cost the clone API adds. */
 	{
-		otlp_exporter_emit(exp, tmpl);
+		t0 = now_ns();
+		for (i = 0; i < n_spans; i++)
+		{
+			otlp_span_t *s = otlp_tracer_start_span(tracer, "operation");
+
+			for (j = 0; j < n_attrs; j++)
+			{
+				char k[16];
+				snprintf(k, sizeof(k), "key%d", j);
+				otlp_span_set_attribute_int(s, k, (int64_t) j);
+			}
+			otlp_span_mark_end(s);
+			otlp_exporter_emit_move(exp, s);
+		}
+		otlp_exporter_flush(exp);
+		t1 = now_ns();
+		ns_move = (double) (t1 - t0) / (double) n_spans;
 	}
-	/* Drain everything via tick. */
-	otlp_exporter_flush(exp);
-	t1 = now_ns();
 
-	elapsed_ns  = t1 - t0;
-	ns_per_op   = (double) elapsed_ns / (double) n_spans;
-	spans_per_sec = (double) n_spans / ((double) elapsed_ns / 1e9);
+	printf("  spans=%-6d attrs=%-3d  %10.1f ns/span (emit)  "
+	       "%10.1f ns/span (build+move)  %8.0f/%8.0f spans/s\n",
+	       n_spans, n_attrs, ns_clone, ns_move,
+	       1e9 / ns_clone, 1e9 / ns_move);
 
-	printf("  spans=%-6d attrs=%-3d  %12.1f ns/op  %12.0f spans/sec\n",
-	       n_spans, n_attrs, ns_per_op, spans_per_sec);
-
-	otlp_span_free(tmpl);
 	otlp_tracer_free(tracer);
 	otlp_exporter_free(exp);
 }

@@ -163,12 +163,20 @@ otlp_span_free(otlp_span_t *span)
 	otlp_free(span->trace_state);
 	for (i = 0; i < span->n_events; i++) {
 		otlp_free(span->events[i].name);
-		for (j = 0; j < span->events[i].n_attrs; j++)
-			otlp_attribute_free(&span->events[i].attrs[j]);
+		if (span->events[i].attrs) {
+			for (j = 0; j < span->events[i].n_attrs; j++)
+				otlp_attribute_free(
+					&span->events[i].attrs[j]);
+			otlp_free(span->events[i].attrs);
+		}
 	}
 	for (i = 0; i < span->n_links; i++)
-		for (j = 0; j < span->links[i].n_attrs; j++)
-			otlp_attribute_free(&span->links[i].attrs[j]);
+		if (span->links[i].attrs) {
+			for (j = 0; j < span->links[i].n_attrs; j++)
+				otlp_attribute_free(
+					&span->links[i].attrs[j]);
+			otlp_free(span->links[i].attrs);
+		}
 	span_release_attrs(span);
 	otlp_free(span);
 }
@@ -500,6 +508,15 @@ otlp_span_set_event_attribute_string(otlp_span_t *span,
 	ev = &span->events[span->n_events - 1];
 	if (ev->n_attrs >= OTLP_EVENT_MAX_ATTRS)
 		return OTLP_ERR_OVERFLOW;
+	/* Lazy-allocate the attrs array on first use (see
+	 * span_internal.h — inline arrays cost ~1KB per event). */
+	if (!ev->attrs)
+	{
+		ev->attrs = otlp_calloc(OTLP_EVENT_MAX_ATTRS,
+					sizeof(*ev->attrs));
+		if (!ev->attrs)
+			return OTLP_ERR_NOMEM;
+	}
 	kc = otlp_dup_str(key);
 	if (!kc)
 		return OTLP_ERR_NOMEM;
@@ -530,6 +547,14 @@ otlp_span_set_link_attribute_string(otlp_span_t *span,
 	lk = &span->links[span->n_links - 1];
 	if (lk->n_attrs >= OTLP_LINK_MAX_ATTRS)
 		return OTLP_ERR_OVERFLOW;
+	/* Lazy-allocate the attrs array on first use. */
+	if (!lk->attrs)
+	{
+		lk->attrs = otlp_calloc(OTLP_LINK_MAX_ATTRS,
+					sizeof(*lk->attrs));
+		if (!lk->attrs)
+			return OTLP_ERR_NOMEM;
+	}
 	kc = otlp_dup_str(key);
 	if (!kc)
 		return OTLP_ERR_NOMEM;
@@ -657,6 +682,12 @@ otlp_span_get_trace_state(const otlp_span_t *span)
 	return span ? span->trace_state : NULL;
 }
 
+size_t
+otlp_span_struct_size(void)
+{
+	return sizeof(struct otlp_span);
+}
+
 const struct otlp_attribute *
 otlp_span_get_attrs(const otlp_span_t *span, size_t *n_out)
 {
@@ -743,11 +774,21 @@ otlp_span_clone(const otlp_span_t *src)
 			otlp_span_free(dst);
 			return NULL;
 		}
-		/* Copy event attributes (was missing — data loss bug). */
+		/* Copy event attributes (was missing — data loss bug).
+		 * attrs is lazily allocated (v0.5.68); calloc it here so
+		 * copy_all has a zeroed destination and span_free can
+		 * free the array on copy failure. */
 		if (events[i].n_attrs > 0)
 		{
 			struct otlp_event *ev =
 				&dst->events[dst->n_events - 1];
+			ev->attrs = otlp_calloc(OTLP_EVENT_MAX_ATTRS,
+						sizeof(*ev->attrs));
+			if (!ev->attrs)
+			{
+				otlp_span_free(dst);
+				return NULL;
+			}
 			if (otlp_attribute_copy_all(ev->attrs,
 				    events[i].attrs,
 				    events[i].n_attrs) != OTLP_OK)
@@ -770,11 +811,19 @@ otlp_span_clone(const otlp_span_t *src)
 			otlp_span_free(dst);
 			return NULL;
 		}
-		/* Copy link attributes (was missing — data loss bug). */
+		/* Copy link attributes (was missing — data loss bug).
+		 * attrs is lazily allocated (v0.5.68); see event path. */
 		if (links[i].n_attrs > 0)
 		{
 			struct otlp_link *lnk =
 				&dst->links[dst->n_links - 1];
+			lnk->attrs = otlp_calloc(OTLP_LINK_MAX_ATTRS,
+						 sizeof(*lnk->attrs));
+			if (!lnk->attrs)
+			{
+				otlp_span_free(dst);
+				return NULL;
+			}
 			if (otlp_attribute_copy_all(lnk->attrs,
 				    links[i].attrs,
 				    links[i].n_attrs) != OTLP_OK)
