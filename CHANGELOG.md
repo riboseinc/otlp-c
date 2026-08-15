@@ -6,7 +6,7 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.5.67] - 2026-08-15
 
-Integration test covers all three signals.
+Integration test covers all three signals; sync-flush retry + diagnostics.
 
 ### Added — metrics + logs end-to-end validation
 
@@ -25,10 +25,37 @@ The integration test now emits:
   `ExportLogsServiceRequest` was accepted.
 
 The otelcol config gains `metrics` and `logs` pipelines with the
-`debug` exporter (prints to stderr). Two new CI steps grep the
-otelcol container logs for the metric name and log body —
-confirming they arrived intact after the batch processor's
-~5s hold (retry loop handles the delay).
+`debug` exporter (verbosity: detailed — the default `basic` prints
+only counts, not names). Two new CI steps grep the otelcol
+container logs for the metric name and log body.
+
+### Fixed — sync flush (flush_metric / flush_log) had no retry
+
+`flush_sync` attempted exactly one POST. A transient network
+failure (e.g., the first connect in a fresh process failing
+before the collector's accept queue is warm) immediately failed
+the flush. The async pipeline recovers from the same transient
+via backoff — the sync path deserved the same resilience.
+
+`flush_sync` now retries pre-response network failures with the
+exporter's `max_retries` budget (100ms backoff between attempts —
+short, since the sync path is on the caller's thread). Non-2xx
+responses and timeouts remain permanent (no retry) — retrying a
+4xx would be wrong, and a timeout already consumed the caller's
+flush budget.
+
+Found by the new integration test: the CI metrics POST hit a
+transient connect failure on its first attempt.
+
+### Added — diagnostic logging on the sync flush paths
+
+`flush_metric` / `flush_log` failures were silent — the caller
+got `OTLP_ERR_NETWORK` with no indication whether it was an HTTP
+4xx/5xx, a network failure, or a timeout. `flush_sync` now emits
+diagnostic-callback events (`OTLP_LOG_ERROR`) at each failure
+mode with the HTTP status or error code, plus `OTLP_LOG_WARN` on
+transient-retry. This closes a gap in the v0.5.23 diagnostic
+callback coverage (it fired only on the async pipeline's events).
 
 ### Why this matters
 

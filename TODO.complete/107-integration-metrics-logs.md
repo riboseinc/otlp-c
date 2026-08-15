@@ -1,7 +1,7 @@
-# TODO 107 — Integration test covers all three signals
+# TODO 107 — Integration test covers all three signals + sync-flush retry
 
 **Status:** Complete (v0.5.67)
-**Priority:** P1 (end-to-end validation of the metrics/logs encoders)
+**Priority:** P1 (end-to-end validation) + P2 (sync-path resilience)
 
 ## What shipped
 
@@ -12,30 +12,53 @@
    the `ExportMetricsServiceRequest` / `ExportLogsServiceRequest`.
 
 2. **otelcol config gains metrics + logs pipelines** with the
-   `debug` exporter (prints received data to stderr). Previously
-   only a traces pipeline existed — metrics/logs POSTs would
-   have been rejected with "no pipeline configured".
+   `debug` exporter (verbosity: detailed — the default `basic`
+   prints only counts, which are not grep-able).
 
 3. **Two new CI steps grep otelcol logs** for the metric name and
-   log body, confirming they arrived intact after the batch
-   processor's ~5s hold (retry loop handles the delay).
+   log body, confirming they arrived intact.
+
+4. **Sync flush retry (library fix, found by the new test).**
+   `flush_sync` had no retry — a transient connect failure
+   failed the flush immediately. The CI's first metrics POST
+   hit exactly this. Now retries pre-response network failures
+   with the exporter's `max_retries` budget (100ms backoff);
+   non-2xx responses and timeouts remain permanent.
+
+5. **Diagnostic logging on sync flush paths (library fix).**
+   `flush_metric`/`flush_log` failures were silent — the caller
+   got `OTLP_ERR_NETWORK` with no HTTP status or error detail.
+   `flush_sync` now emits diagnostic-callback events at each
+   failure mode, closing a gap in the v0.5.23 callback coverage.
+   The integration test installs a logger that prints them.
 
 ## Sites changed
 
-- `tests/integration/otelcol-config.yaml` — add `debug` exporter
-  + metrics/logs pipelines.
+- `tests/integration/otelcol-config.yaml` — debug exporter +
+  metrics/logs pipelines.
 - `tests/integration/test_integration_jaeger.c` — emit metric +
-  log after the spans; assert flush_metric/flush_log return OK.
-- `.github/workflows/ci.yml` — two verification steps that grep
-  `docker compose logs otelcol`.
+  log; install diagnostic logger.
+- `.github/workflows/ci.yml` — two grep verification steps.
+- `src/exporter.c` — `flush_post_once` extracted from
+  `flush_sync`; retry loop for transient failures; `otlp_log`
+  calls on all failure modes.
 
-## Why this matters
+## Debugging journey (why the extra library fixes)
 
-The metrics/logs encoder bugs found in v0.5.48-v0.5.49 were
-invisible to property tests for 49 releases — our decoder shared
-the same wrong expectations. Cross-checking against upstream
-opentelemetry-proto found them; otelcol's independent parser now
-guards against their return on every PR.
+The CI integration job failed twice before passing:
+1. First failure: "flush_metric returned -10" — no detail
+   available because sync flush failures were silent. Added the
+   diagnostic logging.
+2. Second failure with diagnostics: "request failed (network)" —
+   a transient connect failure, identical to the `network_err=1`
+   visible in the v0.5.66 trace stats (the async path had
+   silently retried past it). Added the retry.
+3. Third failure: metric grep found nothing — `verbosity: basic`
+   prints counts only. Switched to `detailed`.
+4. Fourth run: all green.
+
+The integration test found two real library gaps on its first
+extended run — exactly the payoff it was built for.
 
 ## All three signals validated end-to-end
 
