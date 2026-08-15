@@ -36,16 +36,16 @@ static void
 bench(int n_spans, int n_attrs)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_tracer_t       *tracer;
-	uint64_t             t0, t1, elapsed_ns;
-	double               ns_clone, ns_move;
-	int                  i, j;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	uint64_t t0, t1;
+	double ns_clone, ns_move;
+	int i, j;
 
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "bench";
-	opts.batch_size   = (size_t) n_spans; /* flush in one batch */
-	opts.batch_ms     = 0;		    /* don't wait */
+	opts.batch_size = (size_t) n_spans; /* flush in one batch */
+	opts.batch_ms = 0; /* don't wait */
 	opts.queue_capacity = (size_t) n_spans * 2;
 
 	exp = otlp_exporter_create(&opts);
@@ -90,7 +90,8 @@ bench(int n_spans, int n_attrs)
 		t0 = now_ns();
 		for (i = 0; i < n_spans; i++)
 		{
-			otlp_span_t *s = otlp_tracer_start_span(tracer, "operation");
+			otlp_span_t *s =
+				otlp_tracer_start_span(tracer, "operation");
 
 			for (j = 0; j < n_attrs; j++)
 			{
@@ -108,8 +109,12 @@ bench(int n_spans, int n_attrs)
 
 	printf("  spans=%-6d attrs=%-3d  %10.1f ns/span (emit)  "
 	       "%10.1f ns/span (build+move)  %8.0f/%8.0f spans/s\n",
-	       n_spans, n_attrs, ns_clone, ns_move,
-	       1e9 / ns_clone, 1e9 / ns_move);
+		n_spans,
+		n_attrs,
+		ns_clone,
+		ns_move,
+		1e9 / ns_clone,
+		1e9 / ns_move);
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_free(exp);
