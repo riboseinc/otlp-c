@@ -98,7 +98,14 @@ struct otlp_attr_kvlist
 void otlp_attribute_free(struct otlp_attribute *a);
 
 /* Span.Event / Span.Link — each carries name/time + attributes
- * (up to OTLP_EVENT_MAX_ATTRS / OTLP_LINK_MAX_ATTRS). */
+ * (up to OTLP_EVENT_MAX_ATTRS / OTLP_LINK_MAX_ATTRS).
+ *
+ * The attrs array is heap-allocated lazily on the first attribute
+ * set (calloc'd, so the cap still applies but a typical event/
+ * link with zero attributes costs one pointer, not the full
+ * array). This keeps sizeof(struct otlp_span) small — with inline
+ * arrays the struct was ~139KB because every event/link embedded
+ * a full 32-slot attribute array whether used or not (v0.5.68). */
 #ifndef OTLP_EVENT_MAX_ATTRS
 #define OTLP_EVENT_MAX_ATTRS 32
 #endif
@@ -108,17 +115,17 @@ void otlp_attribute_free(struct otlp_attribute *a);
 
 struct otlp_event
 {
-	char	   *name;
-	uint64_t    time_unix_nano;
-	struct otlp_attribute attrs[OTLP_EVENT_MAX_ATTRS];
-	size_t		n_attrs;
+	char		   *name;
+	uint64_t	    time_unix_nano;
+	struct otlp_attribute *attrs;   /* NULL until first attr set */
+	size_t		    n_attrs;
 };
 
 struct otlp_link
 {
 	uint8_t trace_id[OTLP_TRACE_ID_LEN];
 	uint8_t span_id[OTLP_SPAN_ID_LEN];
-	struct otlp_attribute attrs[OTLP_LINK_MAX_ATTRS];
+	struct otlp_attribute *attrs;   /* NULL until first attr set */
 	size_t			n_attrs;
 };
 
@@ -127,6 +134,12 @@ struct otlp_link
  * All pointers returned point into the span; the caller must not
  * free them. They remain valid until otlp_span_free().
  */
+
+/* Test-only: sizeof(struct otlp_span). The struct stays opaque
+ * (defined in span.c); tests use this to regression-guard the
+ * size budget (see v0.5.68 — the struct was ~139KB with inline
+ * event/link attribute arrays, dominating the emit path). */
+size_t otlp_span_struct_size(void);
 
 const char *
 otlp_span_get_name(const otlp_span_t *span);
