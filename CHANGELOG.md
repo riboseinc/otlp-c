@@ -4,6 +4,55 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.67] - 2026-08-15
+
+Integration test covers all three signals.
+
+### Added — metrics + logs end-to-end validation
+
+v0.5.66 brought the integration test into CI but it only
+exercised traces. The metrics and logs encoders — which had 6
+of the 10 v0.5.48-v0.5.49 wire-format bugs — were still validated
+only by property tests against our own decoder.
+
+The integration test now emits:
+- A counter metric (`integration_requests_total`) with an
+  attribute, via the synchronous `flush_metric` path. A 2xx from
+  otelcol proves the `ExportMetricsServiceRequest` was accepted
+  by the collector's real protobuf parser.
+- A log record (`integration log body`, severity INFO) with an
+  attribute, via `flush_log`. A 2xx proves the
+  `ExportLogsServiceRequest` was accepted.
+
+The otelcol config gains `metrics` and `logs` pipelines with the
+`debug` exporter (prints to stderr). Two new CI steps grep the
+otelcol container logs for the metric name and log body —
+confirming they arrived intact after the batch processor's
+~5s hold (retry loop handles the delay).
+
+### Why this matters
+
+The metrics/logs encoder bugs found in v0.5.48-v0.5.49
+(NumberDataPoint attributes at the wrong field, HistogramDataPoint
+attributes/min/max wrong, ExpHistogram zero_count/bucket_counts
+wrong wire types) were invisible to our property tests for 49
+releases — our decoder shared the same wrong expectations. Only
+cross-checking against upstream opentelemetry-proto found them.
+
+With this release, a regression in any of the three signals is
+caught automatically by otelcol's independent parser on every
+PR. The class of bug that hid for 49 releases can no longer hide.
+
+### All three signals now validated end-to-end
+
+| Signal | Test path | CI verification |
+|---|---|---|
+| Traces | emit → flush → Jaeger query | run_id + event + status needles |
+| Metrics | flush_metric → 2xx | otelcol debug-exporter grep |
+| Logs | flush_log → 2xx | otelcol debug-exporter grep |
+
+34/34 tests pass locally. CI validates the integration end-to-end.
+
 ## [0.5.66] - 2026-08-15
 
 Integration test validates events + status; CI runs it.
