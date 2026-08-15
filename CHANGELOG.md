@@ -4,6 +4,47 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.69] - 2026-08-16
+
+Metric/log record structs 19×/52× smaller; log emit ~5× faster.
+
+### Changed — metric/log attributes lazily heap-allocated
+
+The v0.5.68 span fix left the other two signals with the same
+inline-array problem: `sizeof(struct otlp_metric)` was 4,312
+bytes and `sizeof(struct otlp_log_record)` was 4,168 bytes — in
+both cases a 4KB inline `attrs[128]` array that every create and
+clone allocated and zeroed even when no attributes were ever set.
+Logs are the highest-volume signal, making this the dominant
+remaining per-record cost.
+
+Metric and log-record attribute arrays are now heap-allocated
+lazily on the first `otlp_metric_set_attribute_*` /
+`otlp_log_record_set_attribute_*` call. Caps unchanged (128).
+
+- `sizeof(struct otlp_metric)`: 4,312 → **224 bytes** (19.3×).
+- `sizeof(struct otlp_log_record)`: 4,168 → **80 bytes** (52×).
+
+The metric/log release paths now use the shared recursive
+`otlp_attribute_free` instead of hand-rolled copies of the span's
+free loop.
+
+### Added
+
+- `otlp_bench_logs` — dual-pass (clone vs build+move) log emit
+  throughput benchmark, mirroring `otlp_bench_emit`.
+- `unit-metric` / `unit-log` tests — known-answer tests for
+  setters and clone, the lazy-array contract, and struct-size
+  budget guards (≤1KB / ≤512B).
+
+### Performance impact
+
+`otlp_bench_logs` (clone + queue + tick, null_transport), records
+with zero attributes: ~590-720 → **~110-175 ns/log**
+(≈5×, >9M logs/s). Records carrying attributes are unchanged
+within noise — they still allocate the 128-slot array on first
+attribute set.
+
 ## [0.5.68] - 2026-08-15
 
 Span struct 15.7× smaller; emit 20× faster.

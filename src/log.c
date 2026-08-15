@@ -20,20 +20,24 @@ log_release_attrs(struct otlp_log_record *lr)
 {
 	size_t i;
 
-	for (i = 0; i < lr->n_attrs; i++) {
-		otlp_free(lr->attrs[i].key);
-		switch (lr->attrs[i].type) {
-		case OTLP_ATTR_STRING:
-			otlp_free(lr->attrs[i].v.string_val);
-			break;
-		case OTLP_ATTR_BYTES:
-			otlp_free(lr->attrs[i].v.bytes_val.data);
-			break;
-		default:
-			break;
-		}
-	}
+	if (!lr->attrs)
+		return;
+	for (i = 0; i < lr->n_attrs; i++)
+		otlp_attribute_free(&lr->attrs[i]);
 	lr->n_attrs = 0;
+	otlp_free(lr->attrs);
+	lr->attrs = NULL;
+}
+
+/* Lazy-allocate the attrs array on first use; a record with no
+ * attributes costs one NULL pointer (see log_internal.h). */
+static otlp_status_t
+log_attrs_reserve(struct otlp_log_record *lr)
+{
+	if (lr->attrs)
+		return OTLP_OK;
+	lr->attrs = otlp_calloc(OTLP_LOG_MAX_ATTRS, sizeof(*lr->attrs));
+	return lr->attrs ? OTLP_OK : OTLP_ERR_NOMEM;
 }
 
 otlp_log_record_t *
@@ -45,7 +49,8 @@ otlp_log_record_create(otlp_severity_t severity, const char *body)
 		return NULL;
 	lr->severity = severity;
 	lr->body = otlp_dup_str(body ? body : "");
-	if (!lr->body) {
+	if (!lr->body)
+	{
 		otlp_free(lr);
 		return NULL;
 	}
@@ -130,62 +135,108 @@ otlp_log_record_set_severity_text(otlp_log_record_t *lr, const char *text)
 
 otlp_status_t
 otlp_log_record_set_attribute_string(otlp_log_record_t *lr,
-				     const char *key, const char *val)
+	const char *key,
+	const char *val)
 {
+	char *kc;
+
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
 	if (lr->n_attrs >= OTLP_LOG_MAX_ATTRS)
 		return OTLP_ERR_OVERFLOW;
+	if (log_attrs_reserve(lr) != OTLP_OK)
+		return OTLP_ERR_NOMEM;
+	kc = otlp_dup_str(key);
+	if (!kc)
+		return OTLP_ERR_NOMEM;
+	lr->attrs[lr->n_attrs].key = kc;
+	lr->attrs[lr->n_attrs].type = OTLP_ATTR_STRING;
+	lr->attrs[lr->n_attrs].v.string_val = otlp_dup_str(val ? val : "");
+	if (!lr->attrs[lr->n_attrs].v.string_val)
 	{
-		char *kc = otlp_dup_str(key);
-
-		if (!kc)
-			return OTLP_ERR_NOMEM;
-		lr->attrs[lr->n_attrs].key = kc;
-		lr->attrs[lr->n_attrs].type = OTLP_ATTR_STRING;
-		lr->attrs[lr->n_attrs].v.string_val = otlp_dup_str(val ? val : "");
-		if (!lr->attrs[lr->n_attrs].v.string_val) {
-			otlp_free(kc);
-			return OTLP_ERR_NOMEM;
-		}
-		lr->n_attrs++;
-		return OTLP_OK;
+		otlp_free(kc);
+		lr->attrs[lr->n_attrs].key = NULL;
+		return OTLP_ERR_NOMEM;
 	}
+	lr->n_attrs++;
+	return OTLP_OK;
 }
 
 otlp_status_t
 otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
-				  const char *key, int64_t val)
+	const char *key,
+	int64_t val)
 {
+	char *kc;
+
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
 	if (lr->n_attrs >= OTLP_LOG_MAX_ATTRS)
 		return OTLP_ERR_OVERFLOW;
-	{
-		char *kc = otlp_dup_str(key);
-
-		if (!kc)
-			return OTLP_ERR_NOMEM;
-		lr->attrs[lr->n_attrs].key = kc;
-		lr->attrs[lr->n_attrs].type = OTLP_ATTR_INT64;
-		lr->attrs[lr->n_attrs].v.int64_val = val;
-		lr->n_attrs++;
-		return OTLP_OK;
-	}
+	if (log_attrs_reserve(lr) != OTLP_OK)
+		return OTLP_ERR_NOMEM;
+	kc = otlp_dup_str(key);
+	if (!kc)
+		return OTLP_ERR_NOMEM;
+	lr->attrs[lr->n_attrs].key = kc;
+	lr->attrs[lr->n_attrs].type = OTLP_ATTR_INT64;
+	lr->attrs[lr->n_attrs].v.int64_val = val;
+	lr->n_attrs++;
+	return OTLP_OK;
 }
 
 /* ── Internal accessors ───────────────────────────────────────── */
 
-otlp_severity_t otlp_log_get_severity(const otlp_log_record_t *lr) { return lr ? lr->severity : OTLP_SEVERITY_UNSPECIFIED; }
-const char *otlp_log_get_severity_text(const otlp_log_record_t *lr) { return lr ? lr->severity_text : NULL; }
-const char *otlp_log_get_body(const otlp_log_record_t *lr) { return lr ? lr->body : NULL; }
-uint64_t otlp_log_get_timestamp(const otlp_log_record_t *lr) { return lr ? lr->timestamp : 0; }
-bool otlp_log_has_timestamp(const otlp_log_record_t *lr) { return lr ? lr->has_timestamp : false; }
-const uint8_t *otlp_log_get_trace_id(const otlp_log_record_t *lr) { return lr ? lr->trace_id : NULL; }
-const uint8_t *otlp_log_get_span_id(const otlp_log_record_t *lr) { return lr ? lr->span_id : NULL; }
-bool otlp_log_has_trace(const otlp_log_record_t *lr) { return lr ? (lr->has_trace_id || lr->has_span_id) : false; }
-bool otlp_log_has_trace_id(const otlp_log_record_t *lr) { return lr ? lr->has_trace_id : false; }
-bool otlp_log_has_span_id(const otlp_log_record_t *lr) { return lr ? lr->has_span_id : false; }
+otlp_severity_t
+otlp_log_get_severity(const otlp_log_record_t *lr)
+{
+	return lr ? lr->severity : OTLP_SEVERITY_UNSPECIFIED;
+}
+const char *
+otlp_log_get_severity_text(const otlp_log_record_t *lr)
+{
+	return lr ? lr->severity_text : NULL;
+}
+const char *
+otlp_log_get_body(const otlp_log_record_t *lr)
+{
+	return lr ? lr->body : NULL;
+}
+uint64_t
+otlp_log_get_timestamp(const otlp_log_record_t *lr)
+{
+	return lr ? lr->timestamp : 0;
+}
+bool
+otlp_log_has_timestamp(const otlp_log_record_t *lr)
+{
+	return lr ? lr->has_timestamp : false;
+}
+const uint8_t *
+otlp_log_get_trace_id(const otlp_log_record_t *lr)
+{
+	return lr ? lr->trace_id : NULL;
+}
+const uint8_t *
+otlp_log_get_span_id(const otlp_log_record_t *lr)
+{
+	return lr ? lr->span_id : NULL;
+}
+bool
+otlp_log_has_trace(const otlp_log_record_t *lr)
+{
+	return lr ? (lr->has_trace_id || lr->has_span_id) : false;
+}
+bool
+otlp_log_has_trace_id(const otlp_log_record_t *lr)
+{
+	return lr ? lr->has_trace_id : false;
+}
+bool
+otlp_log_has_span_id(const otlp_log_record_t *lr)
+{
+	return lr ? lr->has_span_id : false;
+}
 
 const struct otlp_attribute *
 otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n)
@@ -193,6 +244,12 @@ otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n)
 	if (n)
 		*n = lr ? lr->n_attrs : 0;
 	return lr ? lr->attrs : NULL;
+}
+
+size_t
+otlp_log_struct_size(void)
+{
+	return sizeof(struct otlp_log_record);
 }
 
 otlp_log_record_t *
@@ -209,7 +266,7 @@ otlp_log_record_clone(const otlp_log_record_t *src)
 	dst->severity_text = otlp_dup_str(src->severity_text);
 	dst->body = otlp_dup_str(src->body);
 	if ((src->severity_text && !dst->severity_text) ||
-	    (src->body && !dst->body))
+		(src->body && !dst->body))
 		goto fail;
 	dst->timestamp = src->timestamp;
 	dst->has_timestamp = src->has_timestamp;
@@ -218,17 +275,24 @@ otlp_log_record_clone(const otlp_log_record_t *src)
 	dst->has_trace_id = src->has_trace_id;
 	dst->has_span_id = src->has_span_id;
 
+	/* Attributes: lazy array — calloc the destination so
+	 * copy_all has a zeroed slot set and record_free is safe if
+	 * the copy fails midway. */
 	if (src->n_attrs > 0)
 	{
-		if (otlp_attribute_copy_all(dst->attrs, src->attrs,
-					    src->n_attrs) != OTLP_OK)
+		dst->attrs =
+			otlp_calloc(OTLP_LOG_MAX_ATTRS, sizeof(*dst->attrs));
+		if (!dst->attrs)
+			goto fail;
+		if (otlp_attribute_copy_all(
+			    dst->attrs, src->attrs, src->n_attrs) != OTLP_OK)
 			goto fail;
 		dst->n_attrs = src->n_attrs;
 	}
 
-	return (otlp_log_record_t *)dst;
+	return (otlp_log_record_t *) dst;
 
 fail:
-	otlp_log_record_free((otlp_log_record_t *)dst);
+	otlp_log_record_free((otlp_log_record_t *) dst);
 	return NULL;
 }
