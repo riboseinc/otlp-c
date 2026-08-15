@@ -208,6 +208,19 @@ gen_test_run_id(void)
 	return buf;
 }
 
+/* Diagnostic logger: prints sync-flush HTTP failures so CI
+ * failures include the actual status from otelcol. */
+static void
+test_log_cb(void *ctx, otlp_log_level_t level, const char *msg)
+{
+	const char *lvl = level == OTLP_LOG_ERROR ? "ERROR"
+			: level == OTLP_LOG_WARN  ? "WARN"
+			: level == OTLP_LOG_DEBUG ? "DEBUG" : "INFO";
+
+	(void) ctx;
+	printf("[integration][diag:%s] %s\n", lvl, msg);
+}
+
 int
 main(void)
 {
@@ -237,6 +250,7 @@ main(void)
 	opts.batch_ms = 200;
 	exp = otlp_exporter_create(&opts);
 	assert(exp != NULL);
+	otlp_exporter_set_logger(exp, test_log_cb, NULL);
 
 	tracer = otlp_tracer_create("otlp-c-integration-test",
 		"integration",

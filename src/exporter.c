@@ -1262,7 +1262,12 @@ flush_sync(struct otlp_exporter *e,
 	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len,
 				      e->connect_timeout_ms, e->read_timeout_ms);
 	if (st != OTLP_OK)
+	{
+		otlp_log(e, OTLP_LOG_ERROR,
+			 "sync flush %s: request start failed (st=%d)",
+			 path, (int) st);
 		return st;
+	}
 	deadline = now_mono_ms() + e->flush_timeout_ms;
 	for (;;) {
 		st = otlp_http_request_step(req);
@@ -1274,19 +1279,30 @@ flush_sync(struct otlp_exporter *e,
 			otlp_http_request_free(req);
 			if (http >= 200 && http < 300)
 				return OTLP_OK;
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "sync flush %s: HTTP %d", path, http);
 			return OTLP_ERR_NETWORK;
 		}
 		if (s == OTLP_HTTP_REQ_FAILED) {
 			otlp_http_request_free(req);
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "sync flush %s: request failed (network)",
+				 path);
 			return OTLP_ERR_NETWORK;
 		}
 		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK) {
 			otlp_http_request_free(req);
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "sync flush %s: step failed (st=%d)",
+				 path, (int) st);
 			return st;
 		}
 		now = now_mono_ms();
 		if (now >= deadline) {
 			otlp_http_request_free(req);
+			otlp_log(e, OTLP_LOG_ERROR,
+				 "sync flush %s: timeout after %ums",
+				 path, e->flush_timeout_ms);
 			return OTLP_ERR_TIMEOUT;
 		}
 #if defined(_WIN32)
