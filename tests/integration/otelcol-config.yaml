@@ -24,6 +24,12 @@ exporters:
     endpoint: jaeger:4317
     tls:
       insecure: true
+  # Debug exporter prints received metrics/logs to stderr — the CI
+  # job greps the otelcol container logs to verify our metrics and
+  # logs encoders produced parseable output (end-to-end validation
+  # without needing a metrics/logs backend like Prometheus/Loki).
+  debug:
+    verbosity: basic
 
 service:
   pipelines:
@@ -31,3 +37,11 @@ service:
       receivers:  [otlp]
       processors: [memory_limiter, batch]
       exporters:  [otlp/jaeger]
+    metrics:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug]
+    logs:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug]
