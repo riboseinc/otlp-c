@@ -28,8 +28,10 @@ exporters:
   # job greps the otelcol container logs to verify our metrics and
   # logs encoders produced parseable output (end-to-end validation
   # without needing a metrics/logs backend like Prometheus/Loki).
+  # verbosity: detailed prints metric names and log bodies (the
+  # default "basic" prints only counts, which is not grep-able).
   debug:
-    verbosity: basic
+    verbosity: detailed
 
 service:
   pipelines:
