@@ -4,6 +4,59 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.68] - 2026-08-15
+
+Span struct 15.7× smaller; emit 20× faster.
+
+### Changed — event/link attributes lazily heap-allocated
+
+`sizeof(struct otlp_span)` was **138,880 bytes**. The embedded
+`events[64]` and `links[64]` arrays each carried an inline
+`attrs[32]` array (1KB per event/link slot), so a span with zero
+events and zero links still allocated and zeroed 139KB on every
+`otlp_span_create` and `otlp_span_clone`. The clone inside
+`otlp_exporter_emit` made this the dominant emit-pipeline cost.
+
+Event and link attribute arrays are now heap-allocated lazily on
+the first `otlp_span_set_event_attribute_string` /
+`otlp_span_set_link_attribute_string` call. A typical event or
+link with zero attributes costs one NULL pointer; the 32-attribute
+cap is unchanged.
+
+`sizeof(struct otlp_span)` drops to **8,832 bytes** (15.7×).
+
+### Performance impact
+
+`otlp_bench_emit` (clone + queue + tick, null_transport):
+- Before: ~27,000-195,000 ns/span (erratic — allocator pressure
+  from 139KB alloc/free cycles dominated and caused page-fault
+  noise across configurations).
+- After: **~1,500 ns/span** — roughly **650,000 spans/sec**
+  through the full emit pipeline, and consistent across batch
+  sizes.
+
+The bench was also extended to print the clone-API path (`emit`)
+and the build+move path (`emit_move`) side by side, so the
+deep-copy share is visible.
+
+### Guarded against regression
+
+`test_unit_span` now asserts `otlp_span_struct_size() <= 16KB`
+(new internal accessor; the struct stays opaque). If a future
+change reintroduces inline-array growth, the test fails with a
+pointer to re-run the emit benchmark.
+
+### No public API change
+
+`otlp_span_add_event`, `set_event_attribute_string`,
+`set_link_attribute_string`, clone, free, and the encoder all
+behave identically. The 32-attribute-per-event/link cap is
+unchanged (was inline, now lazily allocated at the same size).
+
+34/34 tests pass locally. ASAN clean — the fail-injecting OOM
+tests cover the new lazy-allocation paths in `span_clone` at
+every alloc offset.
+
 ## [0.5.67] - 2026-08-15
 
 Integration test covers all three signals; sync-flush retry + diagnostics.
