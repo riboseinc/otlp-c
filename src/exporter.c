@@ -1241,25 +1241,28 @@ otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
 
 /* ── Synchronous metric / log flush ───────────────────────────── */
 
+/* One POST attempt. Returns OTLP_OK on 2xx; sets *got_response
+ * when the server answered at all (any HTTP status). A network-
+ * level failure before a response (*got_response == false) is
+ * transient — the caller retries with the async path's backoff
+ * budget. A non-2xx response is permanent for the sync path. */
 static otlp_status_t
-flush_sync(struct otlp_exporter *e,
-	   const char		       *path,
-	   const uint8_t	       *body,
-	   size_t			body_len)
+flush_post_once(struct otlp_exporter *e,
+		const struct otlp_http_url *url,
+		const char		 *path,
+		const uint8_t		 *body,
+		size_t			  body_len,
+		bool			 *got_response)
 {
-	struct otlp_http_url url;
 	otlp_http_request_t      *req = NULL;
 	otlp_status_t		st;
 	uint64_t			deadline;
 	uint64_t			now;
+	struct otlp_http_url u;
 
-	if (!e || !path || (!body && body_len > 0))
-		return OTLP_ERR_NULL;
-	if (e->null_transport)
-		return OTLP_OK;
-	url = e->url;
-	snprintf(url.path, sizeof(url.path), "%s", path);
-	st = otlp_http_request_start(&req, &url, e->user_agent, body, body_len,
+	u = *url;
+	snprintf(u.path, sizeof(u.path), "%s", path);
+	st = otlp_http_request_start(&req, &u, e->user_agent, body, body_len,
 				      e->connect_timeout_ms, e->read_timeout_ms);
 	if (st != OTLP_OK)
 	{
@@ -1277,6 +1280,7 @@ flush_sync(struct otlp_exporter *e,
 			int http = otlp_http_request_http_status(req);
 
 			otlp_http_request_free(req);
+			*got_response = true;
 			if (http >= 200 && http < 300)
 				return OTLP_OK;
 			otlp_log(e, OTLP_LOG_ERROR,
@@ -1316,6 +1320,58 @@ flush_sync(struct otlp_exporter *e,
 	}
 	otlp_http_request_free(req);
 	return OTLP_ERR_TIMEOUT;
+}
+
+static otlp_status_t
+flush_sync(struct otlp_exporter *e,
+	   const char		       *path,
+	   const uint8_t	       *body,
+	   size_t			body_len)
+{
+	otlp_status_t	st = OTLP_ERR_NETWORK;
+	bool		got_response = false;
+	uint32_t	attempt;
+
+	if (!e || !path || (!body && body_len > 0))
+		return OTLP_ERR_NULL;
+	if (e->null_transport)
+		return OTLP_OK;
+	/* Retry transient (pre-response) network failures with the
+	 * same budget the async pipeline uses. The first connect in
+	 * a fresh process occasionally fails transiently (DNS/order-
+	 * of-addresses, collector still warming its accept queue);
+	 * the async path recovers via backoff — the sync path
+	 * deserves the same resilience. Non-2xx responses and
+	 * timeouts are permanent (no retry). */
+	for (attempt = 0; attempt <= e->max_retries; attempt++)
+	{
+		st = flush_post_once(e, &e->url, path, body, body_len,
+				     &got_response);
+		if (st == OTLP_OK || got_response)
+			return st;
+		if (attempt < e->max_retries)
+		{
+			uint32_t delay = e->backoff_initial_ms;
+
+			if (delay > 100)
+				delay = 100;  /* sync path: short backoff */
+			otlp_log(e, OTLP_LOG_WARN,
+				 "sync flush %s: transient failure; "
+				 "retry %u/%u in %ums",
+				 path, attempt + 1, e->max_retries, delay);
+#if defined(_WIN32)
+			Sleep(delay);
+#else
+			{
+				struct timespec ts = {
+					0, (long) delay * 1000 * 1000
+				};
+				nanosleep(&ts, NULL);
+			}
+#endif
+		}
+	}
+	return st;
 }
 
 otlp_status_t
