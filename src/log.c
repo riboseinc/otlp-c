@@ -156,6 +156,78 @@ otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_log_record_set_attribute_double(otlp_log_record_t *lr,
+	const char *key,
+	double val)
+{
+	struct otlp_attribute *a;
+	otlp_status_t st;
+
+	if (!lr || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_DOUBLE;
+	a->v.double_val = val;
+	lr->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_log_record_set_attribute_bool(otlp_log_record_t *lr,
+	const char *key,
+	bool val)
+{
+	struct otlp_attribute *a;
+	otlp_status_t st;
+
+	if (!lr || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_BOOL;
+	a->v.bool_val = val;
+	lr->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_log_record_set_attribute_bytes(otlp_log_record_t *lr,
+	const char *key,
+	const uint8_t *bytes,
+	size_t len)
+{
+	struct otlp_attribute *a;
+	uint8_t *bytes_copy;
+	otlp_status_t st;
+
+	if (!lr || !key)
+		return OTLP_ERR_NULL;
+	if (len > 0 && !bytes)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
+	bytes_copy = otlp_dup_bytes(bytes, len);
+	if (len > 0 && !bytes_copy)
+	{
+		otlp_free(a->key);
+		a->key = NULL;
+		return OTLP_ERR_NOMEM;
+	}
+	a->type = OTLP_ATTR_BYTES;
+	a->v.bytes_val.data = bytes_copy;
+	a->v.bytes_val.len = len;
+	lr->n_attrs++;
+	return OTLP_OK;
+}
+
 /* ── Internal accessors ───────────────────────────────────────── */
 
 otlp_severity_t
