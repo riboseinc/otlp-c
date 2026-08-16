@@ -177,6 +177,169 @@ otlp_attribute_free(struct otlp_attribute *a)
 
 /* ── Attribute copy ───────────────────────────────────────────── */
 
+/* Deep-copy one attribute, including a nested array/kvlist tree.
+ * Safe on partial failure: on return != OTLP_OK the destination
+ * is left in a state otlp_attribute_free can handle (NULL-safe). */
+static otlp_status_t
+attr_copy_one(struct otlp_attribute *dst, const struct otlp_attribute *src)
+{
+	size_t i;
+
+	dst->key = NULL;
+	dst->type = OTLP_ATTR_STRING;
+	dst->v.string_val = NULL;
+	if (src->key)
+	{
+		dst->key = otlp_dup_str(src->key);
+		if (!dst->key)
+			return OTLP_ERR_NOMEM;
+	}
+	switch (src->type)
+	{
+		case OTLP_ATTR_STRING:
+			dst->type = OTLP_ATTR_STRING;
+			if (src->v.string_val)
+			{
+				dst->v.string_val =
+					otlp_dup_str(src->v.string_val);
+				if (!dst->v.string_val)
+					return OTLP_ERR_NOMEM;
+			}
+			break;
+		case OTLP_ATTR_INT64:
+			dst->type = OTLP_ATTR_INT64;
+			dst->v.int64_val = src->v.int64_val;
+			break;
+		case OTLP_ATTR_DOUBLE:
+			dst->type = OTLP_ATTR_DOUBLE;
+			dst->v.double_val = src->v.double_val;
+			break;
+		case OTLP_ATTR_BOOL:
+			dst->type = OTLP_ATTR_BOOL;
+			dst->v.bool_val = src->v.bool_val;
+			break;
+		case OTLP_ATTR_BYTES:
+			dst->type = OTLP_ATTR_BYTES;
+			dst->v.bytes_val.len = src->v.bytes_val.len;
+			if (src->v.bytes_val.len > 0)
+			{
+				dst->v.bytes_val.data =
+					otlp_malloc(src->v.bytes_val.len);
+				if (!dst->v.bytes_val.data)
+					return OTLP_ERR_NOMEM;
+				memcpy(dst->v.bytes_val.data,
+					src->v.bytes_val.data,
+					src->v.bytes_val.len);
+			}
+			break;
+		case OTLP_ATTR_ARRAY:
+		{
+			const struct otlp_attr_array *arr = src->v.array_val;
+
+			dst->type = OTLP_ATTR_ARRAY;
+			if (!arr)
+				break;
+			dst->v.array_val = otlp_calloc(1, sizeof(*arr));
+			if (!dst->v.array_val)
+				return OTLP_ERR_NOMEM;
+			if (arr->n > SIZE_MAX / sizeof(*arr->items))
+			{
+				otlp_free(dst->v.array_val);
+				dst->v.array_val = NULL;
+				return OTLP_ERR_NOMEM;
+			}
+			dst->v.array_val->items =
+				otlp_calloc(arr->n, sizeof(*arr->items));
+			if (!dst->v.array_val->items)
+			{
+				otlp_free(dst->v.array_val);
+				dst->v.array_val = NULL;
+				return OTLP_ERR_NOMEM;
+			}
+			dst->v.array_val->n = arr->n;
+			for (i = 0; i < arr->n; i++)
+				if (attr_copy_one(&dst->v.array_val->items[i],
+					    &arr->items[i]) != OTLP_OK)
+				{
+					/* The failing item may be partially
+					 * built; free is safe on partial
+					 * state, then free the fully-built
+					 * predecessors. */
+					do
+						otlp_attribute_free(
+							&dst->v.array_val
+								->items[i]);
+					while (i-- > 0);
+					otlp_free(dst->v.array_val->items);
+					otlp_free(dst->v.array_val);
+					dst->v.array_val = NULL;
+					return OTLP_ERR_NOMEM;
+				}
+			break;
+		}
+		case OTLP_ATTR_KVLIST:
+		{
+			const struct otlp_attr_kvlist *kvl = src->v.kvlist_val;
+
+			dst->type = OTLP_ATTR_KVLIST;
+			if (!kvl)
+				break;
+			dst->v.kvlist_val = otlp_calloc(1, sizeof(*kvl));
+			if (!dst->v.kvlist_val)
+				return OTLP_ERR_NOMEM;
+			if (kvl->n > SIZE_MAX / sizeof(*kvl->entries))
+			{
+				otlp_free(dst->v.kvlist_val);
+				dst->v.kvlist_val = NULL;
+				return OTLP_ERR_NOMEM;
+			}
+			dst->v.kvlist_val->entries =
+				otlp_calloc(kvl->n, sizeof(*kvl->entries));
+			if (!dst->v.kvlist_val->entries)
+			{
+				otlp_free(dst->v.kvlist_val);
+				dst->v.kvlist_val = NULL;
+				return OTLP_ERR_NOMEM;
+			}
+			dst->v.kvlist_val->n = kvl->n;
+			for (i = 0; i < kvl->n; i++)
+			{
+				struct otlp_attr_kvlist_entry *e =
+					&dst->v.kvlist_val->entries[i];
+
+				if (kvl->entries[i].key)
+				{
+					e->key = otlp_dup_str(
+						kvl->entries[i].key);
+					if (!e->key)
+						goto kvl_fail;
+				}
+				if (attr_copy_one(&e->value,
+					    &kvl->entries[i].value) != OTLP_OK)
+					goto kvl_fail;
+				continue;
+			kvl_fail:
+				do
+				{
+					otlp_free(dst->v.kvlist_val->entries[i]
+							.key);
+					otlp_attribute_free(
+						&dst->v.kvlist_val->entries[i]
+							.value);
+				} while (i-- > 0);
+				otlp_free(dst->v.kvlist_val->entries);
+				otlp_free(dst->v.kvlist_val);
+				dst->v.kvlist_val = NULL;
+				return OTLP_ERR_NOMEM;
+			}
+			break;
+		}
+		default:
+			return OTLP_ERR_NOMEM;
+	}
+	return OTLP_OK;
+}
+
 otlp_status_t
 otlp_attribute_copy_all(struct otlp_attribute *dst,
 	const struct otlp_attribute *src,
@@ -185,62 +348,14 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 	size_t i;
 
 	for (i = 0; i < n; i++)
-	{
-		dst[i].key = otlp_dup_str(src[i].key);
-		if (!dst[i].key)
+		if (attr_copy_one(&dst[i], &src[i]) != OTLP_OK)
 			goto fail;
-		dst[i].type = src[i].type;
-		switch (src[i].type)
-		{
-			case OTLP_ATTR_STRING:
-				dst[i].v.string_val =
-					otlp_dup_str(src[i].v.string_val);
-				if (!dst[i].v.string_val)
-					goto fail;
-				break;
-			case OTLP_ATTR_INT64:
-				dst[i].v.int64_val = src[i].v.int64_val;
-				break;
-			case OTLP_ATTR_DOUBLE:
-				dst[i].v.double_val = src[i].v.double_val;
-				break;
-			case OTLP_ATTR_BOOL:
-				dst[i].v.bool_val = src[i].v.bool_val;
-				break;
-			case OTLP_ATTR_BYTES:
-				dst[i].v.bytes_val.len = src[i].v.bytes_val.len;
-				if (src[i].v.bytes_val.len > 0)
-				{
-					dst[i].v.bytes_val.data = otlp_malloc(
-						src[i].v.bytes_val.len);
-					if (!dst[i].v.bytes_val.data)
-						goto fail;
-					memcpy(dst[i].v.bytes_val.data,
-						src[i].v.bytes_val.data,
-						src[i].v.bytes_val.len);
-				}
-				break;
-			case OTLP_ATTR_ARRAY:
-			case OTLP_ATTR_KVLIST:
-				/* Nested structures require recursive copy;
-				 * not implemented. Fail rather than leave a
-				 * dangling pointer in the union. */
-				otlp_free(dst[i].key);
-				dst[i].key = NULL;
-				goto fail;
-			default:
-				otlp_free(dst[i].key);
-				dst[i].key = NULL;
-				goto fail;
-		}
-	}
 	return OTLP_OK;
 
 fail:
-	/* Free partial copies. The item at index i may have a key
-	 * allocated but no/partial union value (e.g., STRING/BYTES
-	 * where the value alloc just failed). otlp_attribute_free is
-	 * safe on partial state — it no-ops on NULL fields. */
+	/* Free partial copies. The item at index i may be partially
+	 * built; otlp_attribute_free is safe on partial state — it
+	 * no-ops on NULL fields and recurses into built trees. */
 	otlp_attribute_free(&dst[i]);
 	while (i > 0)
 	{
@@ -248,6 +363,178 @@ fail:
 		otlp_attribute_free(&dst[i]);
 	}
 	return OTLP_ERR_NOMEM;
+}
+
+/* ── ArrayValue / KeyValueList builders ───────────────────────── */
+
+/* Fill one internal attribute from a public scalar value. */
+static otlp_status_t
+value_fill(struct otlp_attribute *a, const otlp_value_t *v)
+{
+	a->key = NULL;
+	a->type = OTLP_ATTR_STRING;
+	a->v.string_val = NULL;
+	switch (v->type)
+	{
+		case OTLP_VALUE_STRING:
+			a->type = OTLP_ATTR_STRING;
+			a->v.string_val = otlp_dup_str(
+				v->v.string_val ? v->v.string_val : "");
+			return a->v.string_val ? OTLP_OK : OTLP_ERR_NOMEM;
+		case OTLP_VALUE_BOOL:
+			a->type = OTLP_ATTR_BOOL;
+			a->v.bool_val = v->v.bool_val;
+			return OTLP_OK;
+		case OTLP_VALUE_INT64:
+			a->type = OTLP_ATTR_INT64;
+			a->v.int64_val = v->v.int64_val;
+			return OTLP_OK;
+		case OTLP_VALUE_DOUBLE:
+			a->type = OTLP_ATTR_DOUBLE;
+			a->v.double_val = v->v.double_val;
+			return OTLP_OK;
+		case OTLP_VALUE_BYTES:
+			a->type = OTLP_ATTR_BYTES;
+			a->v.bytes_val.len = v->v.bytes_val.len;
+			if (v->v.bytes_val.len > 0)
+			{
+				a->v.bytes_val.data =
+					otlp_dup_bytes(v->v.bytes_val.data,
+						v->v.bytes_val.len);
+				if (!a->v.bytes_val.data)
+					return OTLP_ERR_NOMEM;
+			}
+			return OTLP_OK;
+		default:
+			return OTLP_ERR_INVALID_ARGUMENT;
+	}
+}
+
+otlp_status_t
+otlp_attr_array_build(const otlp_value_t *items,
+	size_t n,
+	struct otlp_attr_array **out)
+{
+	struct otlp_attr_array *arr;
+	size_t i;
+
+	*out = NULL;
+	if (n > 0 && !items)
+		return OTLP_ERR_NULL;
+	if (n > SIZE_MAX / sizeof(*arr->items))
+		return OTLP_ERR_INVALID_ARGUMENT;
+	arr = otlp_calloc(1, sizeof(*arr));
+	if (!arr)
+		return OTLP_ERR_NOMEM;
+	if (n > 0)
+	{
+		arr->items = otlp_calloc(n, sizeof(*arr->items));
+		if (!arr->items)
+		{
+			otlp_free(arr);
+			return OTLP_ERR_NOMEM;
+		}
+		arr->n = n;
+	}
+	for (i = 0; i < n; i++)
+		if (value_fill(&arr->items[i], &items[i]) != OTLP_OK)
+		{
+			do
+				otlp_attribute_free(&arr->items[i]);
+			while (i-- > 0);
+			otlp_free(arr->items);
+			otlp_free(arr);
+			return OTLP_ERR_NOMEM;
+		}
+	*out = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_attr_kvlist_build(const otlp_kv_t *entries,
+	size_t n,
+	struct otlp_attr_kvlist **out)
+{
+	struct otlp_attr_kvlist *kvl;
+	size_t i;
+
+	*out = NULL;
+	if (n > 0 && !entries)
+		return OTLP_ERR_NULL;
+	if (n > SIZE_MAX / sizeof(*kvl->entries))
+		return OTLP_ERR_INVALID_ARGUMENT;
+	kvl = otlp_calloc(1, sizeof(*kvl));
+	if (!kvl)
+		return OTLP_ERR_NOMEM;
+	if (n > 0)
+	{
+		kvl->entries = otlp_calloc(n, sizeof(*kvl->entries));
+		if (!kvl->entries)
+		{
+			otlp_free(kvl);
+			return OTLP_ERR_NOMEM;
+		}
+		kvl->n = n;
+	}
+	for (i = 0; i < n; i++)
+	{
+		if (!entries[i].key ||
+			value_fill(&kvl->entries[i].value, &entries[i].value) !=
+				OTLP_OK)
+		{
+			do
+			{
+				otlp_free(kvl->entries[i].key);
+				otlp_attribute_free(&kvl->entries[i].value);
+			} while (i-- > 0);
+			otlp_free(kvl->entries);
+			otlp_free(kvl);
+			return entries[i].key ? OTLP_ERR_NOMEM : OTLP_ERR_NULL;
+		}
+		kvl->entries[i].key = otlp_dup_str(entries[i].key);
+		if (!kvl->entries[i].key)
+		{
+			do
+			{
+				otlp_free(kvl->entries[i].key);
+				otlp_attribute_free(&kvl->entries[i].value);
+			} while (i-- > 0);
+			otlp_free(kvl->entries);
+			otlp_free(kvl);
+			return OTLP_ERR_NOMEM;
+		}
+	}
+	*out = kvl;
+	return OTLP_OK;
+}
+
+void
+otlp_attr_array_free(struct otlp_attr_array *arr)
+{
+	size_t i;
+
+	if (!arr)
+		return;
+	for (i = 0; i < arr->n; i++)
+		otlp_attribute_free(&arr->items[i]);
+	otlp_free(arr->items);
+	otlp_free(arr);
+}
+
+void
+otlp_attr_kvlist_free(struct otlp_attr_kvlist *kvl)
+{
+	size_t i;
+
+	if (!kvl)
+		return;
+	for (i = 0; i < kvl->n; i++)
+	{
+		otlp_free(kvl->entries[i].key);
+		otlp_attribute_free(&kvl->entries[i].value);
+	}
+	otlp_free(kvl->entries);
+	otlp_free(kvl);
 }
 
 /* ── Lazy attribute lists ─────────────────────────────────────── */

@@ -288,6 +288,60 @@ otlp_metric_set_attribute_bytes(otlp_metric_t *m,
 }
 
 otlp_status_t
+otlp_metric_set_attribute_array(otlp_metric_t *m,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_array *arr;
+	otlp_status_t st;
+
+	if (!m || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_array_build(items, n, &arr);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_attr_list_reserve(
+		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_array_free(arr);
+		return st;
+	}
+	a->type = OTLP_ATTR_ARRAY;
+	a->v.array_val = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_metric_set_attribute_kvlist(otlp_metric_t *m,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_kvlist *kvl;
+	otlp_status_t st;
+
+	if (!m || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_kvlist_build(entries, n, &kvl);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_attr_list_reserve(
+		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_kvlist_free(kvl);
+		return st;
+	}
+	a->type = OTLP_ATTR_KVLIST;
+	a->v.kvlist_val = kvl;
+	return OTLP_OK;
+}
+
+otlp_status_t
 otlp_metric_set_exp_histogram(otlp_metric_t *m,
 	int32_t scale,
 	int32_t pos_offset,

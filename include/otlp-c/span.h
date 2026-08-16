@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "status.h"
+#include "value.h"
 #include "visibility.h"
 
 #ifdef __cplusplus
@@ -170,6 +171,22 @@ extern "C"
 		const uint8_t *bytes,
 		size_t len);
 
+	/* Set an ArrayValue attribute from `n` scalar values (the
+	 * library deep-copies; the caller keeps ownership of the
+	 * inputs). Same upsert semantics as the scalar setters. */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_attribute_array(otlp_span_t *span,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+
+	/* Set a KeyValueList attribute from `n` (key, value) entries. */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_attribute_kvlist(otlp_span_t *span,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
+
 	/* ── Status ──────────────────────────────────────────────────────
 	 */
 
@@ -238,6 +255,17 @@ extern "C"
 		size_t len);
 
 	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_event_attribute_array(otlp_span_t *span,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_event_attribute_kvlist(otlp_span_t *span,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
+
+	OTLP_C_EXPORT
 	otlp_status_t otlp_span_add_link(otlp_span_t *span,
 		const uint8_t *trace_id,
 		const uint8_t *span_id);
@@ -266,6 +294,17 @@ extern "C"
 		const char *key,
 		const uint8_t *bytes,
 		size_t len);
+
+	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_link_attribute_array(otlp_span_t *span,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+	OTLP_C_EXPORT
+	otlp_status_t otlp_span_set_link_attribute_kvlist(otlp_span_t *span,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
 
 	OTLP_C_EXPORT
 	otlp_status_t otlp_span_set_trace_state(otlp_span_t *span,

@@ -7,6 +7,7 @@
 #define OTLP_C_INTERNAL_UTIL_H
 
 #include <otlp-c/status.h>
+#include <otlp-c/value.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -17,6 +18,8 @@
  * cycle (span.c → internal_util.h → span_internal.h). Only the
  * .c file needs the full definition. */
 struct otlp_attribute;
+struct otlp_attr_array;
+struct otlp_attr_kvlist;
 
 /* ── Custom-allocator-backed wrappers ───────────────────────────
  *
@@ -122,6 +125,36 @@ otlp_attr_list_copy(struct otlp_attribute **dst,
  * NULL and *n to 0. Safe on an already-NULL array. */
 void
 otlp_attr_list_free(struct otlp_attribute **attrs, size_t *n);
+
+/* ── ArrayValue / KeyValueList trees ────────────────────────────
+ *
+ * Builders for the composite attribute types: they consume the
+ * public flat inputs (arrays of scalar otlp_value_t) and return
+ * fully-owned internal trees. Build FIRST, then reserve the
+ * attribute slot, then attach — the reserve-and-fill contract
+ * requires the fill to be non-failing assignments.
+ */
+
+/* Deep-build an ArrayValue tree from `n` scalar values. The
+ * result is owned by the caller until attached to an attribute
+ * slot; free with otlp_attr_array_free if never attached. */
+otlp_status_t
+otlp_attr_array_build(const otlp_value_t *items,
+	size_t n,
+	struct otlp_attr_array **out);
+
+/* Deep-build a KeyValueList tree from `n` (key, value) entries.
+ * Duplicate entry keys are kept as given — the uniqueness
+ * contract applies to attribute keys, not list contents. */
+otlp_status_t
+otlp_attr_kvlist_build(const otlp_kv_t *entries,
+	size_t n,
+	struct otlp_attr_kvlist **out);
+
+void
+otlp_attr_array_free(struct otlp_attr_array *arr);
+void
+otlp_attr_kvlist_free(struct otlp_attr_kvlist *kvl);
 
 /* ── ID validation ────────────────────────────────────────────── */
 

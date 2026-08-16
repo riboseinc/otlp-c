@@ -174,6 +174,40 @@ test_log_attribute_upsert(void)
 }
 
 static int
+test_log_attribute_array_kvlist(void)
+{
+	const otlp_value_t items[2] = {
+		{ .type = OTLP_VALUE_DOUBLE, .v = { .double_val = 0.25 } },
+		{ .type = OTLP_VALUE_STRING, .v = { .string_val = "p99" } },
+	};
+	const otlp_kv_t kvs[1] = {
+		{ .key = "mode",
+			.value = { .type = OTLP_VALUE_STRING,
+				.v = { .string_val = "fast" } } },
+	};
+	otlp_log_record_t *lr =
+		otlp_log_record_create(OTLP_SEVERITY_INFO, "stats");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(lr != NULL);
+	assert(otlp_log_record_set_attribute_array(lr, "pcts", items, 2) ==
+		OTLP_OK);
+	assert(otlp_log_record_set_attribute_kvlist(lr, "cfg", kvs, 1) ==
+		OTLP_OK);
+	attrs = otlp_log_get_attrs(lr, &n);
+	assert(n == 2);
+	assert(attrs[0].type == OTLP_ATTR_ARRAY);
+	assert(attrs[0].v.array_val->items[0].v.double_val == 0.25);
+	assert(strcmp(attrs[0].v.array_val->items[1].v.string_val, "p99") == 0);
+	assert(attrs[1].type == OTLP_ATTR_KVLIST);
+	assert(strcmp(attrs[1].v.kvlist_val->entries[0].value.v.string_val,
+		       "fast") == 0);
+	otlp_log_record_free(lr);
+	return 0;
+}
+
+static int
 test_log_severity_text(void)
 {
 	otlp_log_record_t *lr =
@@ -234,12 +268,13 @@ main(void)
 	failures += test_log_attribute_bytes();
 	failures += test_log_severity_text();
 	failures += test_log_attribute_upsert();
+	failures += test_log_attribute_array_kvlist();
 	failures += test_log_clone_attrs();
 
 	if (failures)
 		printf("[unit-log] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-log] PASS (11 tests)\n");
+		printf("[unit-log] PASS (12 tests)\n");
 
 	return failures ? 1 : 0;
 }

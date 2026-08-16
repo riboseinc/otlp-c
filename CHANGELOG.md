@@ -4,6 +4,41 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.74] - 2026-08-17
+
+ARRAY/KVLIST attributes end-to-end; malformed-frame encoder fix.
+
+### Added — composite attribute setters + `otlp_value_t`
+
+New `include/otlp-c/value.h` introduces `otlp_value_t` (a
+borrowed-data tagged union for one scalar value: string / bool /
+int64 / double / bytes) and `otlp_kv_t` (one KeyValueList entry).
+Ten setters take flat arrays of them and deep-copy:
+
+- `otlp_span_set_attribute_array` / `_kvlist` (also the
+  event/link variants)
+- `otlp_metric_set_attribute_array` / `_kvlist`
+- `otlp_log_record_set_attribute_array` / `_kvlist`
+
+All follow the upsert semantics: re-setting the key replaces the
+whole tree. Composites are built first into fully-owned trees
+(`otlp_attr_array_build` / `otlp_attr_kvlist_build`), then
+attached — preserving the reserve-and-fill contract. Clone now
+deep-copies recursively: `otlp_attribute_copy_all` was rewritten
+as a per-item recursive copy handling all seven types (it
+previously refused ARRAY/KVLIST).
+
+### Fixed — composite AnyValue frames were malformed
+
+`encode_attr_array` / `encode_attr_kvlist` wrote their body
+without the outer LEN length prefix — a malformed protobuf frame
+(the first item's tag byte would be misread as the length). The
+path was unreachable before this release (no code could create a
+composite attribute), which is why it survived. Both encoders now
+build the body into a temp buffer and emit `LEN + body`. Caught by
+the new `prop_attr_array_wire` / `prop_attr_kvlist_wire`
+properties, which walk the wire into the nested oneof.
+
 ## [0.5.73] - 2026-08-16
 
 Attributes are a map: last-write-wins upsert.
