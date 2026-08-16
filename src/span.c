@@ -398,6 +398,60 @@ otlp_span_set_attribute_bytes(otlp_span_t *span,
 	return OTLP_OK;
 }
 
+otlp_status_t
+otlp_span_set_attribute_array(otlp_span_t *span,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_array *arr;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	/* Build the owned tree first; the post-reserve fill must not
+	 * fail (see attr_reserve). */
+	st = otlp_attr_array_build(items, n, &arr);
+	if (st != OTLP_OK)
+		return st;
+	st = attr_reserve(span, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_array_free(arr);
+		return st;
+	}
+	a->type = OTLP_ATTR_ARRAY;
+	a->v.array_val = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_attribute_kvlist(otlp_span_t *span,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_kvlist *kvl;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_kvlist_build(entries, n, &kvl);
+	if (st != OTLP_OK)
+		return st;
+	st = attr_reserve(span, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_kvlist_free(kvl);
+		return st;
+	}
+	a->type = OTLP_ATTR_KVLIST;
+	a->v.kvlist_val = kvl;
+	return OTLP_OK;
+}
+
 /* ── Status ───────────────────────────────────────────────────── */
 
 otlp_status_t
@@ -728,6 +782,114 @@ otlp_span_set_link_attribute_bytes(otlp_span_t *span,
 	a->type = OTLP_ATTR_BYTES;
 	a->v.bytes_val.data = bytes_copy;
 	a->v.bytes_val.len = len;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_array(otlp_span_t *span,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	struct otlp_attr_array *arr;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_array_build(items, n, &arr);
+	if (st != OTLP_OK)
+		return st;
+	st = event_attr_slot(span, key, &ev, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_array_free(arr);
+		return st;
+	}
+	a->type = OTLP_ATTR_ARRAY;
+	a->v.array_val = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_kvlist(otlp_span_t *span,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	struct otlp_attr_kvlist *kvl;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_kvlist_build(entries, n, &kvl);
+	if (st != OTLP_OK)
+		return st;
+	st = event_attr_slot(span, key, &ev, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_kvlist_free(kvl);
+		return st;
+	}
+	a->type = OTLP_ATTR_KVLIST;
+	a->v.kvlist_val = kvl;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_array(otlp_span_t *span,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	struct otlp_attr_array *arr;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_array_build(items, n, &arr);
+	if (st != OTLP_OK)
+		return st;
+	st = link_attr_slot(span, key, &lk, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_array_free(arr);
+		return st;
+	}
+	a->type = OTLP_ATTR_ARRAY;
+	a->v.array_val = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_kvlist(otlp_span_t *span,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	struct otlp_attr_kvlist *kvl;
+	otlp_status_t st;
+
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_kvlist_build(entries, n, &kvl);
+	if (st != OTLP_OK)
+		return st;
+	st = link_attr_slot(span, key, &lk, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_kvlist_free(kvl);
+		return st;
+	}
+	a->type = OTLP_ATTR_KVLIST;
+	a->v.kvlist_val = kvl;
 	return OTLP_OK;
 }
 

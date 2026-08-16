@@ -203,6 +203,63 @@ test_span_attribute_upsert(void)
 }
 
 static int
+test_span_attribute_array_kvlist(void)
+{
+	const otlp_value_t items[3] = {
+		{ .type = OTLP_VALUE_INT64, .v = { .int64_val = 7 } },
+		{ .type = OTLP_VALUE_STRING, .v = { .string_val = "seven" } },
+		{ .type = OTLP_VALUE_BOOL, .v = { .bool_val = true } },
+	};
+	const otlp_kv_t kvs[2] = {
+		{ .key = "a",
+			.value = { .type = OTLP_VALUE_INT64,
+				.v = { .int64_val = 1 } } },
+		{ .key = "b",
+			.value = { .type = OTLP_VALUE_DOUBLE,
+				.v = { .double_val = 2.5 } } },
+	};
+	otlp_span_t *span = otlp_span_create("test");
+	otlp_span_t *clone;
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(span != NULL);
+	assert(otlp_span_set_attribute_array(span, "tags", items, 3) ==
+		OTLP_OK);
+	assert(otlp_span_set_attribute_kvlist(span, "map", kvs, 2) == OTLP_OK);
+	attrs = otlp_span_get_attrs(span, &n);
+	assert(n == 2);
+	assert(attrs[0].type == OTLP_ATTR_ARRAY);
+	assert(attrs[0].v.array_val->n == 3);
+	assert(attrs[0].v.array_val->items[0].v.int64_val == 7);
+	assert(strcmp(attrs[0].v.array_val->items[1].v.string_val, "seven") ==
+		0);
+	assert(attrs[0].v.array_val->items[2].v.bool_val == true);
+	assert(attrs[1].type == OTLP_ATTR_KVLIST);
+	assert(attrs[1].v.kvlist_val->n == 2);
+	assert(strcmp(attrs[1].v.kvlist_val->entries[0].key, "a") == 0);
+	assert(attrs[1].v.kvlist_val->entries[1].value.v.double_val == 2.5);
+
+	/* Upsert over a composite: the old tree is released, the
+	 * scalar takes its place. */
+	assert(otlp_span_set_attribute_int(span, "tags", 1) == OTLP_OK);
+	attrs = otlp_span_get_attrs(span, &n);
+	assert(n == 2);
+	assert(attrs[0].type == OTLP_ATTR_INT64);
+
+	/* Clone deep-copies the kvlist tree. */
+	clone = otlp_span_clone(span);
+	assert(clone != NULL);
+	attrs = otlp_span_get_attrs(clone, &n);
+	assert(n == 2);
+	assert(attrs[1].type == OTLP_ATTR_KVLIST);
+	assert(attrs[1].v.kvlist_val != NULL);
+	otlp_span_free(clone);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
 test_event_typed_attributes(void)
 {
 	const uint8_t payload[2] = { 0xc0, 0xff };
@@ -344,6 +401,7 @@ main(void)
 	failures += test_span_set_status_error();
 	failures += test_span_many_attributes();
 	failures += test_span_attribute_upsert();
+	failures += test_span_attribute_array_kvlist();
 	failures += test_tracer_start_span();
 	failures += test_event_typed_attributes();
 	failures += test_link_typed_attributes();
@@ -354,7 +412,7 @@ main(void)
 	if (failures)
 		printf("[unit-span] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-span] PASS (18 tests)\n");
+		printf("[unit-span] PASS (19 tests)\n");
 
 	return failures ? 1 : 0;
 }

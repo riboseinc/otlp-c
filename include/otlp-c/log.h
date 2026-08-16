@@ -14,6 +14,7 @@
 #define OTLP_C_LOG_H
 
 #include <otlp-c/status.h>
+#include <otlp-c/value.h>
 #include <otlp-c/visibility.h>
 
 #include <stdbool.h>
@@ -119,6 +120,20 @@ extern "C"
 		const char *key,
 		const uint8_t *bytes,
 		size_t len);
+
+	/* Set an ArrayValue / KeyValueList attribute (deep-copied;
+	 * same upsert semantics as the scalar setters). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_log_record_set_attribute_array(otlp_log_record_t *lr,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+	OTLP_C_EXPORT
+	otlp_status_t otlp_log_record_set_attribute_kvlist(
+		otlp_log_record_t *lr,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
 
 #ifdef __cplusplus
 }

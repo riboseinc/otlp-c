@@ -25,6 +25,7 @@
 #define OTLP_C_METRIC_H
 
 #include <otlp-c/status.h>
+#include <otlp-c/value.h>
 #include <otlp-c/visibility.h>
 
 #include <stdbool.h>
@@ -113,6 +114,32 @@ extern "C"
 		const char *key,
 		const uint8_t *bytes,
 		size_t len);
+
+	/* Set an ArrayValue / KeyValueList attribute (deep-copied;
+	 * same upsert semantics as the scalar setters). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_metric_set_attribute_array(otlp_metric_t *m,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+	OTLP_C_EXPORT
+	otlp_status_t otlp_metric_set_attribute_kvlist(otlp_metric_t *m,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
+
+	/* Set an ArrayValue / KeyValueList attribute (deep-copied;
+	 * same upsert semantics as the scalar setters). */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_metric_set_attribute_array(otlp_metric_t *m,
+		const char *key,
+		const otlp_value_t *items,
+		size_t n);
+	OTLP_C_EXPORT
+	otlp_status_t otlp_metric_set_attribute_kvlist(otlp_metric_t *m,
+		const char *key,
+		const otlp_kv_t *entries,
+		size_t n);
 
 	/* Set ExponentialHistogram bucket data. Only valid for
 	 * OTLP_METRIC_EXP_HISTOGRAM. The library copies the arrays.

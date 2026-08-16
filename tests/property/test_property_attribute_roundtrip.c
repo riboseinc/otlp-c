@@ -15,8 +15,10 @@
  *   prop_attr_upsert_at_cap  — at cap a new key overflows but an
  *                             overwrite of an existing key succeeds.
  */
+#include "decoder.h"
 #include "prng.h"
 #include "property_harness.h"
+#include "walker.h"
 
 #include <otlp-c/span.h>
 
@@ -396,6 +398,196 @@ out:
 	return ok;
 }
 
+/* ArrayValue on the wire: AnyValue array_value{5} contains N
+ * values{1} submessages, each an AnyValue with its own oneof
+ * member (item 0: int64, item 1: string). */
+static int
+prop_attr_array_wire(uint64_t seed)
+{
+	struct prng p;
+	otlp_span_t *span;
+	struct otlp_pb_buf buf = { 0 };
+	const otlp_span_t *arr[1] = { NULL };
+	otlp_value_t items_in[2] = {
+		{ .type = OTLP_VALUE_INT64, .v = { .int64_val = 0 } },
+		{ .type = OTLP_VALUE_STRING, .v = { .string_val = NULL } },
+	};
+	uint64_t v;
+	char sval[16];
+	size_t slen;
+	int ok = 0;
+	size_t pos, end, ip, ie;
+	int wt;
+	size_t vp, vl;
+	int n_items = 0;
+
+	prng_seed(&p, seed);
+	v = prng_next(&p);
+	slen = (size_t) prng_u32(&p, 10) + 1;
+	for (size_t i = 0; i < slen; i++)
+		sval[i] = (char) (prng_u32(&p, 94) + 33);
+	sval[slen] = '\0';
+	items_in[0].v.int64_val = (int64_t) v;
+	items_in[1].v.string_val = sval;
+
+	span = otlp_span_create("s");
+	if (!span)
+		return 0;
+	if (otlp_span_set_attribute_array(span, "k", items_in, 2) != OTLP_OK)
+		goto out;
+	arr[0] = span;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_trace_service_request(
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+
+	pos = 0;
+	end = buf.len;
+	if (!walker_descend(buf.data, &pos, &end, 1) || /* ResourceSpans */
+		!walker_descend(buf.data, &pos, &end, 2) || /* ScopeSpans */
+		!walker_descend(buf.data, &pos, &end, 2) || /* Span */
+		!walker_descend(buf.data, &pos, &end, 9) || /* attributes */
+		!walker_descend(buf.data, &pos, &end, 2) || /* value */
+		!walker_descend(buf.data, &pos, &end, 5)) /* array_value */
+		goto out_buf;
+
+	/* Iterate values{1} inside the ArrayValue: each match's
+	 * payload ends exactly where the next field's tag begins. */
+	ip = pos;
+	ie = end;
+	while (n_items < 2 && ip < ie &&
+		walker_find_at_level(buf.data, ip, ie, 1, &wt, &vp, &vl) &&
+		wt == OTLP_PB_WIRE_LEN)
+	{
+		size_t item_pos = vp, item_end = vp + vl;
+
+		if (n_items == 0)
+		{
+			if (!walker_find_at_level(buf.data,
+				    item_pos,
+				    item_end,
+				    3,
+				    &wt,
+				    &vp,
+				    &vl) ||
+				wt != OTLP_PB_WIRE_VARINT)
+				goto out_buf;
+			{
+				size_t pv = vp;
+				uint64_t got = 0;
+
+				if (decode_varint(
+					    buf.data, item_end, &pv, &got) !=
+						OTLP_OK ||
+					got != v)
+					goto out_buf;
+			}
+		}
+		else
+		{
+			if (!walker_find_at_level(buf.data,
+				    item_pos,
+				    item_end,
+				    1,
+				    &wt,
+				    &vp,
+				    &vl) ||
+				wt != OTLP_PB_WIRE_LEN || vl != slen ||
+				memcmp(buf.data + vp, sval, slen) != 0)
+				goto out_buf;
+		}
+		n_items++;
+		ip = item_end;
+	}
+	ok = (n_items == 2);
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_span_free(span);
+	return ok;
+}
+
+/* KeyValueList on the wire: AnyValue kvlist_value{6} contains N
+ * values{1} KeyValue submessages (key{1} + value{2}). */
+static int
+prop_attr_kvlist_wire(uint64_t seed)
+{
+	struct prng p;
+	otlp_span_t *span;
+	struct otlp_pb_buf buf = { 0 };
+	const otlp_span_t *arr[1] = { NULL };
+	otlp_kv_t kvs_in[2] = {
+		{ .key = "k1",
+			.value = { .type = OTLP_VALUE_INT64,
+				.v = { .int64_val = 0 } } },
+		{ .key = "k2",
+			.value = { .type = OTLP_VALUE_BOOL,
+				.v = { .bool_val = true } } },
+	};
+	uint64_t v;
+	int ok = 0;
+	size_t pos, end;
+	int wt;
+	size_t vp, vl;
+
+	prng_seed(&p, seed);
+	v = prng_next(&p);
+	kvs_in[0].value.v.int64_val = (int64_t) v;
+
+	span = otlp_span_create("s");
+	if (!span)
+		return 0;
+	if (otlp_span_set_attribute_kvlist(span, "k", kvs_in, 2) != OTLP_OK)
+		goto out;
+	arr[0] = span;
+	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
+		goto out;
+	if (otlp_encode_export_trace_service_request(
+		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		goto out_buf;
+
+	pos = 0;
+	end = buf.len;
+	if (!walker_descend(buf.data, &pos, &end, 1) || /* ResourceSpans */
+		!walker_descend(buf.data, &pos, &end, 2) || /* ScopeSpans */
+		!walker_descend(buf.data, &pos, &end, 2) || /* Span */
+		!walker_descend(buf.data, &pos, &end, 9) || /* attributes */
+		!walker_descend(buf.data, &pos, &end, 2) || /* value */
+		!walker_descend(buf.data, &pos, &end, 6)) /* kvlist_value */
+		goto out_buf;
+
+	/* KeyValueList: first values{1} is an entry with key{1}="k1"
+	 * and int_value{3}==v. */
+	if (!walker_descend(buf.data, &pos, &end, 1))
+		goto out_buf;
+	if (!walker_find_at_level(buf.data, pos, end, 1, &wt, &vp, &vl) ||
+		wt != OTLP_PB_WIRE_LEN || vl != 2 ||
+		memcmp(buf.data + vp, "k1", 2) != 0)
+		goto out_buf;
+	if (!walker_descend(buf.data, &pos, &end, 2))
+		goto out_buf;
+	if (!walker_find_at_level(buf.data, pos, end, 3, &wt, &vp, &vl) ||
+		wt != OTLP_PB_WIRE_VARINT)
+		goto out_buf;
+	{
+		size_t pv = vp;
+		uint64_t got = 0;
+
+		if (decode_varint(buf.data, end, &pv, &got) != OTLP_OK ||
+			got != v)
+			goto out_buf;
+	}
+	ok = 1;
+
+out_buf:
+	otlp_pb_buf_free(&buf);
+out:
+	otlp_span_free(span);
+	return ok;
+}
+
 /* ── main ─────────────────────────────────────────────────────── */
 
 int
@@ -437,6 +629,10 @@ main(void)
 		"prop_attr_upsert_wire_identical",
 		1000,
 		1);
+	failures += property_run(
+		prop_attr_array_wire, "prop_attr_array_wire", 1000, 1);
+	failures += property_run(
+		prop_attr_kvlist_wire, "prop_attr_kvlist_wire", 1000, 1);
 
 	if (failures)
 		printf("[property] %d attr property(ies) failed\n", failures);

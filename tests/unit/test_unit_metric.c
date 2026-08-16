@@ -154,6 +154,38 @@ test_metric_attribute_upsert(void)
 }
 
 static int
+test_metric_attribute_array_kvlist(void)
+{
+	const otlp_value_t items[2] = {
+		{ .type = OTLP_VALUE_INT64, .v = { .int64_val = 5 } },
+		{ .type = OTLP_VALUE_STRING, .v = { .string_val = "five" } },
+	};
+	const otlp_kv_t kvs[1] = {
+		{ .key = "z",
+			.value = { .type = OTLP_VALUE_BOOL,
+				.v = { .bool_val = false } } },
+	};
+	otlp_metric_t *m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "requests", "1", "doc", NULL, 0);
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(m != NULL);
+	assert(otlp_metric_set_attribute_array(m, "shards", items, 2) ==
+		OTLP_OK);
+	assert(otlp_metric_set_attribute_kvlist(m, "meta", kvs, 1) == OTLP_OK);
+	attrs = otlp_metric_get_attrs(m, &n);
+	assert(n == 2);
+	assert(attrs[0].type == OTLP_ATTR_ARRAY);
+	assert(attrs[0].v.array_val->n == 2);
+	assert(attrs[0].v.array_val->items[0].v.int64_val == 5);
+	assert(attrs[1].type == OTLP_ATTR_KVLIST);
+	assert(attrs[1].v.kvlist_val->entries[0].value.v.bool_val == false);
+	otlp_metric_free(m);
+	return 0;
+}
+
+static int
 test_metric_record_counter(void)
 {
 	otlp_metric_t *m = otlp_metric_create(
@@ -213,12 +245,13 @@ main(void)
 	failures += test_metric_attribute_bytes();
 	failures += test_metric_record_counter();
 	failures += test_metric_attribute_upsert();
+	failures += test_metric_attribute_array_kvlist();
 	failures += test_metric_clone_attrs();
 
 	if (failures)
 		printf("[unit-metric] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-metric] PASS (10 tests)\n");
+		printf("[unit-metric] PASS (11 tests)\n");
 
 	return failures ? 1 : 0;
 }
