@@ -58,22 +58,49 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 	const struct otlp_attribute *src,
 	size_t n);
 
+/* Release the attribute's union payload (string, bytes, or a
+ * nested array/kvlist tree) and reset the type to a safe empty
+ * value. The key is kept — this is the primitive for
+ * replace-value-in-place (attribute upsert). */
+void
+otlp_attribute_release_value(struct otlp_attribute *a);
+
 /* ── Lazy attribute lists ───────────────────────────────────────
  *
  * The shared storage model for attribute arrays on spans' events/
  * links, metrics, and log records: a cap-bounded array that is
  * NULL until the first attribute is set, so an attribute-less
  * object costs one pointer instead of a cap-sized inline array
- * (v0.5.68/v0.5.69). These three functions own that model — the
+ * (v0.5.68/v0.5.69). These functions own that model — the
  * attribute-bearing types just pass their (attrs, n_attrs, cap)
  * triple. DRY: one implementation instead of four copies.
+ *
+ * Upsert semantics (v0.5.73): attributes are a map — the OTLP
+ * data model requires unique keys and the OTel API defines
+ * setting an attribute as last-write-wins. Reserve finds an
+ * existing key and reuses its slot (releasing the old value) or
+ * appends a new one; duplicates can no longer reach the wire.
  */
 
-/* Reserve the next slot and copy the key. Lazily calloc's the
- * cap-sized array on first use. *n is NOT incremented — the
- * caller fills the type-specific value and increments on success;
- * on value-allocation failure the caller must free slot->key and
- * NULL it. On failure the array pointer and count are unchanged. */
+/* Linear search for `key`. Returns true and writes the index to
+ * *idx_out when found. */
+bool
+otlp_attr_list_find(const struct otlp_attribute *attrs,
+	size_t n,
+	const char *key,
+	size_t *idx_out);
+
+/* Reserve the slot for `key` and commit the count: if the key
+ * already exists, its old value is released and that slot is
+ * returned (count unchanged); otherwise a slot is appended at the
+ * end and *n is incremented. Lazily calloc's the cap-sized array
+ * on first use. Overwriting an existing key succeeds even at cap;
+ * appending past cap returns OTLP_ERR_OVERFLOW.
+ *
+ * The caller fills type + value AFTER this returns. Because the
+ * slot is already committed, the fill must not fail — duplicate
+ * owned values (strings, bytes) BEFORE calling and free them if
+ * reserve itself fails. Scalar types have no failure path. */
 otlp_status_t
 otlp_attr_list_reserve(struct otlp_attribute **attrs,
 	size_t *n,

@@ -154,6 +154,26 @@ test_log_attribute_bytes(void)
 }
 
 static int
+test_log_attribute_upsert(void)
+{
+	otlp_log_record_t *lr =
+		otlp_log_record_create(OTLP_SEVERITY_INFO, "hello");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(lr != NULL);
+	assert(otlp_log_record_set_attribute_int(lr, "k", 1) == OTLP_OK);
+	assert(otlp_log_record_set_attribute_string(lr, "k", "replaced") ==
+		OTLP_OK);
+	attrs = otlp_log_get_attrs(lr, &n);
+	assert(n == 1);
+	assert(attrs[0].type == OTLP_ATTR_STRING);
+	assert(strcmp(attrs[0].v.string_val, "replaced") == 0);
+	otlp_log_record_free(lr);
+	return 0;
+}
+
+static int
 test_log_severity_text(void)
 {
 	otlp_log_record_t *lr =
@@ -213,12 +233,13 @@ main(void)
 	failures += test_log_attribute_bool();
 	failures += test_log_attribute_bytes();
 	failures += test_log_severity_text();
+	failures += test_log_attribute_upsert();
 	failures += test_log_clone_attrs();
 
 	if (failures)
 		printf("[unit-log] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-log] PASS (10 tests)\n");
+		printf("[unit-log] PASS (11 tests)\n");
 
 	return failures ? 1 : 0;
 }

@@ -90,7 +90,8 @@ extern "C"
 	otlp_status_t otlp_metric_mark_time(otlp_metric_t *m); /* time = now */
 
 	/* Set an attribute on the current data point (same semantics as
-	 * otlp_span_set_attribute_*). Fixed cap: 128 attributes. */
+	 * otlp_span_set_attribute_*: a map — last write wins, type may
+	 * change; max 128 distinct keys). */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_metric_set_attribute_string(otlp_metric_t *m,
 		const char *key,

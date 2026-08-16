@@ -136,6 +136,12 @@ extern "C"
 	otlp_status_t otlp_span_set_name(otlp_span_t *span, const char *name);
 
 	/* ── Attributes ──────────────────────────────────────────────────
+	 *
+	 * Attributes are a map: setting an existing key replaces its
+	 * value (last write wins — the OTel API / OTLP data-model
+	 * semantic; the type may change). Max 128 distinct keys;
+	 * overflow returns OTLP_ERR_OVERFLOW. Replacing an existing
+	 * key always succeeds, even at cap.
 	 */
 
 	OTLP_C_EXPORT
