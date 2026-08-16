@@ -95,6 +95,46 @@ test_metric_attribute_int(void)
 }
 
 static int
+test_metric_attribute_bool(void)
+{
+	otlp_metric_t *m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "requests", "1", "doc", NULL, 0);
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(m != NULL);
+	assert(otlp_metric_set_attribute_bool(m, "canary", true) == OTLP_OK);
+	attrs = otlp_metric_get_attrs(m, &n);
+	assert(attrs != NULL && n == 1);
+	assert(attrs[0].type == OTLP_ATTR_BOOL);
+	assert(attrs[0].v.bool_val == true);
+	otlp_metric_free(m);
+	return 0;
+}
+
+static int
+test_metric_attribute_bytes(void)
+{
+	const uint8_t payload[3] = { 0xde, 0xad, 0x42 };
+	otlp_metric_t *m = otlp_metric_create(
+		OTLP_METRIC_GAUGE, "depth", "m", NULL, NULL, 0);
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(m != NULL);
+	assert(otlp_metric_set_attribute_bytes(m, "digest", payload, 3) ==
+		OTLP_OK);
+	attrs = otlp_metric_get_attrs(m, &n);
+	assert(attrs != NULL && n == 1);
+	assert(attrs[0].type == OTLP_ATTR_BYTES);
+	assert(attrs[0].v.bytes_val.len == 3);
+	assert(attrs[0].v.bytes_val.data[0] == 0xde);
+	assert(attrs[0].v.bytes_val.data[2] == 0x42);
+	otlp_metric_free(m);
+	return 0;
+}
+
+static int
 test_metric_record_counter(void)
 {
 	otlp_metric_t *m = otlp_metric_create(
@@ -111,6 +151,7 @@ test_metric_record_counter(void)
 static int
 test_metric_clone_attrs(void)
 {
+	const uint8_t digest[2] = { 0xaa, 0xbb };
 	otlp_metric_t *m = otlp_metric_create(
 		OTLP_METRIC_COUNTER, "requests", NULL, NULL, NULL, 0);
 	otlp_metric_t *c;
@@ -120,13 +161,19 @@ test_metric_clone_attrs(void)
 	assert(m != NULL);
 	assert(otlp_metric_set_attribute_string(m, "region", "eu") == OTLP_OK);
 	assert(otlp_metric_set_attribute_int(m, "shard", 3) == OTLP_OK);
+	assert(otlp_metric_set_attribute_bytes(m, "digest", digest, 2) ==
+		OTLP_OK);
 	c = otlp_metric_clone(m);
 	assert(c != NULL);
 	attrs = otlp_metric_get_attrs(c, &n);
-	assert(attrs != NULL && n == 2);
+	assert(attrs != NULL && n == 3);
 	assert(strcmp(attrs[0].key, "region") == 0);
 	assert(strcmp(attrs[0].v.string_val, "eu") == 0);
 	assert(attrs[1].v.int64_val == 3);
+	assert(attrs[2].type == OTLP_ATTR_BYTES);
+	assert(attrs[2].v.bytes_val.len == 2);
+	assert(attrs[2].v.bytes_val.data[0] == 0xaa);
+	assert(attrs[2].v.bytes_val.data != digest); /* deep copy */
 	assert(otlp_metric_get_value(c) == otlp_metric_get_value(m));
 	otlp_metric_free(c);
 	otlp_metric_free(m);
@@ -143,13 +190,15 @@ main(void)
 	failures += test_metric_no_attrs_lazy();
 	failures += test_metric_attribute_string();
 	failures += test_metric_attribute_int();
+	failures += test_metric_attribute_bool();
+	failures += test_metric_attribute_bytes();
 	failures += test_metric_record_counter();
 	failures += test_metric_clone_attrs();
 
 	if (failures)
 		printf("[unit-metric] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-metric] PASS (7 tests)\n");
+		printf("[unit-metric] PASS (9 tests)\n");
 
 	return failures ? 1 : 0;
 }

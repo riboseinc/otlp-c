@@ -4,6 +4,37 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.71] - 2026-08-16
+
+Attribute setter type parity across all three signals.
+
+### Added — missing typed attribute setters for metrics/logs
+
+The span API accepted string/int64/double/bool/bytes attributes,
+but metrics were missing bool + bytes and log records were missing
+double + bool + bytes. Callers had to stringify binary or boolean
+values, losing AnyValue type fidelity on the wire. Five new
+setters close the gap:
+
+- `otlp_metric_set_attribute_bool` / `_bytes`
+- `otlp_log_record_set_attribute_double` / `_bool` / `_bytes`
+
+No encoder, schema, clone, or free-path changes were needed — the
+model-driven `otlp_encode_any_value` dispatch and the shared
+attribute storage already covered every type; each setter is a
+thin typed fill through `otlp_attr_list_reserve`.
+
+Also fixed: `log.h` did not include `<stdbool.h>` (no prior
+declaration used `bool`).
+
+### Tests
+
+`unit-metric` (9) and `unit-log` (10) gain per-type roundtrips and
+bytes deep-copy assertions in the clone tests. The metric/log
+attribute roundtrip properties now cycle int64/double/bool/bytes
+by seed and assert the exact AnyValue oneof field number + wire
+type + value on the wire (verified at 20,000 iterations).
+
 ## [0.5.70] - 2026-08-16
 
 One owner for the lazy attribute-list storage model (DRY).

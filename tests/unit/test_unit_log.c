@@ -95,6 +95,65 @@ test_log_attribute_int(void)
 }
 
 static int
+test_log_attribute_double(void)
+{
+	otlp_log_record_t *lr =
+		otlp_log_record_create(OTLP_SEVERITY_INFO, "timing");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(lr != NULL);
+	assert(otlp_log_record_set_attribute_double(lr, "dur_s", 0.125) ==
+		OTLP_OK);
+	attrs = otlp_log_get_attrs(lr, &n);
+	assert(attrs != NULL && n == 1);
+	assert(attrs[0].type == OTLP_ATTR_DOUBLE);
+	assert(attrs[0].v.double_val == 0.125);
+	otlp_log_record_free(lr);
+	return 0;
+}
+
+static int
+test_log_attribute_bool(void)
+{
+	otlp_log_record_t *lr =
+		otlp_log_record_create(OTLP_SEVERITY_WARN, "degraded");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(lr != NULL);
+	assert(otlp_log_record_set_attribute_bool(lr, "retrying", true) ==
+		OTLP_OK);
+	attrs = otlp_log_get_attrs(lr, &n);
+	assert(attrs != NULL && n == 1);
+	assert(attrs[0].type == OTLP_ATTR_BOOL);
+	assert(attrs[0].v.bool_val == true);
+	otlp_log_record_free(lr);
+	return 0;
+}
+
+static int
+test_log_attribute_bytes(void)
+{
+	const uint8_t payload[4] = { 0x01, 0x02, 0x03, 0xff };
+	otlp_log_record_t *lr =
+		otlp_log_record_create(OTLP_SEVERITY_ERROR, "corrupt frame");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(lr != NULL);
+	assert(otlp_log_record_set_attribute_bytes(lr, "frame", payload, 4) ==
+		OTLP_OK);
+	attrs = otlp_log_get_attrs(lr, &n);
+	assert(attrs != NULL && n == 1);
+	assert(attrs[0].type == OTLP_ATTR_BYTES);
+	assert(attrs[0].v.bytes_val.len == 4);
+	assert(attrs[0].v.bytes_val.data[3] == 0xff);
+	otlp_log_record_free(lr);
+	return 0;
+}
+
+static int
 test_log_severity_text(void)
 {
 	otlp_log_record_t *lr =
@@ -110,6 +169,7 @@ test_log_severity_text(void)
 static int
 test_log_clone_attrs(void)
 {
+	const uint8_t frame[2] = { 0x0a, 0x0b };
 	otlp_log_record_t *lr =
 		otlp_log_record_create(OTLP_SEVERITY_INFO, "hello");
 	otlp_log_record_t *c;
@@ -120,13 +180,19 @@ test_log_clone_attrs(void)
 	assert(otlp_log_record_set_attribute_string(lr, "svc", "api") ==
 		OTLP_OK);
 	assert(otlp_log_record_set_attribute_int(lr, "attempt", 2) == OTLP_OK);
+	assert(otlp_log_record_set_attribute_bytes(lr, "frame", frame, 2) ==
+		OTLP_OK);
 	c = otlp_log_record_clone(lr);
 	assert(c != NULL);
 	attrs = otlp_log_get_attrs(c, &n);
-	assert(attrs != NULL && n == 2);
+	assert(attrs != NULL && n == 3);
 	assert(strcmp(attrs[0].key, "svc") == 0);
 	assert(strcmp(attrs[0].v.string_val, "api") == 0);
 	assert(attrs[1].v.int64_val == 2);
+	assert(attrs[2].type == OTLP_ATTR_BYTES);
+	assert(attrs[2].v.bytes_val.len == 2);
+	assert(attrs[2].v.bytes_val.data[1] == 0x0b);
+	assert(attrs[2].v.bytes_val.data != frame); /* deep copy */
 	assert(strcmp(otlp_log_get_body(c), "hello") == 0);
 	otlp_log_record_free(c);
 	otlp_log_record_free(lr);
@@ -143,13 +209,16 @@ main(void)
 	failures += test_log_no_attrs_lazy();
 	failures += test_log_attribute_string();
 	failures += test_log_attribute_int();
+	failures += test_log_attribute_double();
+	failures += test_log_attribute_bool();
+	failures += test_log_attribute_bytes();
 	failures += test_log_severity_text();
 	failures += test_log_clone_attrs();
 
 	if (failures)
 		printf("[unit-log] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-log] PASS (7 tests)\n");
+		printf("[unit-log] PASS (10 tests)\n");
 
 	return failures ? 1 : 0;
 }
