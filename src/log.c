@@ -15,31 +15,6 @@
 
 #define OTLP_LOG_MAX_ATTRS 128
 
-static void
-log_release_attrs(struct otlp_log_record *lr)
-{
-	size_t i;
-
-	if (!lr->attrs)
-		return;
-	for (i = 0; i < lr->n_attrs; i++)
-		otlp_attribute_free(&lr->attrs[i]);
-	lr->n_attrs = 0;
-	otlp_free(lr->attrs);
-	lr->attrs = NULL;
-}
-
-/* Lazy-allocate the attrs array on first use; a record with no
- * attributes costs one NULL pointer (see log_internal.h). */
-static otlp_status_t
-log_attrs_reserve(struct otlp_log_record *lr)
-{
-	if (lr->attrs)
-		return OTLP_OK;
-	lr->attrs = otlp_calloc(OTLP_LOG_MAX_ATTRS, sizeof(*lr->attrs));
-	return lr->attrs ? OTLP_OK : OTLP_ERR_NOMEM;
-}
-
 otlp_log_record_t *
 otlp_log_record_create(otlp_severity_t severity, const char *body)
 {
@@ -64,7 +39,7 @@ otlp_log_record_free(otlp_log_record_t *lr)
 		return;
 	otlp_free(lr->severity_text);
 	otlp_free(lr->body);
-	log_release_attrs(lr);
+	otlp_attr_list_free(&lr->attrs, &lr->n_attrs);
 	otlp_free(lr);
 }
 
@@ -138,26 +113,25 @@ otlp_log_record_set_attribute_string(otlp_log_record_t *lr,
 	const char *key,
 	const char *val)
 {
-	char *kc;
+	struct otlp_attribute *a;
+	char *vc;
+	otlp_status_t st;
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	if (lr->n_attrs >= OTLP_LOG_MAX_ATTRS)
-		return OTLP_ERR_OVERFLOW;
-	if (log_attrs_reserve(lr) != OTLP_OK)
-		return OTLP_ERR_NOMEM;
-	kc = otlp_dup_str(key);
-	if (!kc)
-		return OTLP_ERR_NOMEM;
-	lr->attrs[lr->n_attrs].key = kc;
-	lr->attrs[lr->n_attrs].type = OTLP_ATTR_STRING;
-	lr->attrs[lr->n_attrs].v.string_val = otlp_dup_str(val ? val : "");
-	if (!lr->attrs[lr->n_attrs].v.string_val)
+	st = otlp_attr_list_reserve(
+		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
+	vc = otlp_dup_str(val ? val : "");
+	if (!vc)
 	{
-		otlp_free(kc);
-		lr->attrs[lr->n_attrs].key = NULL;
+		otlp_free(a->key);
+		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
+	a->type = OTLP_ATTR_STRING;
+	a->v.string_val = vc;
 	lr->n_attrs++;
 	return OTLP_OK;
 }
@@ -167,20 +141,17 @@ otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
 	const char *key,
 	int64_t val)
 {
-	char *kc;
+	struct otlp_attribute *a;
+	otlp_status_t st;
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	if (lr->n_attrs >= OTLP_LOG_MAX_ATTRS)
-		return OTLP_ERR_OVERFLOW;
-	if (log_attrs_reserve(lr) != OTLP_OK)
-		return OTLP_ERR_NOMEM;
-	kc = otlp_dup_str(key);
-	if (!kc)
-		return OTLP_ERR_NOMEM;
-	lr->attrs[lr->n_attrs].key = kc;
-	lr->attrs[lr->n_attrs].type = OTLP_ATTR_INT64;
-	lr->attrs[lr->n_attrs].v.int64_val = val;
+	st = otlp_attr_list_reserve(
+		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_INT64;
+	a->v.int64_val = val;
 	lr->n_attrs++;
 	return OTLP_OK;
 }
@@ -275,20 +246,13 @@ otlp_log_record_clone(const otlp_log_record_t *src)
 	dst->has_trace_id = src->has_trace_id;
 	dst->has_span_id = src->has_span_id;
 
-	/* Attributes: lazy array — calloc the destination so
-	 * copy_all has a zeroed slot set and record_free is safe if
-	 * the copy fails midway. */
-	if (src->n_attrs > 0)
-	{
-		dst->attrs =
-			otlp_calloc(OTLP_LOG_MAX_ATTRS, sizeof(*dst->attrs));
-		if (!dst->attrs)
-			goto fail;
-		if (otlp_attribute_copy_all(
-			    dst->attrs, src->attrs, src->n_attrs) != OTLP_OK)
-			goto fail;
-		dst->n_attrs = src->n_attrs;
-	}
+	/* Attributes: lazily-styled array via the shared helper. */
+	if (otlp_attr_list_copy(&dst->attrs,
+		    &dst->n_attrs,
+		    OTLP_LOG_MAX_ATTRS,
+		    src->attrs,
+		    src->n_attrs) != OTLP_OK)
+		goto fail;
 
 	return (otlp_log_record_t *) dst;
 

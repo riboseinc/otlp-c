@@ -50,7 +50,7 @@ struct otlp_span
 	otlp_status_code_t status_code;
 	char *status_message; /* owned, may be NULL */
 	bool sampled;
-	char *trace_state;		       /* owned, may be NULL */
+	char *trace_state; /* owned, may be NULL */
 	struct otlp_event events[OTLP_SPAN_MAX_EVENTS];
 	size_t n_events;
 	struct otlp_link links[OTLP_SPAN_MAX_LINKS];
@@ -154,29 +154,22 @@ otlp_span_create(const char *name)
 void
 otlp_span_free(otlp_span_t *span)
 {
-	size_t i, j;
+	size_t i;
 
 	if (!span)
 		return;
 	otlp_free(span->name);
 	otlp_free(span->status_message);
 	otlp_free(span->trace_state);
-	for (i = 0; i < span->n_events; i++) {
+	for (i = 0; i < span->n_events; i++)
+	{
 		otlp_free(span->events[i].name);
-		if (span->events[i].attrs) {
-			for (j = 0; j < span->events[i].n_attrs; j++)
-				otlp_attribute_free(
-					&span->events[i].attrs[j]);
-			otlp_free(span->events[i].attrs);
-		}
+		otlp_attr_list_free(
+			&span->events[i].attrs, &span->events[i].n_attrs);
 	}
 	for (i = 0; i < span->n_links; i++)
-		if (span->links[i].attrs) {
-			for (j = 0; j < span->links[i].n_attrs; j++)
-				otlp_attribute_free(
-					&span->links[i].attrs[j]);
-			otlp_free(span->links[i].attrs);
-		}
+		otlp_attr_list_free(
+			&span->links[i].attrs, &span->links[i].n_attrs);
 	span_release_attrs(span);
 	otlp_free(span);
 }
@@ -437,8 +430,8 @@ otlp_span_set_sampled(otlp_span_t *span, bool sampled)
 
 otlp_status_t
 otlp_span_add_event(otlp_span_t *span,
-		    const char *name,
-		    uint64_t time_unix_nano)
+	const char *name,
+	uint64_t time_unix_nano)
 {
 	char *name_copy;
 
@@ -459,8 +452,8 @@ otlp_span_add_event(otlp_span_t *span,
 
 otlp_status_t
 otlp_span_add_link(otlp_span_t *span,
-		   const uint8_t *trace_id,
-		   const uint8_t *span_id)
+	const uint8_t *trace_id,
+	const uint8_t *span_id)
 {
 	if (!span)
 		return OTLP_ERR_NULL;
@@ -469,9 +462,9 @@ otlp_span_add_link(otlp_span_t *span,
 	if (span->n_links >= OTLP_SPAN_MAX_LINKS)
 		return OTLP_ERR_OVERFLOW;
 	memcpy(span->links[span->n_links].trace_id,
-	       trace_id, OTLP_TRACE_ID_LEN);
-	memcpy(span->links[span->n_links].span_id,
-	       span_id, OTLP_SPAN_ID_LEN);
+		trace_id,
+		OTLP_TRACE_ID_LEN);
+	memcpy(span->links[span->n_links].span_id, span_id, OTLP_SPAN_ID_LEN);
 	span->n_links++;
 	return OTLP_OK;
 }
@@ -483,7 +476,8 @@ otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 
 	if (!span)
 		return OTLP_ERR_NULL;
-	if (trace_state) {
+	if (trace_state)
+	{
 		copy = otlp_dup_str(trace_state);
 		if (!copy)
 			return OTLP_ERR_NOMEM;
@@ -495,77 +489,64 @@ otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 
 otlp_status_t
 otlp_span_set_event_attribute_string(otlp_span_t *span,
-				     const char *key,
-				     const char *value)
+	const char *key,
+	const char *value)
 {
 	struct otlp_event *ev;
-	char		  *kc, *vc;
+	struct otlp_attribute *a;
+	char *vc;
+	otlp_status_t st;
 
 	if (!span || !key)
 		return OTLP_ERR_NULL;
 	if (span->n_events == 0)
 		return OTLP_ERR_INVALID_ARGUMENT;
 	ev = &span->events[span->n_events - 1];
-	if (ev->n_attrs >= OTLP_EVENT_MAX_ATTRS)
-		return OTLP_ERR_OVERFLOW;
-	/* Lazy-allocate the attrs array on first use (see
-	 * span_internal.h — inline arrays cost ~1KB per event). */
-	if (!ev->attrs)
-	{
-		ev->attrs = otlp_calloc(OTLP_EVENT_MAX_ATTRS,
-					sizeof(*ev->attrs));
-		if (!ev->attrs)
-			return OTLP_ERR_NOMEM;
-	}
-	kc = otlp_dup_str(key);
-	if (!kc)
-		return OTLP_ERR_NOMEM;
+	st = otlp_attr_list_reserve(
+		&ev->attrs, &ev->n_attrs, OTLP_EVENT_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
 	vc = otlp_dup_str(value ? value : "");
-	if (!vc) {
-		otlp_free(kc);
+	if (!vc)
+	{
+		otlp_free(a->key);
+		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
-	ev->attrs[ev->n_attrs].key	   = kc;
-	ev->attrs[ev->n_attrs].type	   = OTLP_ATTR_STRING;
-	ev->attrs[ev->n_attrs].v.string_val = vc;
+	a->type = OTLP_ATTR_STRING;
+	a->v.string_val = vc;
 	ev->n_attrs++;
 	return OTLP_OK;
 }
 
 otlp_status_t
 otlp_span_set_link_attribute_string(otlp_span_t *span,
-				    const char *key,
-				    const char *value)
+	const char *key,
+	const char *value)
 {
 	struct otlp_link *lk;
-	char		 *kc, *vc;
+	struct otlp_attribute *a;
+	char *vc;
+	otlp_status_t st;
 
 	if (!span || !key)
 		return OTLP_ERR_NULL;
 	if (span->n_links == 0)
 		return OTLP_ERR_INVALID_ARGUMENT;
 	lk = &span->links[span->n_links - 1];
-	if (lk->n_attrs >= OTLP_LINK_MAX_ATTRS)
-		return OTLP_ERR_OVERFLOW;
-	/* Lazy-allocate the attrs array on first use. */
-	if (!lk->attrs)
-	{
-		lk->attrs = otlp_calloc(OTLP_LINK_MAX_ATTRS,
-					sizeof(*lk->attrs));
-		if (!lk->attrs)
-			return OTLP_ERR_NOMEM;
-	}
-	kc = otlp_dup_str(key);
-	if (!kc)
-		return OTLP_ERR_NOMEM;
+	st = otlp_attr_list_reserve(
+		&lk->attrs, &lk->n_attrs, OTLP_LINK_MAX_ATTRS, key, &a);
+	if (st != OTLP_OK)
+		return st;
 	vc = otlp_dup_str(value ? value : "");
-	if (!vc) {
-		otlp_free(kc);
+	if (!vc)
+	{
+		otlp_free(a->key);
+		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
-	lk->attrs[lk->n_attrs].key	     = kc;
-	lk->attrs[lk->n_attrs].type	     = OTLP_ATTR_STRING;
-	lk->attrs[lk->n_attrs].v.string_val = vc;
+	a->type = OTLP_ATTR_STRING;
+	a->v.string_val = vc;
 	lk->n_attrs++;
 	return OTLP_OK;
 }
@@ -653,7 +634,8 @@ otlp_span_is_sampled(const otlp_span_t *span)
 const struct otlp_event *
 otlp_span_get_events(const otlp_span_t *span, size_t *n_out)
 {
-	if (!span) {
+	if (!span)
+	{
 		if (n_out)
 			*n_out = 0;
 		return NULL;
@@ -666,7 +648,8 @@ otlp_span_get_events(const otlp_span_t *span, size_t *n_out)
 const struct otlp_link *
 otlp_span_get_links(const otlp_span_t *span, size_t *n_out)
 {
-	if (!span) {
+	if (!span)
+	{
 		if (n_out)
 			*n_out = 0;
 		return NULL;
@@ -754,8 +737,8 @@ otlp_span_clone(const otlp_span_t *src)
 	attrs = otlp_span_get_attrs(src, &n_attrs);
 	if (n_attrs > 0)
 	{
-		if (otlp_attribute_copy_all(dst->attrs, attrs, n_attrs)
-		    != OTLP_OK)
+		if (otlp_attribute_copy_all(dst->attrs, attrs, n_attrs) !=
+			OTLP_OK)
 		{
 			otlp_span_free(dst);
 			return NULL;
@@ -766,46 +749,37 @@ otlp_span_clone(const otlp_span_t *src)
 	events = otlp_span_get_events(src, &n_events);
 	for (i = 0; i < n_events; i++)
 	{
-		otlp_status_t st = otlp_span_add_event(dst,
-						       events[i].name,
-						       events[i].time_unix_nano);
+		otlp_status_t st = otlp_span_add_event(
+			dst, events[i].name, events[i].time_unix_nano);
 		if (st != OTLP_OK)
 		{
 			otlp_span_free(dst);
 			return NULL;
 		}
 		/* Copy event attributes (was missing — data loss bug).
-		 * attrs is lazily allocated (v0.5.68); calloc it here so
-		 * copy_all has a zeroed destination and span_free can
-		 * free the array on copy failure. */
+		 * attrs is lazily allocated (v0.5.68); attr_list_copy
+		 * calloc's a zeroed destination and is safe to free on
+		 * failure. */
 		if (events[i].n_attrs > 0)
 		{
-			struct otlp_event *ev =
-				&dst->events[dst->n_events - 1];
-			ev->attrs = otlp_calloc(OTLP_EVENT_MAX_ATTRS,
-						sizeof(*ev->attrs));
-			if (!ev->attrs)
-			{
-				otlp_span_free(dst);
-				return NULL;
-			}
-			if (otlp_attribute_copy_all(ev->attrs,
+			struct otlp_event *ev = &dst->events[dst->n_events - 1];
+			if (otlp_attr_list_copy(&ev->attrs,
+				    &ev->n_attrs,
+				    OTLP_EVENT_MAX_ATTRS,
 				    events[i].attrs,
 				    events[i].n_attrs) != OTLP_OK)
 			{
 				otlp_span_free(dst);
 				return NULL;
 			}
-			ev->n_attrs = events[i].n_attrs;
 		}
 	}
 
 	links = otlp_span_get_links(src, &n_links);
 	for (i = 0; i < n_links; i++)
 	{
-		otlp_status_t st = otlp_span_add_link(dst,
-						      links[i].trace_id,
-						      links[i].span_id);
+		otlp_status_t st = otlp_span_add_link(
+			dst, links[i].trace_id, links[i].span_id);
 		if (st != OTLP_OK)
 		{
 			otlp_span_free(dst);
@@ -815,23 +789,16 @@ otlp_span_clone(const otlp_span_t *src)
 		 * attrs is lazily allocated (v0.5.68); see event path. */
 		if (links[i].n_attrs > 0)
 		{
-			struct otlp_link *lnk =
-				&dst->links[dst->n_links - 1];
-			lnk->attrs = otlp_calloc(OTLP_LINK_MAX_ATTRS,
-						 sizeof(*lnk->attrs));
-			if (!lnk->attrs)
-			{
-				otlp_span_free(dst);
-				return NULL;
-			}
-			if (otlp_attribute_copy_all(lnk->attrs,
+			struct otlp_link *lnk = &dst->links[dst->n_links - 1];
+			if (otlp_attr_list_copy(&lnk->attrs,
+				    &lnk->n_attrs,
+				    OTLP_LINK_MAX_ATTRS,
 				    links[i].attrs,
 				    links[i].n_attrs) != OTLP_OK)
 			{
 				otlp_span_free(dst);
 				return NULL;
 			}
-			lnk->n_attrs = links[i].n_attrs;
 		}
 	}
 	return dst;

@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.70] - 2026-08-16
+
+One owner for the lazy attribute-list storage model (DRY).
+
+### Changed — shared `otlp_attr_list_{reserve,copy,free}` helpers
+
+After v0.5.68/v0.5.69 the "lazy attribute array" storage model was
+hand-implemented four times — span events, span links, metrics, log
+records — with twelve near-identical blocks (cap check + lazy
+`calloc`, clone-path `calloc` + deep copy + OOM cleanup, and
+release loops). The model now lives in one place:
+`otlp_attr_list_reserve` / `otlp_attr_list_copy` /
+`otlp_attr_list_free` in `internal_util`. The attribute-bearing
+types pass their `(attrs, n_attrs, cap)` triple; local copies
+(`metric_reserve_attr`, `metric_release_attrs`,
+`log_attrs_reserve`, `log_release_attrs`, and the span event/link
+inline blocks) are deleted.
+
+No behavior change: 36/36 tests, ASAN clean (including the OOM
+injection sweep through the new clone path), and benchmarks
+unchanged (~110 ns/log, ~1,500 ns/span with zero attributes).
+
+### Fixed
+
+- `CPACK_SOURCE_IGNORE_FILES` in `CMakeLists.txt` used jammed
+  quoted fragments that emitted a CMake author warning on every
+  configure; rewritten as a plain list with identical semantics.
+
 ## [0.5.69] - 2026-08-16
 
 Metric/log record structs 19×/52× smaller; log emit ~5× faster.
