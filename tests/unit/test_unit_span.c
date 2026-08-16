@@ -20,18 +20,20 @@
  * Event/link attrs are now lazily heap-allocated pointers. If a
  * change pushes the struct past this budget, re-measure the emit
  * benchmark before accepting it. */
-static int test_span_struct_size(void)
+static int
+test_span_struct_size(void)
 {
 	/* 8.8KB at v0.5.68 (span attrs inline: 4KB; event/link
 	 * headers: ~4.6KB). 16KB is a generous ceiling that still
 	 * catches a return to inline-array growth. */
 	assert(otlp_span_struct_size() <= 16 * 1024);
 	printf("[unit-span] sizeof(otlp_span)=%zu bytes\n",
-	       otlp_span_struct_size());
+		otlp_span_struct_size());
 	return 0;
 }
 
-static int test_span_create_free(void)
+static int
+test_span_create_free(void)
 {
 	otlp_span_t *span = otlp_span_create("test-span");
 
@@ -40,7 +42,8 @@ static int test_span_create_free(void)
 	return 0;
 }
 
-static int test_span_set_name(void)
+static int
+test_span_set_name(void)
 {
 	otlp_span_t *span = otlp_span_create("initial");
 
@@ -52,19 +55,22 @@ static int test_span_set_name(void)
 	return 0;
 }
 
-static int test_span_attribute_string(void)
+static int
+test_span_attribute_string(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
 	assert(span != NULL);
-	otlp_status_t s = otlp_span_set_attribute_string(span, "user.id", "alice");
+	otlp_status_t s =
+		otlp_span_set_attribute_string(span, "user.id", "alice");
 
 	assert(s == OTLP_OK);
 	otlp_span_free(span);
 	return 0;
 }
 
-static int test_span_attribute_int(void)
+static int
+test_span_attribute_int(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
@@ -76,7 +82,8 @@ static int test_span_attribute_int(void)
 	return 0;
 }
 
-static int test_span_attribute_double(void)
+static int
+test_span_attribute_double(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
@@ -88,7 +95,8 @@ static int test_span_attribute_double(void)
 	return 0;
 }
 
-static int test_span_attribute_bool(void)
+static int
+test_span_attribute_bool(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
@@ -100,7 +108,8 @@ static int test_span_attribute_bool(void)
 	return 0;
 }
 
-static int test_span_set_kind(void)
+static int
+test_span_set_kind(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
@@ -112,7 +121,8 @@ static int test_span_set_kind(void)
 	return 0;
 }
 
-static int test_span_set_status_ok(void)
+static int
+test_span_set_status_ok(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
@@ -124,27 +134,30 @@ static int test_span_set_status_ok(void)
 	return 0;
 }
 
-static int test_span_set_status_error(void)
+static int
+test_span_set_status_error(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
 
 	assert(span != NULL);
-	otlp_status_t s = otlp_span_set_status(span, OTLP_STATUS_CODE_ERROR,
-					       "something failed");
+	otlp_status_t s = otlp_span_set_status(
+		span, OTLP_STATUS_CODE_ERROR, "something failed");
 
 	assert(s == OTLP_OK);
 	otlp_span_free(span);
 	return 0;
 }
 
-static int test_span_many_attributes(void)
+static int
+test_span_many_attributes(void)
 {
 	otlp_span_t *span = otlp_span_create("stress");
 	int i;
 	char key[32];
 
 	assert(span != NULL);
-	for (i = 0; i < 128; i++) {
+	for (i = 0; i < 128; i++)
+	{
 		snprintf(key, sizeof(key), "key%d", i);
 		otlp_status_t s = otlp_span_set_attribute_int(span, key, i);
 
@@ -154,7 +167,8 @@ static int test_span_many_attributes(void)
 	return 0;
 }
 
-static int test_tracer_start_span(void)
+static int
+test_tracer_start_span(void)
 {
 	otlp_tracer_t *tracer = otlp_tracer_create("svc", "lib", "0.1.0");
 	otlp_span_t *span;
@@ -167,7 +181,93 @@ static int test_tracer_start_span(void)
 	return 0;
 }
 
-static int test_tracer_start_child(void)
+static int
+test_event_typed_attributes(void)
+{
+	const uint8_t payload[2] = { 0xc0, 0xff };
+	otlp_span_t *span = otlp_span_create("test");
+	const struct otlp_event *ev;
+	size_t n = 0;
+
+	assert(span != NULL);
+	assert(otlp_span_add_event(span, "e", 1) == OTLP_OK);
+	assert(otlp_span_set_event_attribute_int(span, "attempt", 3) ==
+		OTLP_OK);
+	assert(otlp_span_set_event_attribute_double(span, "ratio", 0.5) ==
+		OTLP_OK);
+	assert(otlp_span_set_event_attribute_bool(span, "final", true) ==
+		OTLP_OK);
+	assert(otlp_span_set_event_attribute_bytes(span, "ctx", payload, 2) ==
+		OTLP_OK);
+	ev = otlp_span_get_events(span, &n);
+	assert(n == 1 && ev[0].n_attrs == 4);
+	assert(ev[0].attrs[0].type == OTLP_ATTR_INT64);
+	assert(ev[0].attrs[0].v.int64_val == 3);
+	assert(ev[0].attrs[1].type == OTLP_ATTR_DOUBLE);
+	assert(ev[0].attrs[1].v.double_val == 0.5);
+	assert(ev[0].attrs[2].type == OTLP_ATTR_BOOL);
+	assert(ev[0].attrs[2].v.bool_val == true);
+	assert(ev[0].attrs[3].type == OTLP_ATTR_BYTES);
+	assert(ev[0].attrs[3].v.bytes_val.len == 2);
+	assert(ev[0].attrs[3].v.bytes_val.data[1] == 0xff);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
+test_link_typed_attributes(void)
+{
+	const uint8_t payload[2] = { 0x0a, 0x0b };
+	uint8_t tid[OTLP_TRACE_ID_LEN] = { 1 };
+	uint8_t sid[OTLP_SPAN_ID_LEN] = { 2 };
+	otlp_span_t *span = otlp_span_create("test");
+	const struct otlp_link *lk;
+	size_t n = 0;
+
+	assert(span != NULL);
+	assert(otlp_span_add_link(span, tid, sid) == OTLP_OK);
+	assert(otlp_span_set_link_attribute_int(span, "weight", 9) == OTLP_OK);
+	assert(otlp_span_set_link_attribute_double(span, "score", 1.25) ==
+		OTLP_OK);
+	assert(otlp_span_set_link_attribute_bool(span, "cached", false) ==
+		OTLP_OK);
+	assert(otlp_span_set_link_attribute_bytes(span, "tag", payload, 2) ==
+		OTLP_OK);
+	lk = otlp_span_get_links(span, &n);
+	assert(n == 1 && lk[0].n_attrs == 4);
+	assert(lk[0].attrs[0].type == OTLP_ATTR_INT64);
+	assert(lk[0].attrs[0].v.int64_val == 9);
+	assert(lk[0].attrs[1].type == OTLP_ATTR_DOUBLE);
+	assert(lk[0].attrs[1].v.double_val == 1.25);
+	assert(lk[0].attrs[2].type == OTLP_ATTR_BOOL);
+	assert(lk[0].attrs[2].v.bool_val == false);
+	assert(lk[0].attrs[3].type == OTLP_ATTR_BYTES);
+	assert(lk[0].attrs[3].v.bytes_val.len == 2);
+	assert(lk[0].attrs[3].v.bytes_val.data[0] == 0x0a);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
+test_event_link_attr_before_add(void)
+{
+	otlp_span_t *span = otlp_span_create("test");
+
+	assert(span != NULL);
+	assert(otlp_span_set_event_attribute_string(span, "k", "v") ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	assert(otlp_span_set_link_attribute_string(span, "k", "v") ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	assert(otlp_span_set_event_attribute_int(span, "k", 1) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	assert(otlp_span_set_link_attribute_bytes(span, "k", NULL, 0) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
+test_tracer_start_child(void)
 {
 	otlp_tracer_t *tracer = otlp_tracer_create("svc", "lib", "0.1.0");
 	otlp_span_t *parent;
@@ -184,7 +284,8 @@ static int test_tracer_start_child(void)
 	return 0;
 }
 
-static int test_tracer_multiple_spans_unique_ids(void)
+static int
+test_tracer_multiple_spans_unique_ids(void)
 {
 	otlp_tracer_t *tracer = otlp_tracer_create("svc", "lib", "0.1.0");
 	otlp_span_t *s1;
@@ -205,7 +306,8 @@ static int test_tracer_multiple_spans_unique_ids(void)
 	return 0;
 }
 
-int main(void)
+int
+main(void)
 {
 	int failures = 0;
 
@@ -221,13 +323,16 @@ int main(void)
 	failures += test_span_set_status_error();
 	failures += test_span_many_attributes();
 	failures += test_tracer_start_span();
+	failures += test_event_typed_attributes();
+	failures += test_link_typed_attributes();
+	failures += test_event_link_attr_before_add();
 	failures += test_tracer_start_child();
 	failures += test_tracer_multiple_spans_unique_ids();
 
 	if (failures)
 		printf("[unit-span] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-span] PASS (14 tests)\n");
+		printf("[unit-span] PASS (17 tests)\n");
 
 	return failures ? 1 : 0;
 }

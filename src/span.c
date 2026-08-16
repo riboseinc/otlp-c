@@ -487,6 +487,46 @@ otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 	return OTLP_OK;
 }
 
+/* Common prelude for the event/link attribute setters: validate,
+ * target the most-recently-added event/link, reserve a slot in
+ * its lazy attribute array. The caller fills the typed value and
+ * increments the owner's count on success. */
+static otlp_status_t
+event_attr_slot(otlp_span_t *span,
+	const char *key,
+	struct otlp_event **ev_out,
+	struct otlp_attribute **a_out)
+{
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	if (span->n_events == 0)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	*ev_out = &span->events[span->n_events - 1];
+	return otlp_attr_list_reserve(&(*ev_out)->attrs,
+		&(*ev_out)->n_attrs,
+		OTLP_EVENT_MAX_ATTRS,
+		key,
+		a_out);
+}
+
+static otlp_status_t
+link_attr_slot(otlp_span_t *span,
+	const char *key,
+	struct otlp_link **lk_out,
+	struct otlp_attribute **a_out)
+{
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	if (span->n_links == 0)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	*lk_out = &span->links[span->n_links - 1];
+	return otlp_attr_list_reserve(&(*lk_out)->attrs,
+		&(*lk_out)->n_attrs,
+		OTLP_LINK_MAX_ATTRS,
+		key,
+		a_out);
+}
+
 otlp_status_t
 otlp_span_set_event_attribute_string(otlp_span_t *span,
 	const char *key,
@@ -495,15 +535,8 @@ otlp_span_set_event_attribute_string(otlp_span_t *span,
 	struct otlp_event *ev;
 	struct otlp_attribute *a;
 	char *vc;
-	otlp_status_t st;
+	otlp_status_t st = event_attr_slot(span, key, &ev, &a);
 
-	if (!span || !key)
-		return OTLP_ERR_NULL;
-	if (span->n_events == 0)
-		return OTLP_ERR_INVALID_ARGUMENT;
-	ev = &span->events[span->n_events - 1];
-	st = otlp_attr_list_reserve(
-		&ev->attrs, &ev->n_attrs, OTLP_EVENT_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	vc = otlp_dup_str(value ? value : "");
@@ -520,6 +553,87 @@ otlp_span_set_event_attribute_string(otlp_span_t *span,
 }
 
 otlp_status_t
+otlp_span_set_event_attribute_int(otlp_span_t *span,
+	const char *key,
+	int64_t value)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	otlp_status_t st = event_attr_slot(span, key, &ev, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_INT64;
+	a->v.int64_val = value;
+	ev->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_double(otlp_span_t *span,
+	const char *key,
+	double value)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	otlp_status_t st = event_attr_slot(span, key, &ev, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_DOUBLE;
+	a->v.double_val = value;
+	ev->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_bool(otlp_span_t *span,
+	const char *key,
+	bool value)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	otlp_status_t st = event_attr_slot(span, key, &ev, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_BOOL;
+	a->v.bool_val = value;
+	ev->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_event_attribute_bytes(otlp_span_t *span,
+	const char *key,
+	const uint8_t *bytes,
+	size_t len)
+{
+	struct otlp_event *ev;
+	struct otlp_attribute *a;
+	uint8_t *bytes_copy;
+	otlp_status_t st;
+
+	if (len > 0 && !bytes)
+		return OTLP_ERR_NULL;
+	st = event_attr_slot(span, key, &ev, &a);
+	if (st != OTLP_OK)
+		return st;
+	bytes_copy = otlp_dup_bytes(bytes, len);
+	if (len > 0 && !bytes_copy)
+	{
+		otlp_free(a->key);
+		a->key = NULL;
+		return OTLP_ERR_NOMEM;
+	}
+	a->type = OTLP_ATTR_BYTES;
+	a->v.bytes_val.data = bytes_copy;
+	a->v.bytes_val.len = len;
+	ev->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
 otlp_span_set_link_attribute_string(otlp_span_t *span,
 	const char *key,
 	const char *value)
@@ -527,15 +641,8 @@ otlp_span_set_link_attribute_string(otlp_span_t *span,
 	struct otlp_link *lk;
 	struct otlp_attribute *a;
 	char *vc;
-	otlp_status_t st;
+	otlp_status_t st = link_attr_slot(span, key, &lk, &a);
 
-	if (!span || !key)
-		return OTLP_ERR_NULL;
-	if (span->n_links == 0)
-		return OTLP_ERR_INVALID_ARGUMENT;
-	lk = &span->links[span->n_links - 1];
-	st = otlp_attr_list_reserve(
-		&lk->attrs, &lk->n_attrs, OTLP_LINK_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	vc = otlp_dup_str(value ? value : "");
@@ -547,6 +654,87 @@ otlp_span_set_link_attribute_string(otlp_span_t *span,
 	}
 	a->type = OTLP_ATTR_STRING;
 	a->v.string_val = vc;
+	lk->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_int(otlp_span_t *span,
+	const char *key,
+	int64_t value)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	otlp_status_t st = link_attr_slot(span, key, &lk, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_INT64;
+	a->v.int64_val = value;
+	lk->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_double(otlp_span_t *span,
+	const char *key,
+	double value)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	otlp_status_t st = link_attr_slot(span, key, &lk, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_DOUBLE;
+	a->v.double_val = value;
+	lk->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_bool(otlp_span_t *span,
+	const char *key,
+	bool value)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	otlp_status_t st = link_attr_slot(span, key, &lk, &a);
+
+	if (st != OTLP_OK)
+		return st;
+	a->type = OTLP_ATTR_BOOL;
+	a->v.bool_val = value;
+	lk->n_attrs++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_span_set_link_attribute_bytes(otlp_span_t *span,
+	const char *key,
+	const uint8_t *bytes,
+	size_t len)
+{
+	struct otlp_link *lk;
+	struct otlp_attribute *a;
+	uint8_t *bytes_copy;
+	otlp_status_t st;
+
+	if (len > 0 && !bytes)
+		return OTLP_ERR_NULL;
+	st = link_attr_slot(span, key, &lk, &a);
+	if (st != OTLP_OK)
+		return st;
+	bytes_copy = otlp_dup_bytes(bytes, len);
+	if (len > 0 && !bytes_copy)
+	{
+		otlp_free(a->key);
+		a->key = NULL;
+		return OTLP_ERR_NOMEM;
+	}
+	a->type = OTLP_ATTR_BYTES;
+	a->v.bytes_val.data = bytes_copy;
+	a->v.bytes_val.len = len;
 	lk->n_attrs++;
 	return OTLP_OK;
 }
