@@ -15,49 +15,6 @@
 
 #define OTLP_METRIC_MAX_ATTRS 128
 
-static void
-metric_release_attrs(struct otlp_metric *m)
-{
-	size_t i;
-
-	if (!m->attrs)
-		return;
-	for (i = 0; i < m->n_attrs; i++)
-		otlp_attribute_free(&m->attrs[i]);
-	m->n_attrs = 0;
-	otlp_free(m->attrs);
-	m->attrs = NULL;
-}
-
-static otlp_status_t
-metric_reserve_attr(struct otlp_metric *m,
-	const char *key,
-	struct otlp_attribute **out)
-{
-	char *kc;
-
-	if (!m || !key)
-		return OTLP_ERR_NULL;
-	if (m->n_attrs >= OTLP_METRIC_MAX_ATTRS)
-		return OTLP_ERR_OVERFLOW;
-	/* Lazy-allocate the attrs array on first use; a metric with no
-	 * attributes costs one NULL pointer (see metric_internal.h). */
-	if (!m->attrs)
-	{
-		m->attrs =
-			otlp_calloc(OTLP_METRIC_MAX_ATTRS, sizeof(*m->attrs));
-		if (!m->attrs)
-			return OTLP_ERR_NOMEM;
-	}
-	kc = otlp_dup_str(key);
-	if (!kc)
-		return OTLP_ERR_NOMEM;
-	m->attrs[m->n_attrs].key = kc;
-	m->attrs[m->n_attrs].v.string_val = NULL;
-	*out = &m->attrs[m->n_attrs];
-	return OTLP_OK;
-}
-
 otlp_metric_t *
 otlp_metric_create(otlp_metric_type_t type,
 	const char *name,
@@ -125,7 +82,7 @@ otlp_metric_free(otlp_metric_t *m)
 	otlp_free(m->bucket_counts);
 	otlp_free(m->exp_pos_counts);
 	otlp_free(m->exp_neg_counts);
-	metric_release_attrs(m);
+	otlp_attr_list_free(&m->attrs, &m->n_attrs);
 	otlp_free(m);
 }
 
@@ -229,8 +186,12 @@ otlp_metric_set_attribute_string(otlp_metric_t *m,
 	const char *val)
 {
 	struct otlp_attribute *a;
-	otlp_status_t st = metric_reserve_attr(m, key, &a);
+	otlp_status_t st;
 
+	if (!m || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_STRING;
@@ -238,6 +199,7 @@ otlp_metric_set_attribute_string(otlp_metric_t *m,
 	if (!a->v.string_val)
 	{
 		otlp_free(a->key);
+		a->key = NULL;
 		return OTLP_ERR_NOMEM;
 	}
 	m->n_attrs++;
@@ -248,8 +210,12 @@ otlp_status_t
 otlp_metric_set_attribute_int(otlp_metric_t *m, const char *key, int64_t val)
 {
 	struct otlp_attribute *a;
-	otlp_status_t st = metric_reserve_attr(m, key, &a);
+	otlp_status_t st;
 
+	if (!m || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_INT64;
@@ -262,8 +228,12 @@ otlp_status_t
 otlp_metric_set_attribute_double(otlp_metric_t *m, const char *key, double val)
 {
 	struct otlp_attribute *a;
-	otlp_status_t st = metric_reserve_attr(m, key, &a);
+	otlp_status_t st;
 
+	if (!m || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_list_reserve(
+		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_DOUBLE;
@@ -517,20 +487,13 @@ otlp_metric_clone(const otlp_metric_t *src)
 	dst->max = src->max;
 	dst->has_minmax = src->has_minmax;
 
-	/* Attributes: lazy array — calloc the destination so
-	 * copy_all has a zeroed slot set and metric_free is safe if
-	 * the copy fails midway. */
-	if (src->n_attrs > 0)
-	{
-		dst->attrs =
-			otlp_calloc(OTLP_METRIC_MAX_ATTRS, sizeof(*dst->attrs));
-		if (!dst->attrs)
-			goto fail;
-		if (otlp_attribute_copy_all(
-			    dst->attrs, src->attrs, src->n_attrs) != OTLP_OK)
-			goto fail;
-		dst->n_attrs = src->n_attrs;
-	}
+	/* Attributes: lazily-styled array via the shared helper. */
+	if (otlp_attr_list_copy(&dst->attrs,
+		    &dst->n_attrs,
+		    OTLP_METRIC_MAX_ATTRS,
+		    src->attrs,
+		    src->n_attrs) != OTLP_OK)
+		goto fail;
 
 	/* Histogram bounds + bucket counts. src was validated at
 	 * create but a defensive overflow check is cheap. */

@@ -18,9 +18,9 @@
 /* ── Global allocator state ───────────────────────────────────── */
 
 static otlp_allocator_t g_allocator = {
-	.alloc   = malloc,
+	.alloc = malloc,
 	.realloc = realloc,
-	.free    = free,
+	.free = free,
 };
 
 void
@@ -28,10 +28,11 @@ otlp_set_allocator(const otlp_allocator_t *alloc)
 {
 	if (alloc)
 		g_allocator = *alloc;
-	else {
-		g_allocator.alloc   = malloc;
+	else
+	{
+		g_allocator.alloc = malloc;
 		g_allocator.realloc = realloc;
-		g_allocator.free    = free;
+		g_allocator.free = free;
 	}
 }
 
@@ -65,7 +66,7 @@ void *
 otlp_calloc(size_t count, size_t size)
 {
 	size_t total = count * size;
-	void  *p     = g_allocator.alloc(total);
+	void *p = g_allocator.alloc(total);
 
 	if (p)
 		memset(p, 0, total);
@@ -78,13 +79,13 @@ char *
 otlp_dup_str(const char *s)
 {
 	size_t len;
-	char  *out;
+	char *out;
 
 	if (!s)
 		return NULL;
 	len = strlen(s);
 	if (len == SIZE_MAX)
-		return NULL;  /* len + 1 would overflow */
+		return NULL; /* len + 1 would overflow */
 	out = otlp_malloc(len + 1);
 	if (!out)
 		return NULL;
@@ -117,38 +118,46 @@ otlp_attribute_free(struct otlp_attribute *a)
 
 	if (!a)
 		return;
-	switch (a->type) {
-	case OTLP_ATTR_ARRAY:
-		if (a->v.array_val) {
-			for (i = 0; i < a->v.array_val->n; i++)
-				otlp_attribute_free(&a->v.array_val->items[i]);
-			otlp_free(a->v.array_val->items);
-			otlp_free(a->v.array_val);
-			a->v.array_val = NULL;
-		}
-		break;
-	case OTLP_ATTR_KVLIST:
-		if (a->v.kvlist_val) {
-			for (i = 0; i < a->v.kvlist_val->n; i++) {
-				otlp_free(a->v.kvlist_val->entries[i].key);
-				otlp_attribute_free(&a->v.kvlist_val->entries[i].value);
+	switch (a->type)
+	{
+		case OTLP_ATTR_ARRAY:
+			if (a->v.array_val)
+			{
+				for (i = 0; i < a->v.array_val->n; i++)
+					otlp_attribute_free(
+						&a->v.array_val->items[i]);
+				otlp_free(a->v.array_val->items);
+				otlp_free(a->v.array_val);
+				a->v.array_val = NULL;
 			}
-			otlp_free(a->v.kvlist_val->entries);
-			otlp_free(a->v.kvlist_val);
-			a->v.kvlist_val = NULL;
-		}
-		break;
-	case OTLP_ATTR_STRING:
-		otlp_free(a->v.string_val);
-		a->v.string_val = NULL;
-		break;
-	case OTLP_ATTR_BYTES:
-		otlp_free(a->v.bytes_val.data);
-		a->v.bytes_val.data = NULL;
-		a->v.bytes_val.len = 0;
-		break;
-	default:
-		break;
+			break;
+		case OTLP_ATTR_KVLIST:
+			if (a->v.kvlist_val)
+			{
+				for (i = 0; i < a->v.kvlist_val->n; i++)
+				{
+					otlp_free(a->v.kvlist_val->entries[i]
+							.key);
+					otlp_attribute_free(
+						&a->v.kvlist_val->entries[i]
+							.value);
+				}
+				otlp_free(a->v.kvlist_val->entries);
+				otlp_free(a->v.kvlist_val);
+				a->v.kvlist_val = NULL;
+			}
+			break;
+		case OTLP_ATTR_STRING:
+			otlp_free(a->v.string_val);
+			a->v.string_val = NULL;
+			break;
+		case OTLP_ATTR_BYTES:
+			otlp_free(a->v.bytes_val.data);
+			a->v.bytes_val.data = NULL;
+			a->v.bytes_val.len = 0;
+			break;
+		default:
+			break;
 	}
 	otlp_free(a->key);
 	a->key = NULL;
@@ -158,8 +167,8 @@ otlp_attribute_free(struct otlp_attribute *a)
 
 otlp_status_t
 otlp_attribute_copy_all(struct otlp_attribute *dst,
-			const struct otlp_attribute *src,
-			size_t n)
+	const struct otlp_attribute *src,
+	size_t n)
 {
 	size_t i;
 
@@ -190,13 +199,13 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 				dst[i].v.bytes_val.len = src[i].v.bytes_val.len;
 				if (src[i].v.bytes_val.len > 0)
 				{
-					dst[i].v.bytes_val.data =
-						otlp_malloc(src[i].v.bytes_val.len);
+					dst[i].v.bytes_val.data = otlp_malloc(
+						src[i].v.bytes_val.len);
 					if (!dst[i].v.bytes_val.data)
 						goto fail;
 					memcpy(dst[i].v.bytes_val.data,
-					       src[i].v.bytes_val.data,
-					       src[i].v.bytes_val.len);
+						src[i].v.bytes_val.data,
+						src[i].v.bytes_val.len);
 				}
 				break;
 			case OTLP_ATTR_ARRAY:
@@ -227,6 +236,88 @@ fail:
 		otlp_attribute_free(&dst[i]);
 	}
 	return OTLP_ERR_NOMEM;
+}
+
+/* ── Lazy attribute lists ─────────────────────────────────────── */
+
+otlp_status_t
+otlp_attr_list_reserve(struct otlp_attribute **attrs,
+	size_t *n,
+	size_t cap,
+	const char *key,
+	struct otlp_attribute **out)
+{
+	struct otlp_attribute *slot;
+	char *kc;
+
+	if (!attrs || !n || !out || !key)
+		return OTLP_ERR_NULL;
+	if (*n >= cap)
+		return OTLP_ERR_OVERFLOW;
+	/* Lazy-allocate the array on first use; an attribute-less
+	 * object costs one NULL pointer (see internal_util.h). */
+	if (!*attrs)
+	{
+		*attrs = otlp_calloc(cap, sizeof(**attrs));
+		if (!*attrs)
+			return OTLP_ERR_NOMEM;
+	}
+	kc = otlp_dup_str(key);
+	if (!kc)
+		return OTLP_ERR_NOMEM;
+	slot = &(*attrs)[*n];
+	slot->key = kc;
+	/* Zero the union so cleanup paths don't see garbage. */
+	slot->v.string_val = NULL;
+	*out = slot;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_attr_list_copy(struct otlp_attribute **dst,
+	size_t *n_dst,
+	size_t cap,
+	const struct otlp_attribute *src,
+	size_t n_src)
+{
+	if (n_src == 0)
+		return OTLP_OK;
+	if (!dst || !n_dst || !src)
+		return OTLP_ERR_NULL;
+	if (n_src > cap)
+		return OTLP_ERR_OVERFLOW;
+	/* Zeroed destination so the free path is safe if the copy
+	 * fails midway; copy_all frees partial slots itself. */
+	*dst = otlp_calloc(cap, sizeof(**dst));
+	if (!*dst)
+		return OTLP_ERR_NOMEM;
+	if (otlp_attribute_copy_all(*dst, src, n_src) != OTLP_OK)
+	{
+		otlp_free(*dst);
+		*dst = NULL;
+		return OTLP_ERR_NOMEM;
+	}
+	*n_dst = n_src;
+	return OTLP_OK;
+}
+
+void
+otlp_attr_list_free(struct otlp_attribute **attrs, size_t *n)
+{
+	size_t i;
+
+	if (!attrs || !*attrs)
+	{
+		if (n)
+			*n = 0;
+		return;
+	}
+	for (i = 0; n && i < *n; i++)
+		otlp_attribute_free(&(*attrs)[i]);
+	otlp_free(*attrs);
+	*attrs = NULL;
+	if (n)
+		*n = 0;
 }
 
 /* ── ID validation ────────────────────────────────────────────── */

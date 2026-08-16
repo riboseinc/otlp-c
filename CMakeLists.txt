@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(otlp-c
-    VERSION 0.5.69
+    VERSION 0.5.70
     DESCRIPTION "Pure-C OTLP/HTTP client for OpenTelemetry"
     HOMEPAGE_URL "https://github.com/riboseinc/otlp-c"
     LANGUAGES C
@@ -239,7 +239,11 @@ endif()
 # Source tarball (always .tar.gz for portability).
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
-    "/\\\\.git/;"/build/;"/build-.*/;\\\\.swp$;~$")
+    "/\\\\.git/"
+    "/build/"
+    "/build-.*"
+    "\\\\.swp$"
+    "~$")
 
 include(CPack)
 
