@@ -182,6 +182,27 @@ test_tracer_start_span(void)
 }
 
 static int
+test_span_attribute_upsert(void)
+{
+	otlp_span_t *span = otlp_span_create("test");
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(span != NULL);
+	assert(otlp_span_set_attribute_int(span, "k", 1) == OTLP_OK);
+	assert(otlp_span_set_attribute_string(span, "other", "x") == OTLP_OK);
+	assert(otlp_span_set_attribute_string(span, "k", "replaced") ==
+		OTLP_OK);
+	attrs = otlp_span_get_attrs(span, &n);
+	assert(n == 2);
+	assert(strcmp(attrs[0].key, "k") == 0);
+	assert(attrs[0].type == OTLP_ATTR_STRING);
+	assert(strcmp(attrs[0].v.string_val, "replaced") == 0);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
 test_event_typed_attributes(void)
 {
 	const uint8_t payload[2] = { 0xc0, 0xff };
@@ -322,6 +343,7 @@ main(void)
 	failures += test_span_set_status_ok();
 	failures += test_span_set_status_error();
 	failures += test_span_many_attributes();
+	failures += test_span_attribute_upsert();
 	failures += test_tracer_start_span();
 	failures += test_event_typed_attributes();
 	failures += test_link_typed_attributes();
@@ -332,7 +354,7 @@ main(void)
 	if (failures)
 		printf("[unit-span] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-span] PASS (17 tests)\n");
+		printf("[unit-span] PASS (18 tests)\n");
 
 	return failures ? 1 : 0;
 }

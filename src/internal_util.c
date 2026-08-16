@@ -112,7 +112,7 @@ otlp_dup_bytes(const uint8_t *src, size_t len)
 /* ── Recursive attribute free ─────────────────────────────────── */
 
 void
-otlp_attribute_free(struct otlp_attribute *a)
+otlp_attribute_release_value(struct otlp_attribute *a)
 {
 	size_t i;
 
@@ -159,6 +159,18 @@ otlp_attribute_free(struct otlp_attribute *a)
 		default:
 			break;
 	}
+	/* Safe empty state: the slot stays valid for a typed refill
+	 * and for the free path. */
+	a->type = OTLP_ATTR_STRING;
+	a->v.string_val = NULL;
+}
+
+void
+otlp_attribute_free(struct otlp_attribute *a)
+{
+	if (!a)
+		return;
+	otlp_attribute_release_value(a);
 	otlp_free(a->key);
 	a->key = NULL;
 }
@@ -240,6 +252,26 @@ fail:
 
 /* ── Lazy attribute lists ─────────────────────────────────────── */
 
+bool
+otlp_attr_list_find(const struct otlp_attribute *attrs,
+	size_t n,
+	const char *key,
+	size_t *idx_out)
+{
+	size_t i;
+
+	if (!attrs || !key)
+		return false;
+	for (i = 0; i < n; i++)
+		if (attrs[i].key && strcmp(attrs[i].key, key) == 0)
+		{
+			if (idx_out)
+				*idx_out = i;
+			return true;
+		}
+	return false;
+}
+
 otlp_status_t
 otlp_attr_list_reserve(struct otlp_attribute **attrs,
 	size_t *n,
@@ -249,9 +281,20 @@ otlp_attr_list_reserve(struct otlp_attribute **attrs,
 {
 	struct otlp_attribute *slot;
 	char *kc;
+	size_t idx;
 
 	if (!attrs || !n || !out || !key)
 		return OTLP_ERR_NULL;
+	/* Upsert: an existing key's slot is reused (old value
+	 * released, count unchanged, position preserved). Overwrite
+	 * succeeds even at cap. */
+	if (otlp_attr_list_find(*attrs, *n, key, &idx))
+	{
+		slot = &(*attrs)[idx];
+		otlp_attribute_release_value(slot);
+		*out = slot;
+		return OTLP_OK;
+	}
 	if (*n >= cap)
 		return OTLP_ERR_OVERFLOW;
 	/* Lazy-allocate the array on first use; an attribute-less
@@ -269,6 +312,8 @@ otlp_attr_list_reserve(struct otlp_attribute **attrs,
 	slot->key = kc;
 	/* Zero the union so cleanup paths don't see garbage. */
 	slot->v.string_val = NULL;
+	slot->type = OTLP_ATTR_STRING;
+	(*n)++;
 	*out = slot;
 	return OTLP_OK;
 }

@@ -94,7 +94,8 @@ extern "C"
 	otlp_status_t otlp_log_record_set_severity_text(otlp_log_record_t *lr,
 		const char *text);
 
-	/* Attributes (same model as span/metric: fixed cap 128). */
+	/* Attributes (same model as span/metric: a map — last write
+	 * wins, type may change; max 128 distinct keys). */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_log_record_set_attribute_string(
 		otlp_log_record_t *lr,

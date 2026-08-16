@@ -135,6 +135,25 @@ test_metric_attribute_bytes(void)
 }
 
 static int
+test_metric_attribute_upsert(void)
+{
+	otlp_metric_t *m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "requests", "1", "doc", NULL, 0);
+	const struct otlp_attribute *attrs;
+	size_t n = 0;
+
+	assert(m != NULL);
+	assert(otlp_metric_set_attribute_int(m, "k", 1) == OTLP_OK);
+	assert(otlp_metric_set_attribute_string(m, "k", "replaced") == OTLP_OK);
+	attrs = otlp_metric_get_attrs(m, &n);
+	assert(n == 1);
+	assert(attrs[0].type == OTLP_ATTR_STRING);
+	assert(strcmp(attrs[0].v.string_val, "replaced") == 0);
+	otlp_metric_free(m);
+	return 0;
+}
+
+static int
 test_metric_record_counter(void)
 {
 	otlp_metric_t *m = otlp_metric_create(
@@ -193,12 +212,13 @@ main(void)
 	failures += test_metric_attribute_bool();
 	failures += test_metric_attribute_bytes();
 	failures += test_metric_record_counter();
+	failures += test_metric_attribute_upsert();
 	failures += test_metric_clone_attrs();
 
 	if (failures)
 		printf("[unit-metric] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-metric] PASS (9 tests)\n");
+		printf("[unit-metric] PASS (10 tests)\n");
 
 	return failures ? 1 : 0;
 }

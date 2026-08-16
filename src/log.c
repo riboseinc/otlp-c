@@ -119,20 +119,18 @@ otlp_log_record_set_attribute_string(otlp_log_record_t *lr,
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
+	vc = otlp_dup_str(val ? val : "");
+	if (!vc)
+		return OTLP_ERR_NOMEM;
 	st = otlp_attr_list_reserve(
 		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
-		return st;
-	vc = otlp_dup_str(val ? val : "");
-	if (!vc)
 	{
-		otlp_free(a->key);
-		a->key = NULL;
-		return OTLP_ERR_NOMEM;
+		otlp_free(vc);
+		return st;
 	}
 	a->type = OTLP_ATTR_STRING;
 	a->v.string_val = vc;
-	lr->n_attrs++;
 	return OTLP_OK;
 }
 
@@ -152,7 +150,6 @@ otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
 		return st;
 	a->type = OTLP_ATTR_INT64;
 	a->v.int64_val = val;
-	lr->n_attrs++;
 	return OTLP_OK;
 }
 
@@ -172,7 +169,6 @@ otlp_log_record_set_attribute_double(otlp_log_record_t *lr,
 		return st;
 	a->type = OTLP_ATTR_DOUBLE;
 	a->v.double_val = val;
-	lr->n_attrs++;
 	return OTLP_OK;
 }
 
@@ -192,7 +188,6 @@ otlp_log_record_set_attribute_bool(otlp_log_record_t *lr,
 		return st;
 	a->type = OTLP_ATTR_BOOL;
 	a->v.bool_val = val;
-	lr->n_attrs++;
 	return OTLP_OK;
 }
 
@@ -210,21 +205,19 @@ otlp_log_record_set_attribute_bytes(otlp_log_record_t *lr,
 		return OTLP_ERR_NULL;
 	if (len > 0 && !bytes)
 		return OTLP_ERR_NULL;
+	bytes_copy = otlp_dup_bytes(bytes, len);
+	if (len > 0 && !bytes_copy)
+		return OTLP_ERR_NOMEM;
 	st = otlp_attr_list_reserve(
 		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
-		return st;
-	bytes_copy = otlp_dup_bytes(bytes, len);
-	if (len > 0 && !bytes_copy)
 	{
-		otlp_free(a->key);
-		a->key = NULL;
-		return OTLP_ERR_NOMEM;
+		otlp_free(bytes_copy);
+		return st;
 	}
 	a->type = OTLP_ATTR_BYTES;
 	a->v.bytes_val.data = bytes_copy;
 	a->v.bytes_val.len = len;
-	lr->n_attrs++;
 	return OTLP_OK;
 }
 

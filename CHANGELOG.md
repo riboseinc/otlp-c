@@ -4,6 +4,43 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.73] - 2026-08-16
+
+Attributes are a map: last-write-wins upsert.
+
+### Changed — re-setting an attribute key overwrites (behavior change)
+
+Every attribute setter previously appended unconditionally, so
+setting the same key twice produced duplicate `KeyValue` entries —
+but the OTLP data model requires unique keys and the OTel API
+defines attributes as a map where setting an existing key
+overwrites. A natural pattern (set a default, refine later)
+generated non-compliant wire data.
+
+`otlp_attr_list_reserve` now upserts: an existing key's slot is
+reused with its old value released (count unchanged, position
+preserved, type may change); only new keys append. Overwriting an
+existing key succeeds even at the cap; a new key past the cap still
+returns `OTLP_ERR_OVERFLOW`. One implementation gives all 25
+setters (span, event, link, metric, log) the semantics with zero
+per-setter duplication.
+
+The reserve-then-fill contract was also reordered so the fill
+cannot fail — string/bytes setters duplicate the value before
+reserving — which deletes the fragile free-the-key-on-failure
+cleanup from every owned-value setter.
+
+### Added
+
+- `otlp_attribute_release_value` (internal): release an
+  attribute's payload, keep the key — the primitive for
+  replace-value-in-place.
+- Properties: `prop_attr_upsert_last_write_wins`,
+  `prop_attr_upsert_at_cap`, and `prop_attr_upsert_wire_identical`
+  (a span whose key was set twice encodes byte-identically to one
+  whose key was set once with the final value). Unit upsert tests
+  in all three signals.
+
 ## [0.5.72] - 2026-08-16
 
 Event/link attribute type parity.
