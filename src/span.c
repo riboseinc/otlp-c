@@ -98,32 +98,12 @@ attr_reserve(otlp_span_t *span, const char *key, struct otlp_attribute **out)
 	return OTLP_OK;
 }
 
-/* Release one attribute's owned fields. Does NOT touch the slot
- * itself (caller frees the array as a whole). */
-static void
-attr_release(struct otlp_attribute *a)
-{
-	if (!a)
-		return;
-	otlp_free(a->key);
-	a->key = NULL;
-	switch (a->type)
-	{
-		case OTLP_ATTR_STRING:
-			otlp_free(a->v.string_val);
-			a->v.string_val = NULL;
-			break;
-		case OTLP_ATTR_BYTES:
-			otlp_free(a->v.bytes_val.data);
-			a->v.bytes_val.data = NULL;
-			a->v.bytes_val.len = 0;
-			break;
-		default:
-			/* int64, double, bool: no owned memory. */
-			break;
-	}
-}
-
+/* Recursive release via the shared otlp_attribute_free — the
+ * span-level array is inline but its payloads (including nested
+ * array/kvlist trees) follow the same ownership model. The old
+ * local non-recursive copy only freed STRING/BYTES and leaked
+ * composite trees (caught by CI's LeakSanitizer; macOS ASAN does
+ * not enable leak detection by default). */
 static void
 span_release_attrs(otlp_span_t *span)
 {
@@ -132,7 +112,7 @@ span_release_attrs(otlp_span_t *span)
 	if (!span)
 		return;
 	for (i = 0; i < span->n_attrs; i++)
-		attr_release(&span->attrs[i]);
+		otlp_attribute_free(&span->attrs[i]);
 	span->n_attrs = 0;
 }
 
