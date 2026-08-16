@@ -4,6 +4,38 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.72] - 2026-08-16
+
+Event/link attribute type parity.
+
+### Added — typed event/link attribute setters
+
+`otlp_span_set_event_attribute_string` / `set_link_attribute_string`
+were the only event/link attribute setters, so events couldn't carry
+`attempts=3` as an int64 and links couldn't carry binary context
+without stringifying. Eight new setters close the gap:
+
+- `otlp_span_set_event_attribute_{int,double,bool,bytes}`
+- `otlp_span_set_link_attribute_{int,double,bool,bytes}`
+
+Same contract as the string variants: they target the
+most-recently-added event/link and return
+`OTLP_ERR_INVALID_ARGUMENT` if none exists yet. The shared
+validate-target-reserve prelude moved into static
+`event_attr_slot` / `link_attr_slot` helpers so all ten setters are
+reserve + typed fill (DRY).
+
+### Tests
+
+`unit-span` (14→17) adds typed roundtrips for both targets plus the
+set-before-add error contract. The clone-preservation property now
+deep-copies int (event) and bytes (link) attributes. New
+`prop_event_link_typed_attrs_wire` walks the wire to the AnyValue
+oneof inside Event{11}/Link{13} and pins the attribute field
+numbers — 3 for Event, 4 for Link — which differ and were worth an
+explicit regression guard. The events property file's stale header
+doc (swapped Event name/time field numbers) is fixed.
+
 ## [0.5.71] - 2026-08-16
 
 Attribute setter type parity across all three signals.
