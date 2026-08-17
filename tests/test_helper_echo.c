@@ -75,7 +75,8 @@ echo_server_start(struct echo_server *s,
 
 	s->handler = handler;
 	s->requests_to_serve = requests_to_serve;
-	otlp_atomic_store_u64(&s->requests_served, 0, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_store_u64(
+		&s->requests_served, 0, OTLP_MEMORY_ORDER_RELAXED);
 	otlp_atomic_store_u64(&s->requests_seen, 0, OTLP_MEMORY_ORDER_RELAXED);
 
 	a = malloc(sizeof(*a));
@@ -117,7 +118,7 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 	 * Once we observe running == 0, every write the worker made before
 	 * exiting (including the final requests_served value) is visible. */
 	while (otlp_atomic_load_int(&s->running, OTLP_MEMORY_ORDER_ACQUIRE) &&
-	       now < deadline)
+		now < deadline)
 	{
 		ts.tv_sec = 0;
 		ts.tv_nsec = 1000 * 100; /* 100us */
@@ -127,7 +128,8 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 			(uint64_t) mono.tv_nsec / 1000ULL;
 	}
 	return otlp_atomic_load_int(&s->running, OTLP_MEMORY_ORDER_ACQUIRE)
-		? OTLP_ERR_TIMEOUT : OTLP_OK;
+		? OTLP_ERR_TIMEOUT
+		: OTLP_OK;
 }
 
 void
@@ -246,6 +248,13 @@ serve_one(int conn_fd, echo_handler_t handler)
 		status,
 		reason,
 		resp_len);
+	if (status == ECHO_RAW_RESPONSE)
+	{
+		/* Parser tests: the handler already built the full raw
+		 * response (status line + headers + body). */
+		(void) send(conn_fd, resp_body, resp_len, 0);
+		return;
+	}
 	(void) send(conn_fd, head, (size_t) n, 0);
 	if (resp_len > 0)
 		(void) send(conn_fd, resp_body, resp_len, 0);
@@ -265,19 +274,20 @@ echo_thread_main(void *arg)
 		{
 			if (errno == EINTR)
 				continue;
-			break;  /* socket closed by _stop, or fatal */
+			break; /* socket closed by _stop, or fatal */
 		}
 		serve_one(conn_fd, s->handler);
 		close(conn_fd);
-		otlp_atomic_fetch_add_u64(&s->requests_served, 1,
-			OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&s->requests_served, 1, OTLP_MEMORY_ORDER_RELAXED);
 		otlp_atomic_store_u64(&s->requests_seen,
-			otlp_atomic_load_u64(&s->requests_served,
-				OTLP_MEMORY_ORDER_RELAXED),
+			otlp_atomic_load_u64(
+				&s->requests_served, OTLP_MEMORY_ORDER_RELAXED),
 			OTLP_MEMORY_ORDER_RELAXED);
 		if (s->requests_to_serve > 0 &&
-		    otlp_atomic_load_u64(&s->requests_served,
-				OTLP_MEMORY_ORDER_RELAXED) >= s->requests_to_serve)
+			otlp_atomic_load_u64(&s->requests_served,
+				OTLP_MEMORY_ORDER_RELAXED) >=
+				s->requests_to_serve)
 			break;
 	}
 	if (s->sock_fd >= 0)

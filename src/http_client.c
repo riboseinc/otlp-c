@@ -34,11 +34,11 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(_WIN32)
-#  include <string.h>
-#  define otlp_strncasecmp _strnicmp
+#include <string.h>
+#define otlp_strncasecmp _strnicmp
 #else
-#  include <strings.h>
-#  define otlp_strncasecmp strncasecmp
+#include <strings.h>
+#define otlp_strncasecmp strncasecmp
 #endif
 
 /* ── URL parser ───────────────────────────────────────────────── */
@@ -179,8 +179,8 @@ struct otlp_http_request
 	 * (for connect) or the last successful recv (for read). */
 	uint32_t connect_timeout_ms;
 	uint32_t read_timeout_ms;
-	uint64_t start_ms;       /* monotonic ms at _start time */
-	uint64_t last_recv_ms;   /* monotonic ms at most recent recv */
+	uint64_t start_ms; /* monotonic ms at _start time */
+	uint64_t last_recv_ms; /* monotonic ms at most recent recv */
 };
 
 static otlp_status_t
@@ -245,7 +245,7 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	size_t body_len,
 	uint32_t connect_timeout_ms,
 	uint32_t read_timeout_ms,
-	struct otlp_socket   *donated_socket)
+	struct otlp_socket *donated_socket)
 {
 	struct otlp_http_request *r;
 	otlp_status_t st;
@@ -263,14 +263,14 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 
 	/* Donated socket: skip CONNECTING, go straight to SENDING. */
 	r->state = OTLP_HTTP_REQ_SENDING;
-	r->sock  = donated_socket;
+	r->sock = donated_socket;
 
 	/* Store timeout durations + start time for deadline checks in
 	 * step. 0 means no timeout (infinite). */
 	r->connect_timeout_ms = connect_timeout_ms;
-	r->read_timeout_ms    = read_timeout_ms;
-	r->start_ms           = mono_ms();
-	r->last_recv_ms       = r->start_ms;
+	r->read_timeout_ms = read_timeout_ms;
+	r->start_ms = mono_ms();
+	r->last_recv_ms = r->start_ms;
 
 	st = build_request(r, url, user_agent, body, body_len);
 	if (st != OTLP_OK)
@@ -312,7 +312,7 @@ otlp_http_request_start(otlp_http_request_t **out,
 	/* Store timeout durations + start time for deadline checks in
 	 * step. 0 means no timeout (infinite). */
 	r->connect_timeout_ms = connect_timeout_ms;
-	r->read_timeout_ms    = read_timeout_ms;
+	r->read_timeout_ms = read_timeout_ms;
 
 	st = build_request(r, url, user_agent, body, body_len);
 	if (st != OTLP_OK)
@@ -325,7 +325,7 @@ otlp_http_request_start(otlp_http_request_t **out,
 	/* Start the deadline clock AFTER getaddrinfo + connect initiation.
 	 * The blocking DNS lookup can take seconds; measuring the connect
 	 * timeout from before it would make the deadline fire prematurely. */
-	r->start_ms     = mono_ms();
+	r->start_ms = mono_ms();
 	r->last_recv_ms = r->start_ms;
 
 	/* If connect() completed synchronously (rare for non-blocking
@@ -356,7 +356,7 @@ otlp_http_request_detach_socket(otlp_http_request_t *r)
 
 	if (!r || r->state != OTLP_HTTP_REQ_DONE || !r->keepalive_eligible)
 		return NULL;
-	sock   = r->sock;
+	sock = r->sock;
 	r->sock = NULL;
 	return sock;
 }
@@ -381,6 +381,92 @@ find_substring(const uint8_t *hay,
 	return -1;
 }
 
+/* Decode a chunked body in place (RFC 7230 §4.1):
+ *   chunked-body = *chunk last-chunk trailer-section CRLF
+ * The decoded bytes are compacted over the framing (dst <= src at
+ * every step, so unread bytes are never clobbered). Returns:
+ *   1 — complete; *out_len is the decoded length
+ *   0 — need more data
+ *  -1 — malformed framing (or a chunk over the response cap)
+ */
+static int
+decode_chunked_in_place(uint8_t *buf, size_t len, size_t *out_len)
+{
+	size_t src = 0;
+	size_t dst = 0;
+
+	for (;;)
+	{
+		size_t line_end = src;
+		size_t size = 0;
+		int digits = 0;
+
+		/* chunk-size line: 1*HEXDIG [;ext] CRLF */
+		while (line_end < len && buf[line_end] != '\r' &&
+			buf[line_end] != ';')
+		{
+			uint8_t c = buf[line_end];
+
+			if (c >= '0' && c <= '9')
+				size = size * 16 + (size_t) (c - '0');
+			else if (c >= 'a' && c <= 'f')
+				size = size * 16 + (size_t) (c - 'a' + 10);
+			else if (c >= 'A' && c <= 'F')
+				size = size * 16 + (size_t) (c - 'A' + 10);
+			else
+				return -1;
+			if (size > OTLP_HTTP_RESP_MAX)
+				return -1;
+			digits++;
+			line_end++;
+		}
+		if (digits == 0 || line_end >= len)
+			return 0; /* need more (or empty size line) */
+		/* Skip chunk extensions to the CRLF. */
+		while (line_end < len && buf[line_end] != '\r')
+			line_end++;
+		if (line_end + 1 >= len)
+			return 0;
+		if (buf[line_end + 1] != '\n')
+			return -1;
+
+		if (size == 0)
+		{
+			/* Last chunk. The trailer section starts after
+			 * "0\r\n": either the final CRLF (no trailers)
+			 * or header lines until an empty line. */
+			const uint8_t *t = buf + line_end + 2;
+			size_t avail = len - (line_end + 2);
+
+			if (avail < 2)
+				return 0;
+			if (t[0] == '\r' && t[1] == '\n')
+			{
+				*out_len = dst;
+				return 1;
+			}
+			{
+				int off =
+					find_substring(t, avail, "\r\n\r\n", 4);
+
+				if (off < 0)
+					return 0; /* trailers incomplete */
+				*out_len = dst;
+				return 1;
+			}
+		}
+		/* chunk-data CRLF must be fully buffered. */
+		if (line_end + 2 + size + 2 > len)
+			return 0;
+		if (buf[line_end + 2 + size] != '\r' ||
+			buf[line_end + 2 + size + 1] != '\n')
+			return -1;
+		memmove(buf + dst, buf + line_end + 2, size);
+		dst += size;
+		src = line_end + 2 + size + 2;
+	}
+}
+
 /* Try to parse a complete response from r->resp_buf. Returns:
  *   1  — complete; http_status and body filled in.
  *   0  — incomplete; need more data (or, for the no-Content-Length
@@ -397,9 +483,7 @@ try_parse_response(struct otlp_http_request *r, bool at_eof)
 	int hdr_end_off;
 	const char *body_start;
 	size_t body_off;
-	const char *cl;
 	const char *p;
-	const char *conn;
 	long content_length = -1;
 
 	hdr_end_off = find_substring(r->resp_buf, r->resp_len, "\r\n\r\n", 4);
@@ -424,41 +508,118 @@ try_parse_response(struct otlp_http_request *r, bool at_eof)
 		return -1;
 	r->http_status = (p[0] - '0') * 100 + (p[1] - '0') * 10 + (p[2] - '0');
 
-	/* Find Content-Length (case-insensitive). */
-	for (cl = (const char *) r->resp_buf; cl < body_start - 2; cl++)
+	/* Keep-alive default is version-dependent: HTTP/1.1 defaults
+	 * to persistent, HTTP/1.0 (and earlier) to close (RFC 7230
+	 * §6.3). Any "Connection: close" wins; "Connection:
+	 * keep-alive" upgrades a 1.0 connection. */
+	r->keepalive_eligible = (r->resp_buf[5] == '1' &&
+		r->resp_buf[6] == '.' && r->resp_buf[7] >= '1');
+
+	/* Header scan — LINE-ALIGNED (a substring scan over the whole
+	 * header block would match inside other headers' values, e.g.
+	 * an echoed "X-Note: see Content-Length: 5"). */
 	{
-		if (otlp_strncasecmp(cl, "Content-Length:", 15) == 0)
+		const char *hdr = (const char *) r->resp_buf;
+		const char *hdr_end = (const char *) body_start;
+		bool cl_seen = false;
+		bool te_seen = false;
+		bool te_chunked = false;
+
+		/* Skip the status line. */
+		while (hdr < hdr_end && *hdr != '\n')
+			hdr++;
+		if (hdr >= hdr_end)
+			return -1;
+		hdr++;
+
+		while (hdr < hdr_end)
 		{
-			cl += 15;
-			while (cl < body_start && *cl == ' ')
-				cl++;
-			content_length = 0;
-			while (cl < body_start && isdigit((unsigned char) *cl))
+			const char *line = hdr;
+			const char *eol = hdr;
+
+			while (eol < hdr_end && *eol != '\r')
+				eol++;
+			if (eol >= hdr_end)
+				return -1;
+			hdr = eol + 2; /* skip CRLF */
+
+			if (otlp_strncasecmp(line, "Content-Length:", 15) == 0)
 			{
-				content_length =
-					content_length * 10 + (*cl - '0');
-				if (content_length > OTLP_HTTP_RESP_MAX)
+				const char *v = line + 15;
+				long val = 0;
+
+				while (v < eol && *v == ' ')
+					v++;
+				while (v < eol && isdigit((unsigned char) *v))
+				{
+					val = val * 10 + (*v - '0');
+					if (val > OTLP_HTTP_RESP_MAX)
+						return -1;
+					v++;
+				}
+				/* Duplicate Content-Length with a DIFFERENT
+				 * value is a request-smuggling vector
+				 * (RFC 7230 §3.3.2); reject. Identical
+				 * duplicates are legal and collapse. */
+				if (cl_seen && val != content_length)
 					return -1;
-				cl++;
+				content_length = val;
+				cl_seen = true;
 			}
-			break;
+			else if (otlp_strncasecmp(
+					 line, "Transfer-Encoding:", 18) == 0)
+			{
+				const char *v = line + 18;
+
+				te_seen = true;
+				while (v < eol && *v == ' ')
+					v++;
+				/* Only bare "chunked" is decodable; any other
+				 * coding (gzip, identity, ...) is rejected —
+				 * we cannot frame or decode it. */
+				if ((size_t) (eol - v) == 7 &&
+					otlp_strncasecmp(v, "chunked", 7) == 0)
+					te_chunked = true;
+			}
+			else if (otlp_strncasecmp(line, "Connection:", 11) == 0)
+			{
+				const char *v = line + 11;
+
+				while (v < eol && *v == ' ')
+					v++;
+				if (otlp_strncasecmp(v, "close", 5) == 0)
+					r->keepalive_eligible = false;
+				else if ((size_t) (eol - v) >= 10 &&
+					otlp_strncasecmp(v, "keep-alive", 10) ==
+						0)
+					r->keepalive_eligible = true;
+			}
 		}
-	}
 
-	/* Scan Connection header (case-insensitive). HTTP/1.1 default
-	 * is keep-alive; "Connection: close" disables reuse. */
-	r->keepalive_eligible = true;
-	for (conn = (const char *) r->resp_buf; conn < body_start - 2; conn++)
-	{
-		if (otlp_strncasecmp(conn, "Connection:", 11) == 0)
+		/* Content-Length AND Transfer-Encoding together is the
+		 * classic smuggling vector (RFC 7230 §3.3.3 rule 3):
+		 * reject rather than guess. */
+		if (te_seen)
 		{
-			const char *v = conn + 11;
+			if (cl_seen || !te_chunked)
+				return -1;
+			{
+				size_t decoded = 0;
+				int rc = decode_chunked_in_place(
+					r->resp_buf + body_off,
+					r->resp_len - body_off,
+					&decoded);
 
-			while (v < body_start && *v == ' ')
-				v++;
-			if (otlp_strncasecmp(v, "close", 5) == 0)
-				r->keepalive_eligible = false;
-			break;
+				if (rc == 0)
+					return 0; /* need more chunks */
+				if (rc < 0)
+					return -1;
+				/* Chunked framing is self-delimiting: the
+				 * connection stays reusable. */
+				r->body_ptr = r->resp_buf + body_off;
+				r->body_len = decoded;
+				return 1;
+			}
 		}
 	}
 
@@ -502,7 +663,7 @@ step_connecting(struct otlp_http_request *r)
 	 * has elapsed since start, fail the request rather than waiting
 	 * forever for an unreachable collector. */
 	if (st == OTLP_ERR_WOULDBLOCK && r->connect_timeout_ms != 0 &&
-	    mono_ms() - r->start_ms >= r->connect_timeout_ms)
+		mono_ms() - r->start_ms >= r->connect_timeout_ms)
 	{
 		r->state = OTLP_HTTP_REQ_FAILED;
 		return OTLP_ERR_TIMEOUT;
@@ -551,7 +712,7 @@ step_reading(struct otlp_http_request *r)
 		 * has elapsed since the last successful recv (or start),
 		 * fail the request. */
 		if (r->read_timeout_ms != 0 &&
-		    mono_ms() - r->last_recv_ms >= r->read_timeout_ms)
+			mono_ms() - r->last_recv_ms >= r->read_timeout_ms)
 		{
 			r->state = OTLP_HTTP_REQ_FAILED;
 			return OTLP_ERR_TIMEOUT;
