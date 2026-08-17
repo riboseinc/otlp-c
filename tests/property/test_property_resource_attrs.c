@@ -20,7 +20,10 @@
 #include "../src/otlp_messages.h"
 #include "../src/protobuf_encode.h"
 
+#include <otlp-c/exporter.h>
 #include <otlp-c/span.h>
+
+#include "../src/exporter_internal.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -29,30 +32,34 @@
 /* Resource field indices (matches src/otlp_schema.h).
  * Duplicated as #defines here so the test is self-contained. */
 #define ETSR_F_RESOURCE_SPANS 1
-#define RS_F_RESOURCE	       1
-#define R_F_ATTRIBUTES	       1
-#define KV_F_KEY	       1
-#define KV_F_VALUE	       2
-#define AV_F_STRING	       1
+#define RS_F_RESOURCE 1
+#define R_F_ATTRIBUTES 1
+#define KV_F_KEY 1
+#define KV_F_VALUE 2
+#define AV_F_STRING 1
 
 /* Scan the Resource body at [pos, end) for a KeyValue with the given
  * string key + value. Each KeyValue appears as a length-delimited
  * field 1 (R_F_ATTRIBUTES) in the Resource. Returns 1 on match. */
 static int
-find_string_attr(const uint8_t *data, size_t pos, size_t end,
-		 const char *want_key, const char *want_val)
+find_string_attr(const uint8_t *data,
+	size_t pos,
+	size_t end,
+	const char *want_key,
+	const char *want_val)
 {
-	while (pos < end) {
+	while (pos < end)
+	{
 		size_t kv_pos;
 		size_t kv_end;
-		int    wt = 0;
+		int wt = 0;
 		size_t vp = 0;
 		size_t vl = 0;
 		size_t scan_pos;
 		size_t scan_end;
 
-		if (!walker_find_at_level(data, pos, end, R_F_ATTRIBUTES,
-					  &wt, &vp, &vl))
+		if (!walker_find_at_level(
+			    data, pos, end, R_F_ATTRIBUTES, &wt, &vp, &vl))
 			return 0;
 		if (wt != OTLP_PB_WIRE_LEN)
 			return 0;
@@ -65,19 +72,25 @@ find_string_attr(const uint8_t *data, size_t pos, size_t end,
 		/* Key (KV_F_KEY = 1). */
 		scan_pos = kv_pos;
 		scan_end = kv_end;
-		if (!walker_find_at_level(data, scan_pos, scan_end,
-					  KV_F_KEY, &wt, &vp, &vl))
+		if (!walker_find_at_level(
+			    data, scan_pos, scan_end, KV_F_KEY, &wt, &vp, &vl))
 			continue;
 		if (wt != OTLP_PB_WIRE_LEN)
 			continue;
 		if (vl != strlen(want_key) ||
-		    memcmp(data + vp, want_key, vl) != 0)
+			memcmp(data + vp, want_key, vl) != 0)
 			continue;
 		scan_pos = vp + vl;
 
-		/* Value (KV_F_VALUE = 2) → AnyValue → string (AV_F_STRING = 1). */
-		if (!walker_find_at_level(data, scan_pos, scan_end,
-					  KV_F_VALUE, &wt, &vp, &vl))
+		/* Value (KV_F_VALUE = 2) → AnyValue → string (AV_F_STRING = 1).
+		 */
+		if (!walker_find_at_level(data,
+			    scan_pos,
+			    scan_end,
+			    KV_F_VALUE,
+			    &wt,
+			    &vp,
+			    &vl))
 			continue;
 		if (wt != OTLP_PB_WIRE_LEN)
 			continue;
@@ -85,13 +98,18 @@ find_string_attr(const uint8_t *data, size_t pos, size_t end,
 			size_t av_pos = vp;
 			size_t av_end = vp + vl;
 
-			if (!walker_find_at_level(data, av_pos, av_end,
-						  AV_F_STRING, &wt, &vp, &vl))
+			if (!walker_find_at_level(data,
+				    av_pos,
+				    av_end,
+				    AV_F_STRING,
+				    &wt,
+				    &vp,
+				    &vl))
 				continue;
 			if (wt != OTLP_PB_WIRE_LEN)
 				continue;
 			if (vl != strlen(want_val) ||
-			    memcmp(data + vp, want_val, vl) != 0)
+				memcmp(data + vp, want_val, vl) != 0)
 				continue;
 		}
 		return 1;
@@ -102,8 +120,10 @@ find_string_attr(const uint8_t *data, size_t pos, size_t end,
 /* Descend: ExportTraceServiceRequest → ResourceSpans → Resource body.
  * The Resource body is where repeated KeyValue fields live. */
 static int
-descend_to_resource_attrs(const uint8_t *data, size_t len,
-			  size_t *out_pos, size_t *out_end)
+descend_to_resource_attrs(const uint8_t *data,
+	size_t len,
+	size_t *out_pos,
+	size_t *out_end)
 {
 	size_t pos = 0;
 	size_t end = len;
@@ -121,8 +141,8 @@ static int
 prop_resource_empty(uint64_t seed)
 {
 	struct otlp_pb_buf buf = { 0 };
-	otlp_status_t	    st;
-	int		    ok = 0;
+	otlp_status_t st;
+	int ok = 0;
 
 	(void) seed;
 	st = otlp_pb_buf_init(&buf, 0);
@@ -140,10 +160,10 @@ static int
 prop_resource_service_name_only(uint64_t seed)
 {
 	struct otlp_pb_buf buf = { 0 };
-	otlp_status_t	    st;
-	size_t		    kvs_pos = 0;
-	size_t		    kvs_end = 0;
-	int		    ok = 0;
+	otlp_status_t st;
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	st = otlp_pb_buf_init(&buf, 0);
@@ -155,8 +175,8 @@ prop_resource_service_name_only(uint64_t seed)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
 		goto out;
-	ok = find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.name", "svc-x");
+	ok = find_string_attr(
+		buf.data, kvs_pos, kvs_end, "service.name", "svc-x");
 out:
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -165,12 +185,12 @@ out:
 static int
 prop_resource_extra_attrs_encoded(uint64_t seed)
 {
-	struct otlp_pb_buf	     buf = { 0 };
-	otlp_status_t		     st;
-	otlp_resource_attr_t	     attrs[3];
-	size_t			     kvs_pos = 0;
-	size_t			     kvs_end = 0;
-	int			     ok = 0;
+	struct otlp_pb_buf buf = { 0 };
+	otlp_status_t st;
+	otlp_resource_attr_t attrs[3];
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
@@ -191,14 +211,20 @@ prop_resource_extra_attrs_encoded(uint64_t seed)
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
 		goto out;
 
-	ok = find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.name", "billing") &&
-	     find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.version", "1.2.3") &&
-	     find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "deployment.environment", "production") &&
-	     find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "host.name", "web-01");
+	ok = find_string_attr(
+		     buf.data, kvs_pos, kvs_end, "service.name", "billing") &&
+		find_string_attr(buf.data,
+			kvs_pos,
+			kvs_end,
+			"service.version",
+			"1.2.3") &&
+		find_string_attr(buf.data,
+			kvs_pos,
+			kvs_end,
+			"deployment.environment",
+			"production") &&
+		find_string_attr(
+			buf.data, kvs_pos, kvs_end, "host.name", "web-01");
 out:
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -207,12 +233,12 @@ out:
 static int
 prop_resource_attrs_skip_empty(uint64_t seed)
 {
-	struct otlp_pb_buf	     buf = { 0 };
-	otlp_status_t		     st;
-	otlp_resource_attr_t	     attrs[2];
-	size_t			     kvs_pos = 0;
-	size_t			     kvs_end = 0;
-	int			     ok = 0;
+	struct otlp_pb_buf buf = { 0 };
+	otlp_status_t st;
+	otlp_resource_attr_t attrs[2];
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	/* Empty-key or empty-value entries should be omitted. */
@@ -233,12 +259,12 @@ prop_resource_attrs_skip_empty(uint64_t seed)
 		goto out;
 
 	/* Neither empty entry should be found. service.name should be. */
-	ok = find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.name", "svc") &&
-	     !find_string_attr(buf.data, kvs_pos, kvs_end,
-			       "", "has-empty-key") &&
-	     !find_string_attr(buf.data, kvs_pos, kvs_end,
-			       "has-empty-value", "");
+	ok = find_string_attr(
+		     buf.data, kvs_pos, kvs_end, "service.name", "svc") &&
+		!find_string_attr(
+			buf.data, kvs_pos, kvs_end, "", "has-empty-key") &&
+		!find_string_attr(
+			buf.data, kvs_pos, kvs_end, "has-empty-value", "");
 out:
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -251,20 +277,20 @@ out:
  * without duplicating the full wire-walk for each type's value
  * encoding — the AnyValue encoder tests cover the value bytes. */
 static int
-find_key(const uint8_t *data, size_t pos, size_t end,
-	 const char *want_key)
+find_key(const uint8_t *data, size_t pos, size_t end, const char *want_key)
 {
 	size_t want_len = strlen(want_key);
 
-	while (pos < end) {
+	while (pos < end)
+	{
 		size_t kv_pos;
 		size_t kv_end;
-		int    wt = 0;
+		int wt = 0;
 		size_t vp = 0;
 		size_t vl = 0;
 
-		if (!walker_find_at_level(data, pos, end, R_F_ATTRIBUTES,
-					  &wt, &vp, &vl))
+		if (!walker_find_at_level(
+			    data, pos, end, R_F_ATTRIBUTES, &wt, &vp, &vl))
 			return 0;
 		if (wt != OTLP_PB_WIRE_LEN)
 			return 0;
@@ -272,11 +298,11 @@ find_key(const uint8_t *data, size_t pos, size_t end,
 		kv_end = vp + vl;
 		pos = vp + vl;
 
-		if (walker_find_at_level(data, kv_pos, kv_end,
-					  KV_F_KEY, &wt, &vp, &vl)) {
-			if (wt == OTLP_PB_WIRE_LEN &&
-			    vl == want_len &&
-			    memcmp(data + vp, want_key, want_len) == 0)
+		if (walker_find_at_level(
+			    data, kv_pos, kv_end, KV_F_KEY, &wt, &vp, &vl))
+		{
+			if (wt == OTLP_PB_WIRE_LEN && vl == want_len &&
+				memcmp(data + vp, want_key, want_len) == 0)
 				return 1;
 		}
 	}
@@ -287,11 +313,11 @@ static int
 prop_resource_typed_int64(uint64_t seed)
 {
 	struct otlp_pb_buf buf = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 	otlp_resource_attr_t attrs[1];
-	size_t	     kvs_pos = 0;
-	size_t	     kvs_end = 0;
-	int	     ok = 0;
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
@@ -310,8 +336,8 @@ prop_resource_typed_int64(uint64_t seed)
 		goto out;
 	/* Key is present + service.name is present (backward compat). */
 	ok = find_key(buf.data, kvs_pos, kvs_end, "process.pid") &&
-	     find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.name", "svc");
+		find_string_attr(
+			buf.data, kvs_pos, kvs_end, "service.name", "svc");
 out:
 	otlp_pb_buf_free(&buf);
 	return ok;
@@ -321,11 +347,11 @@ static int
 prop_resource_typed_bool(uint64_t seed)
 {
 	struct otlp_pb_buf buf = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 	otlp_resource_attr_t attrs[1];
-	size_t	     kvs_pos = 0;
-	size_t	     kvs_end = 0;
-	int	     ok = 0;
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
@@ -353,16 +379,16 @@ prop_resource_mixed_types(uint64_t seed)
 {
 	/* Verify string + int64 + bool + double all coexist on the wire. */
 	struct otlp_pb_buf buf = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 	otlp_resource_attr_t attrs[4];
-	size_t	     kvs_pos = 0;
-	size_t	     kvs_end = 0;
-	int	     ok = 0;
+	size_t kvs_pos = 0;
+	size_t kvs_end = 0;
+	int ok = 0;
 
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "service.version";
-	attrs[0].value = "1.0.0";  /* STRING (default) */
+	attrs[0].value = "1.0.0"; /* STRING (default) */
 	attrs[1].key = "process.pid";
 	attrs[1].type = OTLP_RESOURCE_ATTR_INT64;
 	attrs[1].int64_val = 999;
@@ -385,16 +411,96 @@ prop_resource_mixed_types(uint64_t seed)
 
 	/* All four keys present. String value still round-trips
 	 * (backward compat). */
-	ok = find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.name", "svc") &&
-	     find_string_attr(buf.data, kvs_pos, kvs_end,
-			      "service.version", "1.0.0") &&
-	     find_key(buf.data, kvs_pos, kvs_end, "process.pid") &&
-	     find_key(buf.data, kvs_pos, kvs_end, "system.crashed") &&
-	     find_key(buf.data, kvs_pos, kvs_end, "cpu.load");
+	ok = find_string_attr(
+		     buf.data, kvs_pos, kvs_end, "service.name", "svc") &&
+		find_string_attr(buf.data,
+			kvs_pos,
+			kvs_end,
+			"service.version",
+			"1.0.0") &&
+		find_key(buf.data, kvs_pos, kvs_end, "process.pid") &&
+		find_key(buf.data, kvs_pos, kvs_end, "system.crashed") &&
+		find_key(buf.data, kvs_pos, kvs_end, "cpu.load");
 
 out:
 	otlp_pb_buf_free(&buf);
+	return ok;
+}
+
+
+/* Resource attributes are a map: duplicate keys in opts collapse
+ * last-write-wins at exporter-create, so duplicate KeyValues can
+ * never reach the wire (v0.5.78). */
+static int
+prop_resource_attrs_dedup(uint64_t seed)
+{
+	otlp_resource_attr_t attrs[3];
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	const otlp_resource_attr_t *stored;
+	size_t n = 99;
+	int ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "host.name";
+	attrs[0].value = "web-01";
+	attrs[1].key = "host.name";
+	attrs[1].type = OTLP_RESOURCE_ATTR_INT64;
+	attrs[1].int64_val = 77;
+	attrs[2].key = "zone";
+	attrs[2].value = "a";
+
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "svc";
+	opts.resource_attributes = attrs;
+	opts.n_resource_attributes = 3;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	stored = otlp_exporter_get_resource_attrs(exp, &n);
+	ok = (n == 2) && stored && strcmp(stored[0].key, "host.name") == 0 &&
+		stored[0].type == OTLP_RESOURCE_ATTR_INT64 &&
+		stored[0].int64_val == 77 && strcmp(stored[1].key, "zone") == 0;
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+/* A "service.name" resource attr is dropped when the dedicated
+ * service_name opt is set — otherwise it would duplicate the
+ * auto-emitted service.name KeyValue. */
+static int
+prop_resource_service_name_wins(uint64_t seed)
+{
+	otlp_resource_attr_t attrs[2];
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	const otlp_resource_attr_t *stored;
+	size_t n = 99;
+	size_t i;
+	int saw_svc = 0;
+	int ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "service.name";
+	attrs[0].value = "from-attrs";
+	attrs[1].key = "zone";
+	attrs[1].value = "a";
+
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "from-opt";
+	opts.resource_attributes = attrs;
+	opts.n_resource_attributes = 2;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	stored = otlp_exporter_get_resource_attrs(exp, &n);
+	for (i = 0; stored && i < n; i++)
+		if (strcmp(stored[i].key, "service.name") == 0)
+			saw_svc = 1;
+	ok = (n == 1) && !saw_svc && strcmp(stored[0].key, "zone") == 0;
+	otlp_exporter_free(exp);
 	return ok;
 }
 
@@ -403,24 +509,36 @@ main(void)
 {
 	int failures = 0;
 
-	failures += property_run(prop_resource_empty,
-				 "prop_resource_empty", 5, 1);
+	failures +=
+		property_run(prop_resource_empty, "prop_resource_empty", 5, 1);
 	failures += property_run(prop_resource_service_name_only,
-				 "prop_resource_service_name_only", 5, 1);
+		"prop_resource_service_name_only",
+		5,
+		1);
 	failures += property_run(prop_resource_extra_attrs_encoded,
-				 "prop_resource_extra_attrs_encoded", 5, 1);
+		"prop_resource_extra_attrs_encoded",
+		5,
+		1);
 	failures += property_run(prop_resource_attrs_skip_empty,
-				 "prop_resource_attrs_skip_empty", 5, 1);
-	failures += property_run(prop_resource_typed_int64,
-				 "prop_resource_typed_int64", 5, 1);
-	failures += property_run(prop_resource_typed_bool,
-				 "prop_resource_typed_bool", 5, 1);
-	failures += property_run(prop_resource_mixed_types,
-				 "prop_resource_mixed_types", 5, 1);
+		"prop_resource_attrs_skip_empty",
+		5,
+		1);
+	failures += property_run(
+		prop_resource_typed_int64, "prop_resource_typed_int64", 5, 1);
+	failures += property_run(
+		prop_resource_typed_bool, "prop_resource_typed_bool", 5, 1);
+	failures += property_run(
+		prop_resource_mixed_types, "prop_resource_mixed_types", 5, 1);
+	failures += property_run(
+		prop_resource_attrs_dedup, "prop_resource_attrs_dedup", 5, 1);
+	failures += property_run(prop_resource_service_name_wins,
+		"prop_resource_service_name_wins",
+		5,
+		1);
 
 	if (failures)
 		printf("[property] %d resource-attr property(ies) failed\n",
-		       failures);
+			failures);
 	else
 		printf("[property] all resource-attr properties passed\n");
 	return failures ? 1 : 0;

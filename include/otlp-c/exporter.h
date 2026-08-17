@@ -57,11 +57,12 @@ extern "C"
 	 * attributes. STRING is the default (0) for backward
 	 * compatibility — callers who only set `.value` get string
 	 * encoding with no code change. */
-	typedef enum {
+	typedef enum
+	{
 		OTLP_RESOURCE_ATTR_STRING = 0,
-		OTLP_RESOURCE_ATTR_INT64  = 1,
+		OTLP_RESOURCE_ATTR_INT64 = 1,
 		OTLP_RESOURCE_ATTR_DOUBLE = 2,
-		OTLP_RESOURCE_ATTR_BOOL   = 3,
+		OTLP_RESOURCE_ATTR_BOOL = 3,
 	} otlp_resource_attr_type_t;
 
 	/* A key-value pair attached to the OTLP Resource of every batch
@@ -95,15 +96,23 @@ extern "C"
 	 *   };
 	 *
 	 * The library deep-copies all fields at otlp_exporter_create()
-	 * time; the caller may free the input array immediately after. */
+	 * time; the caller may free the input array immediately after.
+	 *
+	 * Map semantics (v0.5.78): resource-attribute keys MUST be
+	 * unique (OTLP data model). Duplicate keys in the opts array
+	 * collapse last-write-wins at create time, and a
+	 * "service.name" entry is dropped when the dedicated
+	 * service_name opt is set (the documented field wins — the
+	 * attrs entry would otherwise duplicate the auto-emitted
+	 * service.name KeyValue). */
 	typedef struct
 	{
 		const char *key;
-		const char *value;   /* used when type == STRING (default) */
-		otlp_resource_attr_type_t type;  /* 0 = STRING; see enum above */
-		int64_t int64_val;   /* used when type == INT64 */
-		double  double_val;  /* used when type == DOUBLE */
-		bool    bool_val;    /* used when type == BOOL */
+		const char *value; /* used when type == STRING (default) */
+		otlp_resource_attr_type_t type; /* 0 = STRING; see enum above */
+		int64_t int64_val; /* used when type == INT64 */
+		double double_val; /* used when type == DOUBLE */
+		bool bool_val; /* used when type == BOOL */
 	} otlp_resource_attr_t;
 
 	/* Configuration for otlp_exporter_create. Pass zero-initialized +
@@ -286,8 +295,7 @@ extern "C"
 	 * 500 to trigger retry behavior, then 200 for success). */
 	typedef int (*otlp_null_transport_status_fn)(void *ctx);
 	OTLP_C_EXPORT
-	void otlp_exporter_set_null_transport_status_fn(
-		otlp_exporter_t *exp,
+	void otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *exp,
 		otlp_null_transport_status_fn fn,
 		void *ctx);
 
@@ -319,16 +327,17 @@ extern "C"
 	 * Performance: when no callback is installed (default), every
 	 * log site compiles to a NULL-pointer check — zero observable
 	 * overhead in hot paths. */
-	typedef enum {
+	typedef enum
+	{
 		OTLP_LOG_DEBUG = 0,
-		OTLP_LOG_INFO  = 1,
-		OTLP_LOG_WARN  = 2,
+		OTLP_LOG_INFO = 1,
+		OTLP_LOG_WARN = 2,
 		OTLP_LOG_ERROR = 3,
 	} otlp_log_level_t;
 
-	typedef void (*otlp_log_fn)(void		     *ctx,
-				    otlp_log_level_t	      level,
-				    const char		      *message);
+	typedef void (*otlp_log_fn)(void *ctx,
+		otlp_log_level_t level,
+		const char *message);
 
 	/* Install a diagnostic callback. Pass fn=NULL to disable.
 	 * Default: no callback. Safe to call at any time during the
@@ -336,8 +345,8 @@ extern "C"
 	 * callback. */
 	OTLP_C_EXPORT
 	void otlp_exporter_set_logger(otlp_exporter_t *exp,
-				     otlp_log_fn fn,
-				     void	    *ctx);
+		otlp_log_fn fn,
+		void *ctx);
 
 	/* Synchronously encode and POST a single metric to the OTLP
 	 * collector at /v1/metrics. Blocks the calling thread until
@@ -412,7 +421,8 @@ extern "C"
 		uint64_t http_4xx; /* HTTP responses in 4xx (all signals) */
 		uint64_t http_5xx; /* HTTP responses in 5xx (all signals) */
 		uint64_t network_err; /* network failures (all signals) */
-		uint64_t emitted_metrics; /* metrics accepted by emit_metric_move */
+		uint64_t emitted_metrics; /* metrics accepted by
+					     emit_metric_move */
 		uint64_t sent_metrics; /* metrics successfully POSTed */
 		uint64_t dropped_metrics_full; /* metrics dropped: queue full */
 		uint64_t dropped_metrics_err; /* metrics dropped: max retries */

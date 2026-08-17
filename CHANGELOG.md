@@ -4,6 +4,28 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.78] - 2026-08-17
+
+Resource attributes are a map too.
+
+### Fixed — duplicate Resource KeyValues could reach the wire
+
+The five in-object attribute surfaces got map semantics in
+v0.5.73, but resource attributes were copied verbatim from
+`otlp_exporter_opts_t` at create time. Two ways to emit
+non-compliant wire data (OTLP data model: attribute keys MUST be
+unique): duplicate keys in the opts array, and a caller-supplied
+`service.name` resource attr colliding with the auto-emitted one.
+
+`otlp_exporter_create` now normalizes: duplicate keys collapse
+last-write-wins, and a `service.name` entry is dropped when the
+dedicated `service_name` opt is set (the documented field wins;
+with the opt unset the attrs entry is emitted as-is). The replace
+path keeps the exporter-free path safe under mid-replace OOM, and
+a NULL key now fails create explicitly. Two new properties pin the
+behavior via a new test-only accessor
+(`otlp_exporter_get_resource_attrs`, `src/exporter_internal.h`).
+
 ## [0.5.77] - 2026-08-17
 
 Documentation catch-up for the attribute-model arc (docs only).
