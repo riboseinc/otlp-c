@@ -23,6 +23,7 @@
 #include <otlp-c/span.h>
 #include <otlp-c/version.h>
 
+#include "exporter_internal.h"
 #include "exporter_otel.h"
 #include "http_client.h"
 #include "internal_util.h"
@@ -105,7 +106,7 @@ struct otlp_exporter
 
 	/* Optional diagnostic callback (NULL = no-op). */
 	otlp_log_fn log_fn;
-	void       *log_ctx;
+	void *log_ctx;
 
 	/* Tick-private state (no synchronisation needed). */
 	otlp_span_t **pending;
@@ -115,25 +116,25 @@ struct otlp_exporter
 	uint64_t first_pending_mono;
 
 	/* Metric/log pending batches (tick-private). */
-	otlp_metric_t     **metric_pending;
-	size_t		metric_pending_cap;
-	size_t		metric_pending_count;
-	bool		metric_first_set;
-	uint64_t		metric_first_mono;
+	otlp_metric_t **metric_pending;
+	size_t metric_pending_cap;
+	size_t metric_pending_count;
+	bool metric_first_set;
+	uint64_t metric_first_mono;
 	otlp_log_record_t **log_pending;
-	size_t		log_pending_cap;
-	size_t		log_pending_count;
-	bool		log_first_set;
-	uint64_t		log_first_mono;
+	size_t log_pending_cap;
+	size_t log_pending_count;
+	bool log_first_set;
+	uint64_t log_first_mono;
 
 	/* In-flight request state. in_flight_signal identifies which
 	 * signal's batch is being POSTed (0=span, 1=metric, 2=log). */
 	otlp_http_request_t *in_flight;
-	int			 in_flight_signal;
-	size_t			 in_flight_count;
-	uint32_t		 attempt;
-	uint64_t		 backoff_deadline_mono;
-	bool			 backoff_armed;
+	int in_flight_signal;
+	size_t in_flight_count;
+	uint32_t attempt;
+	uint64_t backoff_deadline_mono;
+	bool backoff_armed;
 	/* Cached TCP connection for HTTP keep-alive. Owned by the exporter,
 	 * donated to the next in_flight request, re-acquired on success. */
 	otlp_socket_t *keepalive_sock;
@@ -157,11 +158,11 @@ now_mono_ms(void)
  * the check happens before any formatting work). */
 static void
 otlp_log(const struct otlp_exporter *e,
-	 otlp_log_level_t		 level,
-	 const char			*fmt,
-	 ...)
+	otlp_log_level_t level,
+	const char *fmt,
+	...)
 {
-	char	 buf[256];
+	char buf[256];
 	va_list ap;
 
 	if (!e || !e->log_fn)
@@ -252,9 +253,9 @@ log_free_void(void *p)
 struct signal_drain_path
 {
 	struct mpsc_queue *queue;
-	void	     **pending;
-	size_t	      pending_count;
-	void	   (*free_item)(void *);
+	void **pending;
+	size_t pending_count;
+	void (*free_item)(void *);
 };
 
 /* Drain one signal: pop everything from the queue and free it,
@@ -262,13 +263,21 @@ struct signal_drain_path
 static void
 drain_signal(const struct signal_drain_path *p)
 {
-	void  *item;
+	void *item;
 	size_t i;
 
 	while ((item = mpsc_queue_pop(p->queue)) != NULL)
 		p->free_item(item);
 	for (i = 0; i < p->pending_count; i++)
 		p->free_item(p->pending[i]);
+}
+
+const otlp_resource_attr_t *
+otlp_exporter_get_resource_attrs(const otlp_exporter_t *e, size_t *n)
+{
+	if (n)
+		*n = e ? e->n_resource_attributes : 0;
+	return e ? e->resource_attributes : NULL;
 }
 
 otlp_exporter_t *
@@ -299,10 +308,11 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (o.n_resource_attributes > 0 && o.resource_attributes)
 	{
 		size_t i;
+		bool svc_set = o.service_name && o.service_name[0];
 		/* Overflow check before the count * sizeof multiplication.
 		 * See the v0.5.62/63 integer-overflow audit. */
 		if (o.n_resource_attributes >
-		    SIZE_MAX / sizeof(*e->resource_attributes))
+			SIZE_MAX / sizeof(*e->resource_attributes))
 			goto fail;
 		/* otlp_calloc (not otlp_malloc): the fail path iterates
 		 * every slot and frees key/value pointers. If a partial
@@ -311,28 +321,52 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 		 * otlp_free on garbage pointers is UB. otlp_calloc
 		 * guarantees unset slots are NULL/NULL, which otlp_free
 		 * handles as no-ops. */
-		e->resource_attributes =
-			otlp_calloc(o.n_resource_attributes,
-				    sizeof(*e->resource_attributes));
+		e->resource_attributes = otlp_calloc(o.n_resource_attributes,
+			sizeof(*e->resource_attributes));
 		if (!e->resource_attributes)
 			goto fail;
-		e->n_resource_attributes = o.n_resource_attributes;
+		/* Resource attributes are a map (OTLP data model: keys
+		 * MUST be unique): duplicate keys in opts collapse
+		 * last-write-wins, and a "service.name" entry is dropped
+		 * when the dedicated service_name opt is set — the
+		 * documented field wins, otherwise the attrs entry would
+		 * duplicate the auto-emitted service.name KeyValue
+		 * (v0.5.78). */
+		e->n_resource_attributes = 0;
 		for (i = 0; i < o.n_resource_attributes; i++)
 		{
-			const otlp_resource_attr_t *src = &o.resource_attributes[i];
-			otlp_resource_attr_t       *dst = &e->resource_attributes[i];
+			const otlp_resource_attr_t *src =
+				&o.resource_attributes[i];
+			otlp_resource_attr_t *dst;
+			size_t j;
 
-			dst->key = otlp_dup_str(src->key);
-			if (!dst->key)
+			if (!src->key)
 				goto fail;
-			dst->type       = src->type;
-			dst->int64_val  = src->int64_val;
+			if (svc_set && strcmp(src->key, "service.name") == 0)
+				continue;
+			for (j = 0; j < e->n_resource_attributes; j++)
+				if (strcmp(e->resource_attributes[j].key,
+					    src->key) == 0)
+					break;
+			dst = &e->resource_attributes[j];
+			if (j == e->n_resource_attributes)
+			{
+				dst->key = otlp_dup_str(src->key);
+				if (!dst->key)
+					goto fail;
+				e->n_resource_attributes++;
+			}
+			else
+				otlp_free((char *) dst->value);
+			dst->type = src->type;
+			dst->int64_val = src->int64_val;
 			dst->double_val = src->double_val;
-			dst->bool_val   = src->bool_val;
-			/* Always copy value — for STRING it's the string; for
-			 * other types it's NULL/unused but copying keeps the
-			 * free path uniform (always free key + value). */
-			dst->value = src->value ? otlp_dup_str(src->value) : NULL;
+			dst->bool_val = src->bool_val;
+			/* NULL the value before duplicating so the slot stays
+			 * free-path-safe if the dup fails mid-replace. */
+			dst->value = NULL;
+			dst->value =
+				src->value ? otlp_dup_str(src->value) : NULL;
 			if (src->value && !dst->value)
 				goto fail;
 		}
@@ -352,14 +386,14 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 		goto fail;
 
 	e->metric_pending_cap = e->batch_size * 2;
-	e->metric_pending = otlp_malloc(
-		e->metric_pending_cap * sizeof(*e->metric_pending));
+	e->metric_pending =
+		otlp_malloc(e->metric_pending_cap * sizeof(*e->metric_pending));
 	if (!e->metric_pending)
 		goto fail;
 
 	e->log_pending_cap = e->batch_size * 2;
-	e->log_pending = otlp_malloc(
-		e->log_pending_cap * sizeof(*e->log_pending));
+	e->log_pending =
+		otlp_malloc(e->log_pending_cap * sizeof(*e->log_pending));
 	if (!e->log_pending)
 		goto fail;
 
@@ -374,7 +408,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 		goto fail;
 
 	e->in_flight_signal = 0; /* SPAN */
-	otlp_atomic_store_int(&e->shutdown_requested, 0, OTLP_MEMORY_ORDER_RELEASE);
+	otlp_atomic_store_int(
+		&e->shutdown_requested, 0, OTLP_MEMORY_ORDER_RELEASE);
 	return e;
 
 fail:
@@ -408,26 +443,26 @@ void
 otlp_exporter_free(otlp_exporter_t *e)
 {
 	struct signal_drain_path drains[3];
-	size_t		       i;
+	size_t i;
 
 	if (!e)
 		return;
 	/* Drain queues + free pending batches, all signals. The drain
 	 * is table-driven: adding a 4th signal is one entry, not a
 	 * copy-paste of the while + for pair. */
-	drains[0] = (struct signal_drain_path){
+	drains[0] = (struct signal_drain_path) {
 		.queue = &e->queue,
 		.pending = (void **) e->pending,
 		.pending_count = e->pending_count,
 		.free_item = span_free_void,
 	};
-	drains[1] = (struct signal_drain_path){
+	drains[1] = (struct signal_drain_path) {
 		.queue = &e->metric_queue,
 		.pending = (void **) e->metric_pending,
 		.pending_count = e->metric_pending_count,
 		.free_item = metric_free_void,
 	};
-	drains[2] = (struct signal_drain_path){
+	drains[2] = (struct signal_drain_path) {
 		.queue = &e->log_queue,
 		.pending = (void **) e->log_pending,
 		.pending_count = e->log_pending_count,
@@ -491,8 +526,8 @@ log_clone_void(const void *p)
 struct signal_emit_path
 {
 	struct mpsc_queue *queue;
-	otlp_atomic_u64   *emitted_counter;
-	otlp_atomic_u64   *dropped_full_counter;
+	otlp_atomic_u64 *emitted_counter;
+	otlp_atomic_u64 *dropped_full_counter;
 	void (*free_item)(void *);
 	void *(*clone_item)(const void *);
 	const char *signal_name;
@@ -509,7 +544,8 @@ emit_move_common(struct otlp_exporter *e,
 
 	if (!e || !item)
 		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	if (otlp_atomic_load_int(
+		    &e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 	{
 		/* Honor the move contract: we own the item from call entry.
 		 * The docstring promises the library frees on drop. */
@@ -523,9 +559,11 @@ emit_move_common(struct otlp_exporter *e,
 		p->free_item(item);
 		otlp_atomic_fetch_add_u64(
 			p->dropped_full_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e, OTLP_LOG_WARN,
-			 "%s dropped: queue full (size=%zu)",
-			 p->signal_name, mpsc_queue_size(p->queue));
+		otlp_log(e,
+			OTLP_LOG_WARN,
+			"%s dropped: queue full (size=%zu)",
+			p->signal_name,
+			mpsc_queue_size(p->queue));
 		return st;
 	}
 	otlp_atomic_fetch_add_u64(
@@ -546,7 +584,8 @@ emit_clone_common(struct otlp_exporter *e,
 
 	if (!e || !item)
 		return OTLP_ERR_NULL;
-	if (otlp_atomic_load_int(&e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
+	if (otlp_atomic_load_int(
+		    &e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 		return OTLP_ERR_SHUTDOWN;
 	clone = p->clone_item(item);
 	if (!clone)
@@ -641,7 +680,12 @@ otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
 /* ── tick (single thread) ─────────────────────────────────────── */
 
 /* Signal kind constants (0=span, 1=metric, 2=log). */
-enum { SIGNAL_SPAN = 0, SIGNAL_METRIC = 1, SIGNAL_LOG = 2 };
+enum
+{
+	SIGNAL_SPAN = 0,
+	SIGNAL_METRIC = 1,
+	SIGNAL_LOG = 2
+};
 
 /* Table-driven signal descriptor. Bundles the per-signal state
  * (queue, pending array, timer, start_post function) so tick()
@@ -655,14 +699,14 @@ enum { SIGNAL_SPAN = 0, SIGNAL_METRIC = 1, SIGNAL_LOG = 2 };
  * Adding a new signal = one more paths[] entry (OCP). */
 struct signal_path
 {
-	struct mpsc_queue      *queue;
-	void		      **pending;
-	size_t		       pending_cap;
-	size_t		      *pending_count;
-	bool		      *first_set;
-	uint64_t	      *first_mono;
-	int		       signal_kind;
-	otlp_status_t	      (*start_post)(struct otlp_exporter *e);
+	struct mpsc_queue *queue;
+	void **pending;
+	size_t pending_cap;
+	size_t *pending_count;
+	bool *first_set;
+	uint64_t *first_mono;
+	int signal_kind;
+	otlp_status_t (*start_post)(struct otlp_exporter *e);
 };
 
 /* Per-signal descriptor for the record_outcome path. Bundles the
@@ -674,13 +718,13 @@ struct signal_path
  * to the helpers that need it. */
 struct signal_record_path
 {
-	void	    **pending;
-	size_t	     *pending_count;
-	bool	     *first_set;
-	void	   (*free_item)(void *);
+	void **pending;
+	size_t *pending_count;
+	bool *first_set;
+	void (*free_item)(void *);
 	otlp_atomic_u64 *sent_counter;
 	otlp_atomic_u64 *dropped_err_counter;
-	const char	      *signal_name;
+	const char *signal_name;
 };
 
 /* Look up the record-path descriptor for the in-flight signal. */
@@ -690,7 +734,7 @@ record_path_for(struct otlp_exporter *e)
 	switch (e->in_flight_signal)
 	{
 		case SIGNAL_METRIC:
-			return (struct signal_record_path){
+			return (struct signal_record_path) {
 				.pending = (void **) e->metric_pending,
 				.pending_count = &e->metric_pending_count,
 				.first_set = &e->metric_first_set,
@@ -700,7 +744,7 @@ record_path_for(struct otlp_exporter *e)
 				.signal_name = "metrics",
 			};
 		case SIGNAL_LOG:
-			return (struct signal_record_path){
+			return (struct signal_record_path) {
 				.pending = (void **) e->log_pending,
 				.pending_count = &e->log_pending_count,
 				.first_set = &e->log_first_set,
@@ -711,7 +755,7 @@ record_path_for(struct otlp_exporter *e)
 			};
 		case SIGNAL_SPAN:
 		default:
-			return (struct signal_record_path){
+			return (struct signal_record_path) {
 				.pending = (void **) e->pending,
 				.pending_count = &e->pending_count,
 				.first_set = &e->first_pending_set,
@@ -750,8 +794,9 @@ static void
 add_dropped_err_for_signal(const struct signal_record_path *p,
 	uint64_t in_flight_count)
 {
-	otlp_atomic_fetch_add_u64(
-		p->dropped_err_counter, in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_fetch_add_u64(p->dropped_err_counter,
+		in_flight_count,
+		OTLP_MEMORY_ORDER_RELAXED);
 }
 
 /* Type-erased wrappers around the typed otlp_exporter_otel_build_*
@@ -760,44 +805,80 @@ add_dropped_err_for_signal(const struct signal_record_path *p,
  * localized here; the typed build helpers retain full type safety. */
 static otlp_status_t
 build_span_request_void(const struct otlp_http_url *url,
-	const char *user_agent, const char *service_name,
-	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
-	const void *const *items, size_t n_items,
-	uint32_t connect_to, uint32_t read_to,
-	otlp_socket_t *reuse, otlp_http_request_t **out)
+	const char *user_agent,
+	const char *service_name,
+	const otlp_resource_attr_t *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
 {
-	return otlp_exporter_otel_build_span_request(url, user_agent,
-		service_name, res_attrs, n_res_attrs,
-		(const otlp_span_t *const *) items, n_items,
-		connect_to, read_to, reuse, out);
+	return otlp_exporter_otel_build_span_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_span_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
 }
 
 static otlp_status_t
 build_metric_request_void(const struct otlp_http_url *url,
-	const char *user_agent, const char *service_name,
-	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
-	const void *const *items, size_t n_items,
-	uint32_t connect_to, uint32_t read_to,
-	otlp_socket_t *reuse, otlp_http_request_t **out)
+	const char *user_agent,
+	const char *service_name,
+	const otlp_resource_attr_t *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
 {
-	return otlp_exporter_otel_build_metric_request(url, user_agent,
-		service_name, res_attrs, n_res_attrs,
-		(const otlp_metric_t *const *) items, n_items,
-		connect_to, read_to, reuse, out);
+	return otlp_exporter_otel_build_metric_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_metric_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
 }
 
 static otlp_status_t
 build_log_request_void(const struct otlp_http_url *url,
-	const char *user_agent, const char *service_name,
-	const otlp_resource_attr_t *res_attrs, size_t n_res_attrs,
-	const void *const *items, size_t n_items,
-	uint32_t connect_to, uint32_t read_to,
-	otlp_socket_t *reuse, otlp_http_request_t **out)
+	const char *user_agent,
+	const char *service_name,
+	const otlp_resource_attr_t *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
 {
-	return otlp_exporter_otel_build_log_request(url, user_agent,
-		service_name, res_attrs, n_res_attrs,
-		(const otlp_log_record_t *const *) items, n_items,
-		connect_to, read_to, reuse, out);
+	return otlp_exporter_otel_build_log_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_log_record_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
 }
 
 /* Per-signal descriptor for the start-post path. Bundles the
@@ -806,16 +887,21 @@ build_log_request_void(const struct otlp_http_url *url,
  * table-driven rather than triplicated. */
 struct signal_start_path
 {
-	const void	     *pending;
-	size_t	      pending_count;
-	bool	     *first_set;
-	int		      signal_kind;
-	otlp_status_t	  (*build_request)(const struct otlp_http_url *,
-			       const char *, const char *,
-			       const otlp_resource_attr_t *, size_t,
-			       const void *const *, size_t,
-			       uint32_t, uint32_t,
-			       otlp_socket_t *, otlp_http_request_t **);
+	const void *pending;
+	size_t pending_count;
+	bool *first_set;
+	int signal_kind;
+	otlp_status_t (*build_request)(const struct otlp_http_url *,
+		const char *,
+		const char *,
+		const otlp_resource_attr_t *,
+		size_t,
+		const void *const *,
+		size_t,
+		uint32_t,
+		uint32_t,
+		otlp_socket_t *,
+		otlp_http_request_t **);
 };
 
 /* Encode + start the HTTP POST for whichever signal's descriptor
@@ -832,11 +918,17 @@ try_start_post_common(struct otlp_exporter *e,
 
 	if (e->in_flight || p->pending_count == 0)
 		return OTLP_OK;
-	st = p->build_request(&e->url, e->user_agent, e->service_name,
-		e->resource_attributes, e->n_resource_attributes,
-		(const void *const *) p->pending, p->pending_count,
-		e->connect_timeout_ms, e->read_timeout_ms,
-		e->keepalive_sock, &e->in_flight);
+	st = p->build_request(&e->url,
+		e->user_agent,
+		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
+		(const void *const *) p->pending,
+		p->pending_count,
+		e->connect_timeout_ms,
+		e->read_timeout_ms,
+		e->keepalive_sock,
+		&e->in_flight);
 	if (st != OTLP_OK)
 	{
 		/* Build failed. The donated socket (if any) was closed by
@@ -846,9 +938,9 @@ try_start_post_common(struct otlp_exporter *e,
 		return st;
 	}
 	/* The request now owns the donated socket (if any). */
-	e->keepalive_sock   = NULL;
+	e->keepalive_sock = NULL;
 	e->in_flight_signal = p->signal_kind;
-	e->in_flight_count  = p->pending_count;
+	e->in_flight_count = p->pending_count;
 	/* IMPORTANT: do NOT free the pending batch here. It must stay
 	 * alive until the in-flight request completes successfully or
 	 * is permanently dropped, so retry can re-encode it. The batch
@@ -901,7 +993,7 @@ static void
 record_outcome(struct otlp_exporter *e, int http_status)
 {
 	struct signal_record_path p = record_path_for(e);
-	uint64_t		       count = e->in_flight_count;
+	uint64_t count = e->in_flight_count;
 
 	if (http_status == 0)
 	{
@@ -913,10 +1005,13 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		if (e->attempt > e->max_retries)
 		{
 			add_dropped_err_for_signal(&p, count);
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "network error: %llu %s dropped (max retries %u)",
-				 (unsigned long long) count,
-				 p.signal_name, e->max_retries);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"network error: %llu %s dropped (max retries "
+				"%u)",
+				(unsigned long long) count,
+				p.signal_name,
+				e->max_retries);
 			clear_in_flight_batch(e, &p);
 			return;
 		}
@@ -928,9 +1023,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
-			otlp_log(e, OTLP_LOG_WARN,
-				 "network error; retry %u/%u in %ums",
-				 e->attempt, e->max_retries, delay);
+			otlp_log(e,
+				OTLP_LOG_WARN,
+				"network error; retry %u/%u in %ums",
+				e->attempt,
+				e->max_retries,
+				delay);
 		}
 		return;
 	}
@@ -939,9 +1037,11 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		otlp_atomic_fetch_add_u64(
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 		add_sent_for_signal(&p, count);
-		otlp_log(e, OTLP_LOG_DEBUG,
-			 "batch sent: %llu %s",
-			 (unsigned long long) count, p.signal_name);
+		otlp_log(e,
+			OTLP_LOG_DEBUG,
+			"batch sent: %llu %s",
+			(unsigned long long) count,
+			p.signal_name);
 		/* Success — free the pending batch (kept across retries). */
 		clear_in_flight_batch(e, &p);
 		return;
@@ -954,10 +1054,13 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		if (e->attempt > e->max_retries)
 		{
 			add_dropped_err_for_signal(&p, count);
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "HTTP %d: %llu %s dropped (max retries %u)",
-				 http_status, (unsigned long long) count,
-				 p.signal_name, e->max_retries);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"HTTP %d: %llu %s dropped (max retries %u)",
+				http_status,
+				(unsigned long long) count,
+				p.signal_name,
+				e->max_retries);
 			/* Permanent failure — free the pending batch. */
 			clear_in_flight_batch(e, &p);
 		}
@@ -970,19 +1073,25 @@ record_outcome(struct otlp_exporter *e, int http_status)
 				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
-			otlp_log(e, OTLP_LOG_WARN,
-				 "HTTP %d; retry %u/%u in %ums",
-				 http_status, e->attempt, e->max_retries,
-				 delay);
+			otlp_log(e,
+				OTLP_LOG_WARN,
+				"HTTP %d; retry %u/%u in %ums",
+				http_status,
+				e->attempt,
+				e->max_retries,
+				delay);
 		}
 		return;
 	}
 	/* Permanent 4xx (non-429). */
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 	add_dropped_err_for_signal(&p, count);
-	otlp_log(e, OTLP_LOG_ERROR,
-		 "HTTP %d: %llu %s dropped (permanent)",
-		 http_status, (unsigned long long) count, p.signal_name);
+	otlp_log(e,
+		OTLP_LOG_ERROR,
+		"HTTP %d: %llu %s dropped (permanent)",
+		http_status,
+		(unsigned long long) count,
+		p.signal_name);
 	/* Permanent failure — free the pending batch. */
 	clear_in_flight_batch(e, &p);
 }
@@ -990,10 +1099,10 @@ record_outcome(struct otlp_exporter *e, int http_status)
 otlp_status_t
 otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 {
-	uint64_t		  deadline;
-	bool			  work_done;
-	struct signal_path	  paths[3];
-	int			  s;
+	uint64_t deadline;
+	bool work_done;
+	struct signal_path paths[3];
+	int s;
 
 	if (!e)
 		return OTLP_ERR_NULL;
@@ -1001,9 +1110,9 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 	/* Build the signal descriptor table once. All pointer fields
 	 * point into the exporter struct; mutations through paths[]
 	 * update e directly. */
-	paths[SIGNAL_SPAN] = (struct signal_path){
+	paths[SIGNAL_SPAN] = (struct signal_path) {
 		.queue = &e->queue,
-		.pending = (void **)e->pending,
+		.pending = (void **) e->pending,
 		.pending_cap = e->pending_cap,
 		.pending_count = &e->pending_count,
 		.first_set = &e->first_pending_set,
@@ -1011,9 +1120,9 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		.signal_kind = SIGNAL_SPAN,
 		.start_post = try_start_post,
 	};
-	paths[SIGNAL_METRIC] = (struct signal_path){
+	paths[SIGNAL_METRIC] = (struct signal_path) {
 		.queue = &e->metric_queue,
-		.pending = (void **)e->metric_pending,
+		.pending = (void **) e->metric_pending,
 		.pending_cap = e->metric_pending_cap,
 		.pending_count = &e->metric_pending_count,
 		.first_set = &e->metric_first_set,
@@ -1021,9 +1130,9 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		.signal_kind = SIGNAL_METRIC,
 		.start_post = try_start_metric_post,
 	};
-	paths[SIGNAL_LOG] = (struct signal_path){
+	paths[SIGNAL_LOG] = (struct signal_path) {
 		.queue = &e->log_queue,
-		.pending = (void **)e->log_pending,
+		.pending = (void **) e->log_pending,
 		.pending_cap = e->log_pending_cap,
 		.pending_count = &e->log_pending_count,
 		.first_set = &e->log_first_set,
@@ -1052,7 +1161,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 				if (!*paths[s].first_set)
 				{
 					*paths[s].first_mono = now_mono_ms();
-					*paths[s].first_set  = true;
+					*paths[s].first_set = true;
 				}
 				work_done = true;
 			}
@@ -1067,12 +1176,12 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 				{
 					int http_status = 200;
 
-					e->in_flight_signal = paths[s].signal_kind;
+					e->in_flight_signal =
+						paths[s].signal_kind;
 					e->in_flight_count =
 						*paths[s].pending_count;
 					if (e->null_transport_status_fn)
-						http_status = e
-							->null_transport_status_fn(
+						http_status = e->null_transport_status_fn(
 							e->null_transport_status_ctx);
 					record_outcome(e, http_status);
 					work_done = true;
@@ -1084,21 +1193,21 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		/* 3. Start POST if batch ready (by priority). */
 		if (!e->in_flight && !e->backoff_armed)
 		{
-			bool	   shutdown =
+			bool shutdown =
 				otlp_atomic_load_int(&e->shutdown_requested,
 					OTLP_MEMORY_ORDER_RELAXED);
-			uint64_t   now_ms = now_mono_ms();
+			uint64_t now_ms = now_mono_ms();
 
 			for (s = 0; s < 3; s++)
 			{
 				if (e->in_flight || e->backoff_armed)
 					break;
 				if (*paths[s].pending_count >= e->batch_size ||
-				    (*paths[s].first_set &&
-				     now_ms - *paths[s].first_mono >=
-					     e->batch_ms) ||
-				    (shutdown &&
-				     *paths[s].pending_count > 0))
+					(*paths[s].first_set &&
+						now_ms - *paths[s].first_mono >=
+							e->batch_ms) ||
+					(shutdown &&
+						*paths[s].pending_count > 0))
 				{
 					if (paths[s].start_post(e) == OTLP_OK)
 						work_done = true;
@@ -1109,7 +1218,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		/* 4. Step in-flight request. */
 		if (e->in_flight)
 		{
-			otlp_status_t	     st = otlp_http_request_step(e->in_flight);
+			otlp_status_t st = otlp_http_request_step(e->in_flight);
 			otlp_http_req_state_t s2 =
 				otlp_http_request_state(e->in_flight);
 
@@ -1126,18 +1235,18 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 							e->in_flight);
 				record_outcome(e, status);
 				otlp_http_request_free(e->in_flight);
-				e->in_flight       = NULL;
+				e->in_flight = NULL;
 				e->in_flight_count = 0;
 				if (status != 0 &&
-				    (status < 200 || status >= 300) &&
-				    e->keepalive_sock)
+					(status < 200 || status >= 300) &&
+					e->keepalive_sock)
 				{
 					otlp_socket_close(e->keepalive_sock);
 					e->keepalive_sock = NULL;
 				}
 			}
 			work_done = true;
-			(void)st;
+			(void) st;
 		}
 
 		/* 5. Backoff retry (table-driven via paths[]). */
@@ -1163,7 +1272,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 #if defined(_WIN32)
 			Sleep(1);
 #else
-			struct timespec ts = {0, 1 * 1000 * 1000};
+			struct timespec ts = { 0, 1 * 1000 * 1000 };
 			nanosleep(&ts, NULL);
 #endif
 		}
@@ -1189,11 +1298,11 @@ otlp_exporter_flush(otlp_exporter_t *e)
 		otlp_exporter_tick(e, 100);
 		now = now_mono_ms();
 	} while ((e->pending_count > 0 || e->in_flight ||
-		 mpsc_queue_size(&e->queue) > 0 ||
-		 e->metric_pending_count > 0 ||
-		 mpsc_queue_size(&e->metric_queue) > 0 ||
-		 e->log_pending_count > 0 ||
-		 mpsc_queue_size(&e->log_queue) > 0) &&
+			 mpsc_queue_size(&e->queue) > 0 ||
+			 e->metric_pending_count > 0 ||
+			 mpsc_queue_size(&e->metric_queue) > 0 ||
+			 e->log_pending_count > 0 ||
+			 mpsc_queue_size(&e->log_queue) > 0) &&
 		now < deadline);
 
 	/* The return-status check must match the loop condition. The
@@ -1204,10 +1313,10 @@ otlp_exporter_flush(otlp_exporter_t *e)
 	 * Pre-v0.5.58 this check omitted the queue sizes, so flush
 	 * could silently return OK with unsent items. */
 	if (e->pending_count > 0 || e->in_flight ||
-	    e->metric_pending_count > 0 || e->log_pending_count > 0 ||
-	    mpsc_queue_size(&e->queue) > 0 ||
-	    mpsc_queue_size(&e->metric_queue) > 0 ||
-	    mpsc_queue_size(&e->log_queue) > 0)
+		e->metric_pending_count > 0 || e->log_pending_count > 0 ||
+		mpsc_queue_size(&e->queue) > 0 ||
+		mpsc_queue_size(&e->metric_queue) > 0 ||
+		mpsc_queue_size(&e->log_queue) > 0)
 		return OTLP_ERR_NETWORK;
 	return OTLP_OK;
 }
@@ -1221,11 +1330,12 @@ otlp_exporter_set_null_transport(otlp_exporter_t *e, bool enabled)
 
 void
 otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *e,
-					   otlp_null_transport_status_fn fn,
-					   void *ctx)
+	otlp_null_transport_status_fn fn,
+	void *ctx)
 {
-	if (e) {
-		e->null_transport_status_fn  = fn;
+	if (e)
+	{
+		e->null_transport_status_fn = fn;
 		e->null_transport_status_ctx = ctx;
 	}
 }
@@ -1233,8 +1343,9 @@ otlp_exporter_set_null_transport_status_fn(otlp_exporter_t *e,
 void
 otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
 {
-	if (e) {
-		e->log_fn  = fn;
+	if (e)
+	{
+		e->log_fn = fn;
 		e->log_ctx = ctx;
 	}
 }
@@ -1248,65 +1359,85 @@ otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
  * budget. A non-2xx response is permanent for the sync path. */
 static otlp_status_t
 flush_post_once(struct otlp_exporter *e,
-		const struct otlp_http_url *url,
-		const char		 *path,
-		const uint8_t		 *body,
-		size_t			  body_len,
-		bool			 *got_response)
+	const struct otlp_http_url *url,
+	const char *path,
+	const uint8_t *body,
+	size_t body_len,
+	bool *got_response)
 {
-	otlp_http_request_t      *req = NULL;
-	otlp_status_t		st;
-	uint64_t			deadline;
-	uint64_t			now;
+	otlp_http_request_t *req = NULL;
+	otlp_status_t st;
+	uint64_t deadline;
+	uint64_t now;
 	struct otlp_http_url u;
 
 	u = *url;
 	snprintf(u.path, sizeof(u.path), "%s", path);
-	st = otlp_http_request_start(&req, &u, e->user_agent, body, body_len,
-				      e->connect_timeout_ms, e->read_timeout_ms);
+	st = otlp_http_request_start(&req,
+		&u,
+		e->user_agent,
+		body,
+		body_len,
+		e->connect_timeout_ms,
+		e->read_timeout_ms);
 	if (st != OTLP_OK)
 	{
-		otlp_log(e, OTLP_LOG_ERROR,
-			 "sync flush %s: request start failed (st=%d)",
-			 path, (int) st);
+		otlp_log(e,
+			OTLP_LOG_ERROR,
+			"sync flush %s: request start failed (st=%d)",
+			path,
+			(int) st);
 		return st;
 	}
 	deadline = now_mono_ms() + e->flush_timeout_ms;
-	for (;;) {
+	for (;;)
+	{
 		st = otlp_http_request_step(req);
 		otlp_http_req_state_t s = otlp_http_request_state(req);
 
-		if (s == OTLP_HTTP_REQ_DONE) {
+		if (s == OTLP_HTTP_REQ_DONE)
+		{
 			int http = otlp_http_request_http_status(req);
 
 			otlp_http_request_free(req);
 			*got_response = true;
 			if (http >= 200 && http < 300)
 				return OTLP_OK;
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "sync flush %s: HTTP %d", path, http);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"sync flush %s: HTTP %d",
+				path,
+				http);
 			return OTLP_ERR_NETWORK;
 		}
-		if (s == OTLP_HTTP_REQ_FAILED) {
+		if (s == OTLP_HTTP_REQ_FAILED)
+		{
 			otlp_http_request_free(req);
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "sync flush %s: request failed (network)",
-				 path);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"sync flush %s: request failed (network)",
+				path);
 			return OTLP_ERR_NETWORK;
 		}
-		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK) {
+		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK)
+		{
 			otlp_http_request_free(req);
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "sync flush %s: step failed (st=%d)",
-				 path, (int) st);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"sync flush %s: step failed (st=%d)",
+				path,
+				(int) st);
 			return st;
 		}
 		now = now_mono_ms();
-		if (now >= deadline) {
+		if (now >= deadline)
+		{
 			otlp_http_request_free(req);
-			otlp_log(e, OTLP_LOG_ERROR,
-				 "sync flush %s: timeout after %ums",
-				 path, e->flush_timeout_ms);
+			otlp_log(e,
+				OTLP_LOG_ERROR,
+				"sync flush %s: timeout after %ums",
+				path,
+				e->flush_timeout_ms);
 			return OTLP_ERR_TIMEOUT;
 		}
 #if defined(_WIN32)
@@ -1324,13 +1455,13 @@ flush_post_once(struct otlp_exporter *e,
 
 static otlp_status_t
 flush_sync(struct otlp_exporter *e,
-	   const char		       *path,
-	   const uint8_t	       *body,
-	   size_t			body_len)
+	const char *path,
+	const uint8_t *body,
+	size_t body_len)
 {
-	otlp_status_t	st = OTLP_ERR_NETWORK;
-	bool		got_response = false;
-	uint32_t	attempt;
+	otlp_status_t st = OTLP_ERR_NETWORK;
+	bool got_response = false;
+	uint32_t attempt;
 
 	if (!e || !path || (!body && body_len > 0))
 		return OTLP_ERR_NULL;
@@ -1345,8 +1476,8 @@ flush_sync(struct otlp_exporter *e,
 	 * timeouts are permanent (no retry). */
 	for (attempt = 0; attempt <= e->max_retries; attempt++)
 	{
-		st = flush_post_once(e, &e->url, path, body, body_len,
-				     &got_response);
+		st = flush_post_once(
+			e, &e->url, path, body, body_len, &got_response);
 		if (st == OTLP_OK || got_response)
 			return st;
 		if (attempt < e->max_retries)
@@ -1354,18 +1485,21 @@ flush_sync(struct otlp_exporter *e,
 			uint32_t delay = e->backoff_initial_ms;
 
 			if (delay > 100)
-				delay = 100;  /* sync path: short backoff */
-			otlp_log(e, OTLP_LOG_WARN,
-				 "sync flush %s: transient failure; "
-				 "retry %u/%u in %ums",
-				 path, attempt + 1, e->max_retries, delay);
+				delay = 100; /* sync path: short backoff */
+			otlp_log(e,
+				OTLP_LOG_WARN,
+				"sync flush %s: transient failure; "
+				"retry %u/%u in %ums",
+				path,
+				attempt + 1,
+				e->max_retries,
+				delay);
 #if defined(_WIN32)
 			Sleep(delay);
 #else
 			{
-				struct timespec ts = {
-					0, (long) delay * 1000 * 1000
-				};
+				struct timespec ts = { 0,
+					(long) delay * 1000 * 1000 };
 				nanosleep(&ts, NULL);
 			}
 #endif
@@ -1378,7 +1512,7 @@ otlp_status_t
 otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 {
 	struct otlp_pb_buf body = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 	const otlp_metric_t *arr[1];
 
 	if (!e || !m)
@@ -1391,15 +1525,19 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		/* Accounting invariant: emitted == sent + dropped_err.
 		 * Pre-v0.5.59 this path returned without updating
 		 * dropped_err, breaking the invariant under OOM. */
-		otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
-			1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_metrics_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
 	arr[0] = m;
-	st = otlp_encode_export_metrics_service_request(
-		&body, e->service_name,
-		e->resource_attributes, e->n_resource_attributes,
-		NULL, NULL, arr, 1);
+	st = otlp_encode_export_metrics_service_request(&body,
+		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
+		NULL,
+		NULL,
+		arr,
+		1);
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/metrics", body.data, body.len);
 	otlp_pb_buf_free(&body);
@@ -1407,8 +1545,8 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		otlp_atomic_fetch_add_u64(
 			&e->sent_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
 	else
-		otlp_atomic_fetch_add_u64(&e->dropped_metrics_err,
-			1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_metrics_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
@@ -1416,7 +1554,7 @@ otlp_status_t
 otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 {
 	struct otlp_pb_buf body = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 	const otlp_log_record_t *arr[1];
 
 	if (!e || !lr)
@@ -1429,15 +1567,19 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		/* Accounting invariant: emitted == sent + dropped_err.
 		 * Pre-v0.5.59 this path returned without updating
 		 * dropped_err, breaking the invariant under OOM. */
-		otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
-			1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_logs_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
 	arr[0] = lr;
-	st = otlp_encode_export_logs_service_request(
-		&body, e->service_name,
-		e->resource_attributes, e->n_resource_attributes,
-		NULL, NULL, arr, 1);
+	st = otlp_encode_export_logs_service_request(&body,
+		e->service_name,
+		e->resource_attributes,
+		e->n_resource_attributes,
+		NULL,
+		NULL,
+		arr,
+		1);
 	if (st == OTLP_OK)
 		st = flush_sync(e, "/v1/logs", body.data, body.len);
 	otlp_pb_buf_free(&body);
@@ -1445,8 +1587,8 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		otlp_atomic_fetch_add_u64(
 			&e->sent_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
 	else
-		otlp_atomic_fetch_add_u64(&e->dropped_logs_err,
-			1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(
+			&e->dropped_logs_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
@@ -1455,7 +1597,8 @@ otlp_exporter_shutdown(otlp_exporter_t *e)
 {
 	if (!e)
 		return OTLP_ERR_NULL;
-	otlp_atomic_store_int(&e->shutdown_requested, 1, OTLP_MEMORY_ORDER_RELEASE);
+	otlp_atomic_store_int(
+		&e->shutdown_requested, 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 }
 
@@ -1488,11 +1631,12 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 {
 	if (!e || !out)
 		return OTLP_ERR_NULL;
-	out->emitted = otlp_atomic_load_u64(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_full =
-		otlp_atomic_load_u64(&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_err =
-		otlp_atomic_load_u64(&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted =
+		otlp_atomic_load_u64(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_full = otlp_atomic_load_u64(
+		&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_err = otlp_atomic_load_u64(
+		&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
 	out->sent = otlp_atomic_load_u64(&e->sent, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_2xx =
 		otlp_atomic_load_u64(&e->http_2xx, OTLP_MEMORY_ORDER_RELAXED);
@@ -1500,23 +1644,23 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 		otlp_atomic_load_u64(&e->http_4xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_5xx =
 		otlp_atomic_load_u64(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
-	out->network_err =
-		otlp_atomic_load_u64(&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->emitted_metrics =
-		otlp_atomic_load_u64(&e->emitted_metrics, OTLP_MEMORY_ORDER_RELAXED);
-	out->sent_metrics =
-		otlp_atomic_load_u64(&e->sent_metrics, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_metrics_full =
-		otlp_atomic_load_u64(&e->dropped_metrics_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_metrics_err =
-		otlp_atomic_load_u64(&e->dropped_metrics_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->emitted_logs =
-		otlp_atomic_load_u64(&e->emitted_logs, OTLP_MEMORY_ORDER_RELAXED);
+	out->network_err = otlp_atomic_load_u64(
+		&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted_metrics = otlp_atomic_load_u64(
+		&e->emitted_metrics, OTLP_MEMORY_ORDER_RELAXED);
+	out->sent_metrics = otlp_atomic_load_u64(
+		&e->sent_metrics, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_metrics_full = otlp_atomic_load_u64(
+		&e->dropped_metrics_full, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_metrics_err = otlp_atomic_load_u64(
+		&e->dropped_metrics_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->emitted_logs = otlp_atomic_load_u64(
+		&e->emitted_logs, OTLP_MEMORY_ORDER_RELAXED);
 	out->sent_logs =
 		otlp_atomic_load_u64(&e->sent_logs, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_logs_full =
-		otlp_atomic_load_u64(&e->dropped_logs_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_logs_err =
-		otlp_atomic_load_u64(&e->dropped_logs_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_logs_full = otlp_atomic_load_u64(
+		&e->dropped_logs_full, OTLP_MEMORY_ORDER_RELAXED);
+	out->dropped_logs_err = otlp_atomic_load_u64(
+		&e->dropped_logs_err, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
