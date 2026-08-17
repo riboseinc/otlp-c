@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.77] - 2026-08-17
+
+Documentation catch-up for the attribute-model arc (docs only).
+
+### Fixed — stale documentation across nine releases of API surface
+
+- `docs/roadmap.md`: version table extended through v0.5.76 (PR
+  numbers verified against the merge history), key-metrics block
+  refreshed (116 TODOs, 36 tests, 37+ bugs, span struct 176 B,
+  ~150 ns/span emit), plus an attribute-model-arc summary.
+- `docs/otlp-spec.md`: the AnyValue section claimed ArrayValue /
+  KeyValueList were "tracked as P2" — now documents the full oneof,
+  the composite setters, the `otlp_value_t` input model, and the
+  map (unique keys, last write wins) semantics.
+- `README.md`: feature list gained the attribute bullet (full
+  AnyValue set on all five surfaces, map semantics, grow-on-demand
+  storage).
+- `CLAUDE.md`: key-files table gained `value.h`; conventions
+  document the shared attribute-vector model and the
+  build-then-attach contract; implementing-agent notes cover the
+  five-surface × seven-type matrix.
+- `docs/cookbook.md`: new composite-attributes section with array +
+  kvlist examples.
+
+No code changes; build and full test suite run as the gate.
+
 ## [0.5.76] - 2026-08-17
 
 Span events/links grow on demand; span struct 176 bytes (was 5,776).

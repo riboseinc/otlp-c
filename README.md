@@ -74,6 +74,12 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
   events (queue full, HTTP error, retry, drop, success).
 - **Sampler**: pluggable vtable with always_on, always_off, and
   deterministic trace_id_ratio_based built-ins.
+- **Attributes**: the full OTLP AnyValue set — string, bool,
+  int64, double, bytes, and composite ArrayValue / KeyValueList
+  (via the public `otlp_value_t` type) — on spans, events, links,
+  metrics, and log records. Map semantics: re-setting a key
+  replaces its value. Storage is grow-on-demand: objects pay for
+  the attributes they carry, not fixed-cap arrays.
 - **Resource attributes**: typed (string/int64/double/bool) on
   every batch's Resource.
 - **Slab allocator**: fixed-slot memory pool with malloc fallback.

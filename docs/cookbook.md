@@ -423,7 +423,34 @@ otlp_metric_set_monotonic(m, false);
 
 Defaults: CUMULATIVE temporality, is_monotonic = true.
 
-## 16. Configurable flush timeout (v0.5.21)
+## 16. Composite attributes — arrays and maps (v0.5.74+)
+
+AnyValue arrays and KeyValueLists use the public `otlp_value_t`
+scalar type (`include/otlp-c/value.h`); the library deep-copies:
+
+```c
+const otlp_value_t tags[3] = {
+    {.type = OTLP_VALUE_STRING, .v = {.string_val = "prod"}},
+    {.type = OTLP_VALUE_INT64,  .v = {.int64_val = 7}},
+    {.type = OTLP_VALUE_BOOL,   .v = {.bool_val = true}},
+};
+otlp_span_set_attribute_array(span, "env.tags", tags, 3);
+
+const otlp_kv_t dims[2] = {
+    {.key = "region", .value = {.type = OTLP_VALUE_STRING,
+                                .v = {.string_val = "eu"}}},
+    {.key = "shard",  .value = {.type = OTLP_VALUE_INT64,
+                                .v = {.int64_val = 3}}},
+};
+otlp_span_set_attribute_kvlist(span, "env.dims", dims, 2);
+```
+
+Re-setting a key replaces its whole value — attributes are a map
+(v0.5.73), and the type may change between writes. The same
+setters exist on metrics, log records, and (per most-recently
+added) span events and links.
+
+## 17. Configurable flush timeout (v0.5.21)
 
 ```c
 otlp_exporter_opts_t opts = {0};

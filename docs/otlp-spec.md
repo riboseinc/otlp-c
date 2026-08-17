@@ -290,9 +290,14 @@ message AnyValue {
 }
 ```
 
-`otlp-c` v0.1.0 supports `string`, `bool`, `int64`, `double`,
-`bytes`. Nested values (`ArrayValue`, `KeyValueList`) are tracked
-as P2.
+`otlp-c` supports the full oneof: `string`, `bool`, `int64`,
+`double`, `bytes`, and the composite `ArrayValue` /
+`KeyValueList` (via the `*_set_attribute_array` /
+`*_set_attribute_kvlist` setters, which take flat arrays of the
+public `otlp_value_t` scalar type — see `include/otlp-c/value.h`;
+nesting composites inside composites is not expressible through
+the public API). Attribute keys are unique per object: setting an
+existing key replaces its value (last write wins, v0.5.73).
 
 ### Event
 
