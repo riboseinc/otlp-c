@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.79] - 2026-08-17
+
+One set-attribute engine (internal; behavior unchanged).
+
+### Changed — all 29 attribute setters delegate to one engine
+
+Every public `*_set_attribute_*` setter hand-rolled the same flow —
+null guards, value pre-duplication, upsert reserve, typed fill,
+failure cleanup — across 29 setters in three files. The v0.5.75
+NULL-guard bug was possible precisely because a guard lived in one
+of those copies. Three engine entry points in `internal_util` now
+own the flow (`otlp_attr_vec_set` for scalars;
+`otlp_attr_vec_set_array` / `_set_kvlist` for composites,
+build-then-attach), and every setter on every surface is a thin
+typed wrapper over a stack `otlp_value_t`. The event/link slot
+helpers are deleted. Net −145 lines.
+
+Semantics are byte-identical (same error codes and ordering);
+verified by the unchanged 36-test suite, 20k-iteration property
+runs, ASAN + LeakSanitizer, and unchanged benchmarks.
+
 ## [0.5.78] - 2026-08-17
 
 Resource attributes are a map too.

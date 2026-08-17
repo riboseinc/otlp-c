@@ -111,6 +111,44 @@ otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
 	const char *key,
 	struct otlp_attribute **out);
 
+/* ── The set-attribute engine ───────────────────────────────────
+ *
+ * Every public *_set_attribute_* setter on every surface (span,
+ * event, link, metric, log record) is a thin typed wrapper over
+ * these three entry points — one owner for the whole flow (null
+ * guards, value pre-duplication, upsert reserve, non-failing
+ * fill). DRY: a guard or OOM bug can exist in one place, not
+ * twenty-nine. OCP: a new value type extends the engine, and the
+ * typed wrappers stay two-liners.
+ */
+
+/* Set `key` to the scalar `v` (upsert; see reserve). The value is
+ * copied — string/bytes payloads are duplicated before the slot
+ * is committed, so the fill cannot fail. */
+otlp_status_t
+otlp_attr_vec_set(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_value_t *v);
+
+/* Set `key` to an ArrayValue built from `n` scalar values
+ * (deep-copied). Same upsert semantics. */
+otlp_status_t
+otlp_attr_vec_set_array(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n);
+
+/* Set `key` to a KeyValueList built from `n` entries
+ * (deep-copied). Same upsert semantics. */
+otlp_status_t
+otlp_attr_vec_set_kvlist(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n);
+
 /* Deep-copy `src` into `dst` as an exact-fit vector (n slots, no
  * spare capacity — a later append grows it). On success dst owns
  * the copy. On failure everything is freed and dst is empty. */

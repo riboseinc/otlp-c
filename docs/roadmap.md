@@ -130,6 +130,8 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.74 | **ARRAY/KVLIST attributes end-to-end + fix: composite AnyValue frames were malformed** (missing LEN prefix) | #105 |
 | 0.5.75 | Grow-on-demand attribute vectors everywhere; span struct 5.8KB; 1-attr span ~4× faster + **fix: NULL-span setter guards** | #106 |
 | 0.5.76 | Span events/links grow on demand; **span struct 176 bytes** (789× smaller than v0.5.67); emit ~150 ns/span | #107 |
+| 0.5.77 | Documentation catch-up for the attribute-model arc | #108 |
+| 0.5.78 | **Resource attributes are a map** (duplicate opts keys / service.name collisions emitted non-compliant wire data) | #109 |
 
 **Key metrics (v0.5.76):** 116 TODOs complete, 36 tests, **37+
 distinct bugs found and fixed**, all sanitizers green, zero

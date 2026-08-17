@@ -227,8 +227,11 @@ property tests catch regressions in the encoder immediately.
   cost tracks actual use (empty objects pay pointers, not
   cap-sized arrays). Composite values (ARRAY/KVLIST) come from the
   public `otlp_value_t` / `otlp_kv_t` via the `*_set_attribute_
-  {array,kvlist}` setters — build-then-attach keeps the
-  reserve-and-fill contract (fills never fail).
+  {array,kvlist}` setters. One set-attribute engine
+  (`otlp_attr_vec_set` / `_set_array` / `_set_kvlist` in
+  internal_util) owns the whole flow — every public setter is a
+  thin typed wrapper, so guard/OOM semantics exist in exactly one
+  place.
 
 ## CI
 

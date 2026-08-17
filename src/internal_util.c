@@ -614,6 +614,139 @@ otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
 	return OTLP_OK;
 }
 
+/* ── The set-attribute engine ─────────────────────────────────── */
+
+otlp_status_t
+otlp_attr_vec_set(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_value_t *v)
+{
+	struct otlp_attribute *a;
+	char *s_copy = NULL;
+	uint8_t *b_copy = NULL;
+	size_t b_len = 0;
+	otlp_status_t st;
+
+	if (!vec || !key || !v)
+		return OTLP_ERR_NULL;
+	/* Owned payloads are duplicated BEFORE the reserve: the slot
+	 * is committed by reserve, so the fill must not fail. */
+	switch (v->type)
+	{
+		case OTLP_VALUE_STRING:
+			s_copy = otlp_dup_str(
+				v->v.string_val ? v->v.string_val : "");
+			if (!s_copy)
+				return OTLP_ERR_NOMEM;
+			break;
+		case OTLP_VALUE_BYTES:
+			b_len = v->v.bytes_val.len;
+			if (b_len > 0 && !v->v.bytes_val.data)
+				return OTLP_ERR_NULL;
+			if (b_len > 0)
+			{
+				b_copy = otlp_dup_bytes(
+					v->v.bytes_val.data, b_len);
+				if (!b_copy)
+					return OTLP_ERR_NOMEM;
+			}
+			break;
+		case OTLP_VALUE_BOOL:
+		case OTLP_VALUE_INT64:
+		case OTLP_VALUE_DOUBLE:
+			break;
+		default:
+			return OTLP_ERR_INVALID_ARGUMENT;
+	}
+	st = otlp_attr_vec_reserve(vec, max, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_free(s_copy);
+		otlp_free(b_copy);
+		return st;
+	}
+	switch (v->type)
+	{
+		case OTLP_VALUE_STRING:
+			a->type = OTLP_ATTR_STRING;
+			a->v.string_val = s_copy;
+			break;
+		case OTLP_VALUE_BYTES:
+			a->type = OTLP_ATTR_BYTES;
+			a->v.bytes_val.data = b_copy;
+			a->v.bytes_val.len = b_len;
+			break;
+		case OTLP_VALUE_BOOL:
+			a->type = OTLP_ATTR_BOOL;
+			a->v.bool_val = v->v.bool_val;
+			break;
+		case OTLP_VALUE_INT64:
+			a->type = OTLP_ATTR_INT64;
+			a->v.int64_val = v->v.int64_val;
+			break;
+		default:
+			a->type = OTLP_ATTR_DOUBLE;
+			a->v.double_val = v->v.double_val;
+			break;
+	}
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_attr_vec_set_array(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_value_t *items,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_array *arr;
+	otlp_status_t st;
+
+	if (!vec || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_array_build(items, n, &arr);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_attr_vec_reserve(vec, max, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_array_free(arr);
+		return st;
+	}
+	a->type = OTLP_ATTR_ARRAY;
+	a->v.array_val = arr;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_attr_vec_set_kvlist(struct otlp_attr_vec *vec,
+	size_t max,
+	const char *key,
+	const otlp_kv_t *entries,
+	size_t n)
+{
+	struct otlp_attribute *a;
+	struct otlp_attr_kvlist *kvl;
+	otlp_status_t st;
+
+	if (!vec || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_kvlist_build(entries, n, &kvl);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_attr_vec_reserve(vec, max, key, &a);
+	if (st != OTLP_OK)
+	{
+		otlp_attr_kvlist_free(kvl);
+		return st;
+	}
+	a->type = OTLP_ATTR_KVLIST;
+	a->v.kvlist_val = kvl;
+	return OTLP_OK;
+}
+
 otlp_status_t
 otlp_attr_vec_copy(struct otlp_attr_vec *dst, const struct otlp_attr_vec *src)
 {
