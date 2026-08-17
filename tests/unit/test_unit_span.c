@@ -23,10 +23,11 @@
 static int
 test_span_struct_size(void)
 {
-	/* 8.8KB at v0.5.68 (span attrs inline: 4KB; event/link
-	 * headers: ~4.6KB). 16KB is a generous ceiling that still
-	 * catches a return to inline-array growth. */
-	assert(otlp_span_struct_size() <= 16 * 1024);
+	/* 5.8KB at v0.5.75 (span attrs became a grow-on-demand vec;
+	 * event/link headers dominate: ~40B x 128 slots). 8KB is a
+	 * generous ceiling that still catches a return to inline
+	 * attribute arrays. */
+	assert(otlp_span_struct_size() <= 8 * 1024);
 	printf("[unit-span] sizeof(otlp_span)=%zu bytes\n",
 		otlp_span_struct_size());
 	return 0;
@@ -278,16 +279,16 @@ test_event_typed_attributes(void)
 	assert(otlp_span_set_event_attribute_bytes(span, "ctx", payload, 2) ==
 		OTLP_OK);
 	ev = otlp_span_get_events(span, &n);
-	assert(n == 1 && ev[0].n_attrs == 4);
-	assert(ev[0].attrs[0].type == OTLP_ATTR_INT64);
-	assert(ev[0].attrs[0].v.int64_val == 3);
-	assert(ev[0].attrs[1].type == OTLP_ATTR_DOUBLE);
-	assert(ev[0].attrs[1].v.double_val == 0.5);
-	assert(ev[0].attrs[2].type == OTLP_ATTR_BOOL);
-	assert(ev[0].attrs[2].v.bool_val == true);
-	assert(ev[0].attrs[3].type == OTLP_ATTR_BYTES);
-	assert(ev[0].attrs[3].v.bytes_val.len == 2);
-	assert(ev[0].attrs[3].v.bytes_val.data[1] == 0xff);
+	assert(n == 1 && ev[0].attrs.n == 4);
+	assert(ev[0].attrs.items[0].type == OTLP_ATTR_INT64);
+	assert(ev[0].attrs.items[0].v.int64_val == 3);
+	assert(ev[0].attrs.items[1].type == OTLP_ATTR_DOUBLE);
+	assert(ev[0].attrs.items[1].v.double_val == 0.5);
+	assert(ev[0].attrs.items[2].type == OTLP_ATTR_BOOL);
+	assert(ev[0].attrs.items[2].v.bool_val == true);
+	assert(ev[0].attrs.items[3].type == OTLP_ATTR_BYTES);
+	assert(ev[0].attrs.items[3].v.bytes_val.len == 2);
+	assert(ev[0].attrs.items[3].v.bytes_val.data[1] == 0xff);
 	otlp_span_free(span);
 	return 0;
 }
@@ -312,16 +313,16 @@ test_link_typed_attributes(void)
 	assert(otlp_span_set_link_attribute_bytes(span, "tag", payload, 2) ==
 		OTLP_OK);
 	lk = otlp_span_get_links(span, &n);
-	assert(n == 1 && lk[0].n_attrs == 4);
-	assert(lk[0].attrs[0].type == OTLP_ATTR_INT64);
-	assert(lk[0].attrs[0].v.int64_val == 9);
-	assert(lk[0].attrs[1].type == OTLP_ATTR_DOUBLE);
-	assert(lk[0].attrs[1].v.double_val == 1.25);
-	assert(lk[0].attrs[2].type == OTLP_ATTR_BOOL);
-	assert(lk[0].attrs[2].v.bool_val == false);
-	assert(lk[0].attrs[3].type == OTLP_ATTR_BYTES);
-	assert(lk[0].attrs[3].v.bytes_val.len == 2);
-	assert(lk[0].attrs[3].v.bytes_val.data[0] == 0x0a);
+	assert(n == 1 && lk[0].attrs.n == 4);
+	assert(lk[0].attrs.items[0].type == OTLP_ATTR_INT64);
+	assert(lk[0].attrs.items[0].v.int64_val == 9);
+	assert(lk[0].attrs.items[1].type == OTLP_ATTR_DOUBLE);
+	assert(lk[0].attrs.items[1].v.double_val == 1.25);
+	assert(lk[0].attrs.items[2].type == OTLP_ATTR_BOOL);
+	assert(lk[0].attrs.items[2].v.bool_val == false);
+	assert(lk[0].attrs.items[3].type == OTLP_ATTR_BYTES);
+	assert(lk[0].attrs.items[3].v.bytes_val.len == 2);
+	assert(lk[0].attrs.items[3].v.bytes_val.data[0] == 0x0a);
 	otlp_span_free(span);
 	return 0;
 }

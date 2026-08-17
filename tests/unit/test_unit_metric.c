@@ -22,9 +22,10 @@
 static int
 test_metric_struct_size(void)
 {
-	/* 224 bytes at v0.5.69. 1KB is a generous ceiling that still
-	 * catches a return to the inline-array layout. */
-	assert(otlp_metric_struct_size() <= 1024);
+	/* 232 bytes at v0.5.75 (vec adds a capacity field). 512B is a
+	 * generous ceiling that still catches a return to the
+	 * inline-array layout. */
+	assert(otlp_metric_struct_size() <= 512);
 	printf("[unit-metric] sizeof(otlp_metric)=%zu bytes\n",
 		otlp_metric_struct_size());
 	return 0;

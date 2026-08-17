@@ -452,8 +452,8 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 			if (st == OTLP_OK)
 				st = otlp_emit_attributes(&ev,
 					EVENT_F_ATTRIBUTES,
-					events[i].attrs,
-					events[i].n_attrs);
+					events[i].attrs.items,
+					events[i].attrs.n);
 			if (st == OTLP_OK)
 				st = otlp_pb_field_message(
 					out, SPAN_F_EVENTS, ev.data, ev.len);
@@ -487,8 +487,8 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span)
 			if (st == OTLP_OK)
 				st = otlp_emit_attributes(&lk,
 					LINK_F_ATTRIBUTES,
-					links[i].attrs,
-					links[i].n_attrs);
+					links[i].attrs.items,
+					links[i].attrs.n);
 			if (st == OTLP_OK)
 				st = otlp_pb_field_message(
 					out, SPAN_F_LINKS, lk.data, lk.len);

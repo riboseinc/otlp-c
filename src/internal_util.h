@@ -20,6 +20,7 @@
 struct otlp_attribute;
 struct otlp_attr_array;
 struct otlp_attr_kvlist;
+struct otlp_attr_vec;
 
 /* ── Custom-allocator-backed wrappers ───────────────────────────
  *
@@ -53,9 +54,8 @@ otlp_dup_bytes(const uint8_t *src, size_t len);
 
 /* Deep-copy `n` attributes from `src` to `dst`. dst must have at
  * least `n` slots. On failure, partial copies are freed. Returns
- * OTLP_OK or OTLP_ERR_NOMEM. DRY: used by otlp_metric_clone,
- * otlp_log_record_clone (and could replace the inline copy in
- * otlp_span_clone). */
+ * OTLP_OK or OTLP_ERR_NOMEM. Used by otlp_attr_vec_copy (the
+ * shared clone path for every attribute-bearing object). */
 otlp_status_t
 otlp_attribute_copy_all(struct otlp_attribute *dst,
 	const struct otlp_attribute *src,
@@ -68,15 +68,15 @@ otlp_attribute_copy_all(struct otlp_attribute *dst,
 void
 otlp_attribute_release_value(struct otlp_attribute *a);
 
-/* ── Lazy attribute lists ───────────────────────────────────────
+/* ── Attribute vectors (grow-on-demand) ─────────────────────────
  *
- * The shared storage model for attribute arrays on spans' events/
- * links, metrics, and log records: a cap-bounded array that is
- * NULL until the first attribute is set, so an attribute-less
- * object costs one pointer instead of a cap-sized inline array
- * (v0.5.68/v0.5.69). These functions own that model — the
- * attribute-bearing types just pass their (attrs, n_attrs, cap)
- * triple. DRY: one implementation instead of four copies.
+ * The one storage model for attribute arrays on spans, span
+ * events/links, metrics, and log records (struct otlp_attr_vec,
+ * span_internal.h): items is NULL until the first attribute and
+ * the array grows 4 → 8 → … slots bounded by the owner's max — an
+ * object with a handful of attributes pays for a handful of
+ * slots, not a cap-sized array (v0.5.68/69 made them lazy;
+ * v0.5.75 made them grow).
  *
  * Upsert semantics (v0.5.73): attributes are a map — the OTLP
  * data model requires unique keys and the OTel API defines
@@ -85,46 +85,42 @@ otlp_attribute_release_value(struct otlp_attribute *a);
  * appends a new one; duplicates can no longer reach the wire.
  */
 
-/* Linear search for `key`. Returns true and writes the index to
- * *idx_out when found. */
+/* Linear search for `key` over `n` items. Returns true and writes
+ * the index to *idx_out when found. */
 bool
 otlp_attr_list_find(const struct otlp_attribute *attrs,
 	size_t n,
 	const char *key,
 	size_t *idx_out);
 
-/* Reserve the slot for `key` and commit the count: if the key
- * already exists, its old value is released and that slot is
- * returned (count unchanged); otherwise a slot is appended at the
- * end and *n is incremented. Lazily calloc's the cap-sized array
- * on first use. Overwriting an existing key succeeds even at cap;
- * appending past cap returns OTLP_ERR_OVERFLOW.
+/* Reserve the slot for `key` in `vec` (bounded by `max`) and
+ * commit the count: if the key already exists, its old value is
+ * released and that slot is returned (count unchanged, position
+ * preserved); otherwise the array grows if full and a slot is
+ * appended (n incremented). Overwriting an existing key succeeds
+ * even at max; appending past max returns OTLP_ERR_OVERFLOW.
  *
  * The caller fills type + value AFTER this returns. Because the
  * slot is already committed, the fill must not fail — duplicate
- * owned values (strings, bytes) BEFORE calling and free them if
- * reserve itself fails. Scalar types have no failure path. */
+ * owned values (strings, bytes, composite trees) BEFORE calling
+ * and free them if reserve itself fails. Scalar types have no
+ * failure path. */
 otlp_status_t
-otlp_attr_list_reserve(struct otlp_attribute **attrs,
-	size_t *n,
-	size_t cap,
+otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
+	size_t max,
 	const char *key,
 	struct otlp_attribute **out);
 
-/* Deep-copy n_src attributes into a freshly lazily-styled array.
- * On success *dst owns the copy and *n_dst == n_src. On failure
- * everything is freed and *dst is NULL. n_src == 0 is a no-op. */
+/* Deep-copy `src` into `dst` as an exact-fit vector (n slots, no
+ * spare capacity — a later append grows it). On success dst owns
+ * the copy. On failure everything is freed and dst is empty. */
 otlp_status_t
-otlp_attr_list_copy(struct otlp_attribute **dst,
-	size_t *n_dst,
-	size_t cap,
-	const struct otlp_attribute *src,
-	size_t n_src);
+otlp_attr_vec_copy(struct otlp_attr_vec *dst, const struct otlp_attr_vec *src);
 
-/* Free every attribute and the array itself; resets *attrs to
- * NULL and *n to 0. Safe on an already-NULL array. */
+/* Free every attribute and the array itself; resets the vector to
+ * empty. Safe on an already-empty vector. */
 void
-otlp_attr_list_free(struct otlp_attribute **attrs, size_t *n);
+otlp_attr_vec_free(struct otlp_attr_vec *vec);
 
 /* ── ArrayValue / KeyValueList trees ────────────────────────────
  *

@@ -18,13 +18,8 @@ struct otlp_metric
 	uint64_t time;
 	bool has_start;
 	bool has_time;
-	/* Attribute array is heap-allocated lazily on the first
-	 * attribute set (calloc'd). A metric with zero attributes —
-	 * the common case — pays one NULL pointer, not a 4KB inline
-	 * array (see TODO.complete/109; same pattern the span's
-	 * events/links use since v0.5.68). */
-	struct otlp_attribute *attrs;
-	size_t n_attrs;
+	/* Attributes (grow-on-demand otlp_attr_vec, v0.5.75). */
+	struct otlp_attr_vec attrs;
 	/* Aggregation temporality (OTLP_AGG_TEMP_DELTA or _CUMULATIVE).
 	 * Default CUMULATIVE. Applies to Sum/Histogram/ExpHistogram;
 	 * Gauge does not use it. */

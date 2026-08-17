@@ -39,7 +39,7 @@ otlp_log_record_free(otlp_log_record_t *lr)
 		return;
 	otlp_free(lr->severity_text);
 	otlp_free(lr->body);
-	otlp_attr_list_free(&lr->attrs, &lr->n_attrs);
+	otlp_attr_vec_free(&lr->attrs);
 	otlp_free(lr);
 }
 
@@ -122,8 +122,7 @@ otlp_log_record_set_attribute_string(otlp_log_record_t *lr,
 	vc = otlp_dup_str(val ? val : "");
 	if (!vc)
 		return OTLP_ERR_NOMEM;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(vc);
@@ -144,8 +143,7 @@ otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_INT64;
@@ -163,8 +161,7 @@ otlp_log_record_set_attribute_double(otlp_log_record_t *lr,
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_DOUBLE;
@@ -182,8 +179,7 @@ otlp_log_record_set_attribute_bool(otlp_log_record_t *lr,
 
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_BOOL;
@@ -208,8 +204,7 @@ otlp_log_record_set_attribute_bytes(otlp_log_record_t *lr,
 	bytes_copy = otlp_dup_bytes(bytes, len);
 	if (len > 0 && !bytes_copy)
 		return OTLP_ERR_NOMEM;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(bytes_copy);
@@ -236,8 +231,7 @@ otlp_log_record_set_attribute_array(otlp_log_record_t *lr,
 	st = otlp_attr_array_build(items, n, &arr);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_array_free(arr);
@@ -263,8 +257,7 @@ otlp_log_record_set_attribute_kvlist(otlp_log_record_t *lr,
 	st = otlp_attr_kvlist_build(entries, n, &kvl);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_attr_list_reserve(
-		&lr->attrs, &lr->n_attrs, OTLP_LOG_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_kvlist_free(kvl);
@@ -332,8 +325,8 @@ const struct otlp_attribute *
 otlp_log_get_attrs(const otlp_log_record_t *lr, size_t *n)
 {
 	if (n)
-		*n = lr ? lr->n_attrs : 0;
-	return lr ? lr->attrs : NULL;
+		*n = lr ? lr->attrs.n : 0;
+	return lr ? lr->attrs.items : NULL;
 }
 
 size_t
@@ -365,12 +358,7 @@ otlp_log_record_clone(const otlp_log_record_t *src)
 	dst->has_trace_id = src->has_trace_id;
 	dst->has_span_id = src->has_span_id;
 
-	/* Attributes: lazily-styled array via the shared helper. */
-	if (otlp_attr_list_copy(&dst->attrs,
-		    &dst->n_attrs,
-		    OTLP_LOG_MAX_ATTRS,
-		    src->attrs,
-		    src->n_attrs) != OTLP_OK)
+	if (otlp_attr_vec_copy(&dst->attrs, &src->attrs) != OTLP_OK)
 		goto fail;
 
 	return (otlp_log_record_t *) dst;

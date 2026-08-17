@@ -560,9 +560,8 @@ otlp_attr_list_find(const struct otlp_attribute *attrs,
 }
 
 otlp_status_t
-otlp_attr_list_reserve(struct otlp_attribute **attrs,
-	size_t *n,
-	size_t cap,
+otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
+	size_t max,
 	const char *key,
 	struct otlp_attribute **out)
 {
@@ -570,87 +569,93 @@ otlp_attr_list_reserve(struct otlp_attribute **attrs,
 	char *kc;
 	size_t idx;
 
-	if (!attrs || !n || !out || !key)
+	if (!vec || !out || !key)
 		return OTLP_ERR_NULL;
 	/* Upsert: an existing key's slot is reused (old value
 	 * released, count unchanged, position preserved). Overwrite
-	 * succeeds even at cap. */
-	if (otlp_attr_list_find(*attrs, *n, key, &idx))
+	 * succeeds even at max. */
+	if (otlp_attr_list_find(vec->items, vec->n, key, &idx))
 	{
-		slot = &(*attrs)[idx];
+		slot = &vec->items[idx];
 		otlp_attribute_release_value(slot);
 		*out = slot;
 		return OTLP_OK;
 	}
-	if (*n >= cap)
+	if (vec->n >= max)
 		return OTLP_ERR_OVERFLOW;
-	/* Lazy-allocate the array on first use; an attribute-less
-	 * object costs one NULL pointer (see internal_util.h). */
-	if (!*attrs)
+	/* Grow-on-demand: 4 slots initially, double on full, clamped
+	 * to max. A realloc failure leaves the old array intact. */
+	if (vec->n == vec->cap)
 	{
-		*attrs = otlp_calloc(cap, sizeof(**attrs));
-		if (!*attrs)
+		size_t new_cap = vec->cap ? vec->cap * 2 : (4 < max ? 4 : max);
+		struct otlp_attribute *grown;
+
+		if (new_cap > max)
+			new_cap = max;
+		grown = otlp_realloc(vec->items, new_cap * sizeof(*grown));
+		if (!grown)
 			return OTLP_ERR_NOMEM;
+		memset(grown + vec->cap,
+			0,
+			(new_cap - vec->cap) * sizeof(*grown));
+		vec->items = grown;
+		vec->cap = new_cap;
 	}
 	kc = otlp_dup_str(key);
 	if (!kc)
 		return OTLP_ERR_NOMEM;
-	slot = &(*attrs)[*n];
+	slot = &vec->items[vec->n];
 	slot->key = kc;
 	/* Zero the union so cleanup paths don't see garbage. */
 	slot->v.string_val = NULL;
 	slot->type = OTLP_ATTR_STRING;
-	(*n)++;
+	vec->n++;
 	*out = slot;
 	return OTLP_OK;
 }
 
 otlp_status_t
-otlp_attr_list_copy(struct otlp_attribute **dst,
-	size_t *n_dst,
-	size_t cap,
-	const struct otlp_attribute *src,
-	size_t n_src)
+otlp_attr_vec_copy(struct otlp_attr_vec *dst, const struct otlp_attr_vec *src)
 {
-	if (n_src == 0)
-		return OTLP_OK;
-	if (!dst || !n_dst || !src)
+	if (!dst || !src)
 		return OTLP_ERR_NULL;
-	if (n_src > cap)
-		return OTLP_ERR_OVERFLOW;
-	/* Zeroed destination so the free path is safe if the copy
-	 * fails midway; copy_all frees partial slots itself. */
-	*dst = otlp_calloc(cap, sizeof(**dst));
-	if (!*dst)
+	if (src->n == 0)
+		return OTLP_OK;
+	if (src->n > SIZE_MAX / sizeof(*src->items))
 		return OTLP_ERR_NOMEM;
-	if (otlp_attribute_copy_all(*dst, src, n_src) != OTLP_OK)
+	dst->items = otlp_calloc(src->n, sizeof(*dst->items));
+	if (!dst->items)
+		return OTLP_ERR_NOMEM;
+	if (otlp_attribute_copy_all(dst->items, src->items, src->n) != OTLP_OK)
 	{
-		otlp_free(*dst);
-		*dst = NULL;
+		otlp_free(dst->items);
+		dst->items = NULL;
 		return OTLP_ERR_NOMEM;
 	}
-	*n_dst = n_src;
+	dst->cap = src->n;
+	dst->n = src->n;
 	return OTLP_OK;
 }
 
 void
-otlp_attr_list_free(struct otlp_attribute **attrs, size_t *n)
+otlp_attr_vec_free(struct otlp_attr_vec *vec)
 {
 	size_t i;
 
-	if (!attrs || !*attrs)
+	if (!vec || !vec->items)
 	{
-		if (n)
-			*n = 0;
+		if (vec)
+			vec->n = 0;
 		return;
 	}
-	for (i = 0; n && i < *n; i++)
-		otlp_attribute_free(&(*attrs)[i]);
-	otlp_free(*attrs);
-	*attrs = NULL;
-	if (n)
-		*n = 0;
+	for (i = 0; i < vec->n; i++)
+		otlp_attribute_free(&vec->items[i]);
+	otlp_free(vec->items);
+	vec->items = NULL;
+	vec->n = 0;
+	vec->cap = 0;
 }
+
 
 /* ── ID validation ────────────────────────────────────────────── */
 
@@ -659,10 +664,8 @@ otlp_id_is_all_zero(const uint8_t *id, size_t len)
 {
 	size_t i;
 
-	if (!id || len == 0)
-		return true;
 	for (i = 0; i < len; i++)
-		if (id[i] != 0)
+		if (id[i])
 			return false;
 	return true;
 }

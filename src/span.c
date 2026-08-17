@@ -45,8 +45,7 @@ struct otlp_span
 	bool has_start_time;
 	bool has_end_time;
 	otlp_span_kind_t kind;
-	struct otlp_attribute attrs[OTLP_SPAN_MAX_ATTRIBUTES];
-	size_t n_attrs;
+	struct otlp_attr_vec attrs;
 	otlp_status_code_t status_code;
 	char *status_message; /* owned, may be NULL */
 	bool sampled;
@@ -58,63 +57,6 @@ struct otlp_span
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
-
-/* Upsert-reserve the slot for `key` in the span's inline attribute
- * array (same semantics as otlp_attr_list_reserve — see
- * internal_util.h): reuse an existing key's slot, releasing its
- * old value, or append and bump n_attrs. Caller fills the typed
- * value, which must not fail. */
-static otlp_status_t
-attr_reserve(otlp_span_t *span, const char *key, struct otlp_attribute **out)
-{
-	struct otlp_attribute *a;
-	char *key_copy;
-	size_t idx;
-
-	if (!span || !key)
-		return OTLP_ERR_NULL;
-	if (otlp_attr_list_find(span->attrs, span->n_attrs, key, &idx))
-	{
-		a = &span->attrs[idx];
-		otlp_attribute_release_value(a);
-		*out = a;
-		return OTLP_OK;
-	}
-	if (span->n_attrs >= OTLP_SPAN_MAX_ATTRIBUTES)
-		return OTLP_ERR_OVERFLOW;
-
-	key_copy = otlp_dup_str(key);
-	if (!key_copy)
-		return OTLP_ERR_NOMEM;
-
-	a = &span->attrs[span->n_attrs];
-	a->key = key_copy;
-	/* Zero the union so cleanup paths don't see garbage. */
-	a->v.string_val = NULL;
-	a->type = OTLP_ATTR_STRING; /* tentative; caller overrides */
-
-	span->n_attrs++;
-	*out = a;
-	return OTLP_OK;
-}
-
-/* Recursive release via the shared otlp_attribute_free — the
- * span-level array is inline but its payloads (including nested
- * array/kvlist trees) follow the same ownership model. The old
- * local non-recursive copy only freed STRING/BYTES and leaked
- * composite trees (caught by CI's LeakSanitizer; macOS ASAN does
- * not enable leak detection by default). */
-static void
-span_release_attrs(otlp_span_t *span)
-{
-	size_t i;
-
-	if (!span)
-		return;
-	for (i = 0; i < span->n_attrs; i++)
-		otlp_attribute_free(&span->attrs[i]);
-	span->n_attrs = 0;
-}
 
 /* ── Lifecycle ────────────────────────────────────────────────── */
 
@@ -155,13 +97,11 @@ otlp_span_free(otlp_span_t *span)
 	for (i = 0; i < span->n_events; i++)
 	{
 		otlp_free(span->events[i].name);
-		otlp_attr_list_free(
-			&span->events[i].attrs, &span->events[i].n_attrs);
+		otlp_attr_vec_free(&span->events[i].attrs);
 	}
 	for (i = 0; i < span->n_links; i++)
-		otlp_attr_list_free(
-			&span->links[i].attrs, &span->links[i].n_attrs);
-	span_release_attrs(span);
+		otlp_attr_vec_free(&span->links[i].attrs);
+	otlp_attr_vec_free(&span->attrs);
 	otlp_free(span);
 }
 
@@ -295,10 +235,13 @@ otlp_span_set_attribute_string(otlp_span_t *span,
 	char *val_copy;
 	otlp_status_t st;
 
+	if (!span || !key)
+		return OTLP_ERR_NULL;
 	val_copy = otlp_dup_str(value ? value : "");
 	if (!val_copy)
 		return OTLP_ERR_NOMEM;
-	st = attr_reserve(span, key, &a);
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(val_copy);
@@ -315,7 +258,10 @@ otlp_span_set_attribute_int(otlp_span_t *span, const char *key, int64_t value)
 	struct otlp_attribute *a;
 	otlp_status_t st;
 
-	st = attr_reserve(span, key, &a);
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_INT64;
@@ -329,7 +275,10 @@ otlp_span_set_attribute_double(otlp_span_t *span, const char *key, double value)
 	struct otlp_attribute *a;
 	otlp_status_t st;
 
-	st = attr_reserve(span, key, &a);
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_DOUBLE;
@@ -343,7 +292,10 @@ otlp_span_set_attribute_bool(otlp_span_t *span, const char *key, bool value)
 	struct otlp_attribute *a;
 	otlp_status_t st;
 
-	st = attr_reserve(span, key, &a);
+	if (!span || !key)
+		return OTLP_ERR_NULL;
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_BOOL;
@@ -361,12 +313,15 @@ otlp_span_set_attribute_bytes(otlp_span_t *span,
 	uint8_t *bytes_copy;
 	otlp_status_t st;
 
+	if (!span || !key)
+		return OTLP_ERR_NULL;
 	if (len > 0 && !bytes)
 		return OTLP_ERR_NULL;
 	bytes_copy = otlp_dup_bytes(bytes, len);
 	if (len > 0 && !bytes_copy)
 		return OTLP_ERR_NOMEM;
-	st = attr_reserve(span, key, &a);
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(bytes_copy);
@@ -395,7 +350,8 @@ otlp_span_set_attribute_array(otlp_span_t *span,
 	st = otlp_attr_array_build(items, n, &arr);
 	if (st != OTLP_OK)
 		return st;
-	st = attr_reserve(span, key, &a);
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_array_free(arr);
@@ -421,7 +377,8 @@ otlp_span_set_attribute_kvlist(otlp_span_t *span,
 	st = otlp_attr_kvlist_build(entries, n, &kvl);
 	if (st != OTLP_OK)
 		return st;
-	st = attr_reserve(span, key, &a);
+	st = otlp_attr_vec_reserve(
+		&span->attrs, OTLP_SPAN_MAX_ATTRIBUTES, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_kvlist_free(kvl);
@@ -540,11 +497,8 @@ event_attr_slot(otlp_span_t *span,
 	if (span->n_events == 0)
 		return OTLP_ERR_INVALID_ARGUMENT;
 	*ev_out = &span->events[span->n_events - 1];
-	return otlp_attr_list_reserve(&(*ev_out)->attrs,
-		&(*ev_out)->n_attrs,
-		OTLP_EVENT_MAX_ATTRS,
-		key,
-		a_out);
+	return otlp_attr_vec_reserve(
+		&(*ev_out)->attrs, OTLP_EVENT_MAX_ATTRS, key, a_out);
 }
 
 static otlp_status_t
@@ -558,11 +512,8 @@ link_attr_slot(otlp_span_t *span,
 	if (span->n_links == 0)
 		return OTLP_ERR_INVALID_ARGUMENT;
 	*lk_out = &span->links[span->n_links - 1];
-	return otlp_attr_list_reserve(&(*lk_out)->attrs,
-		&(*lk_out)->n_attrs,
-		OTLP_LINK_MAX_ATTRS,
-		key,
-		a_out);
+	return otlp_attr_vec_reserve(
+		&(*lk_out)->attrs, OTLP_LINK_MAX_ATTRS, key, a_out);
 }
 
 otlp_status_t
@@ -1003,8 +954,8 @@ otlp_span_get_attrs(const otlp_span_t *span, size_t *n_out)
 		return NULL;
 	}
 	if (n_out)
-		*n_out = span->n_attrs;
-	return span->attrs;
+		*n_out = span->attrs.n;
+	return span->attrs.items;
 }
 
 otlp_span_t *
@@ -1057,15 +1008,11 @@ otlp_span_clone(const otlp_span_t *src)
 	}
 
 	attrs = otlp_span_get_attrs(src, &n_attrs);
-	if (n_attrs > 0)
+	(void) attrs;
+	if (otlp_attr_vec_copy(&dst->attrs, &src->attrs) != OTLP_OK)
 	{
-		if (otlp_attribute_copy_all(dst->attrs, attrs, n_attrs) !=
-			OTLP_OK)
-		{
-			otlp_span_free(dst);
-			return NULL;
-		}
-		dst->n_attrs = n_attrs;
+		otlp_span_free(dst);
+		return NULL;
 	}
 
 	events = otlp_span_get_events(src, &n_events);
@@ -1078,18 +1025,13 @@ otlp_span_clone(const otlp_span_t *src)
 			otlp_span_free(dst);
 			return NULL;
 		}
-		/* Copy event attributes (was missing — data loss bug).
-		 * attrs is lazily allocated (v0.5.68); attr_list_copy
-		 * calloc's a zeroed destination and is safe to free on
-		 * failure. */
-		if (events[i].n_attrs > 0)
+		/* Copy event attributes (was missing — data loss bug,
+		 * fixed v0.5.33); deep-copied via the shared vec helper. */
+		if (events[i].attrs.n > 0)
 		{
 			struct otlp_event *ev = &dst->events[dst->n_events - 1];
-			if (otlp_attr_list_copy(&ev->attrs,
-				    &ev->n_attrs,
-				    OTLP_EVENT_MAX_ATTRS,
-				    events[i].attrs,
-				    events[i].n_attrs) != OTLP_OK)
+			if (otlp_attr_vec_copy(&ev->attrs, &events[i].attrs) !=
+				OTLP_OK)
 			{
 				otlp_span_free(dst);
 				return NULL;
@@ -1107,16 +1049,13 @@ otlp_span_clone(const otlp_span_t *src)
 			otlp_span_free(dst);
 			return NULL;
 		}
-		/* Copy link attributes (was missing — data loss bug).
-		 * attrs is lazily allocated (v0.5.68); see event path. */
-		if (links[i].n_attrs > 0)
+		/* Copy link attributes (was missing — data loss bug); see
+		 * event path. */
+		if (links[i].attrs.n > 0)
 		{
 			struct otlp_link *lnk = &dst->links[dst->n_links - 1];
-			if (otlp_attr_list_copy(&lnk->attrs,
-				    &lnk->n_attrs,
-				    OTLP_LINK_MAX_ATTRS,
-				    links[i].attrs,
-				    links[i].n_attrs) != OTLP_OK)
+			if (otlp_attr_vec_copy(&lnk->attrs, &links[i].attrs) !=
+				OTLP_OK)
 			{
 				otlp_span_free(dst);
 				return NULL;
