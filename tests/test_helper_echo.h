@@ -34,15 +34,23 @@ typedef int (*echo_handler_t)(const uint8_t *req_body,
 	size_t resp_cap,
 	size_t *resp_len);
 
+/* Handler return value: the HTTP status code to respond with, or
+ * ECHO_RAW_RESPONSE to send resp_buf[0..*resp_len) as the complete
+ * raw response bytes (wire-format parser tests: chunked framing,
+ * malformed headers, HTTP/1.0, ...). */
+#define ECHO_RAW_RESPONSE (-1)
+
 struct echo_server
 {
 	uint16_t port;
 	int sock_fd;
-	otlp_atomic_int running;           /* 0/1; written by worker, polled by main */
+	otlp_atomic_int running; /* 0/1; written by worker, polled by main */
 	echo_handler_t handler;
-	size_t requests_to_serve;          /* const after _start; no sync needed */
-	otlp_atomic_u64 requests_served;   /* incremented by worker; read by main */
-	otlp_atomic_u64 requests_seen;     /* mirror of requests_served for old callers */
+	size_t requests_to_serve; /* const after _start; no sync needed */
+	otlp_atomic_u64
+		requests_served; /* incremented by worker; read by main */
+	otlp_atomic_u64
+		requests_seen; /* mirror of requests_served for old callers */
 };
 
 /* Start an echo server bound to a kernel-chosen port on localhost.
@@ -52,19 +60,38 @@ struct echo_server
  * `requests_to_serve` is the upper bound on accepted requests; 0
  * means "unbounded" (server runs until _stop). */
 otlp_status_t
-echo_server_start(struct echo_server *s,
+echo_server_start(/* Handler return value: the HTTP status code to respond with,
+		   * or ECHO_RAW_RESPONSE to send resp_buf[0..*resp_len) as the
+		   * complete raw response bytes (wire-format parser tests:
+		   * chunked framing, malformed headers, HTTP/1.0, ...). */
+#define ECHO_RAW_RESPONSE (-1)
+
+	struct echo_server *s,
 	echo_handler_t handler,
 	size_t requests_to_serve);
 
 /* Stop the server: closes the listening socket, waits for the
  * worker thread to exit. Safe to call multiple times. */
 void
-echo_server_stop(struct echo_server *s);
+echo_server_stop(/* Handler return value: the HTTP status code to respond with,
+		  * or ECHO_RAW_RESPONSE to send resp_buf[0..*resp_len) as the
+		  * complete raw response bytes (wire-format parser tests:
+		  * chunked framing, malformed headers, HTTP/1.0, ...). */
+#define ECHO_RAW_RESPONSE (-1)
+
+	struct echo_server *s);
 
 /* Block until the server has served its allotted requests or until
  * the timeout elapses (microseconds). Returns OTLP_OK on clean
  * shutdown, OTLP_ERR_TIMEOUT if still running. */
 otlp_status_t
-echo_server_join(struct echo_server *s, uint64_t timeout_us);
+echo_server_join(/* Handler return value: the HTTP status code to respond with,
+		  * or ECHO_RAW_RESPONSE to send resp_buf[0..*resp_len) as the
+		  * complete raw response bytes (wire-format parser tests:
+		  * chunked framing, malformed headers, HTTP/1.0, ...). */
+#define ECHO_RAW_RESPONSE (-1)
+
+	struct echo_server *s,
+	uint64_t timeout_us);
 
 #endif

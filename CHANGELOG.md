@@ -4,6 +4,44 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.80] - 2026-08-18
+
+HTTP response parser: chunked support + framing hardening.
+
+### Fixed — chunked responses were unusable
+
+`Transfer-Encoding: chunked` was not handled at all. On keep-alive
+the parser waited for an EOF that never comes — read timeout, the
+request failed, and the batch burned its retries; any streaming
+proxy (nginx/envoy with buffering off — the documented sidecar
+topology) triggers it. Even at EOF the "body" contained the raw
+chunk framing. The parser now decodes chunked bodies in place
+(RFC 7230 §4.1: chunk sizes with extensions, trailers, incremental
+need-more until the terminator, size-capped) and keeps the
+connection reusable — chunked framing is self-delimiting.
+
+### Fixed — framing and smuggling hardening
+
+- Header matching is now **line-aligned**; a "Content-Length:"
+  inside another header's value no longer matches.
+- **TE + Content-Length together** (RFC 7230 §3.3.3, the classic
+  request-smuggling vector) is rejected outright.
+- Duplicate `Content-Length` with differing values (§3.3.2) is
+  rejected; identical duplicates collapse.
+- Undecodable `Transfer-Encoding` (gzip, `gzip, chunked`,
+  identity) is rejected instead of misparsed.
+- Keep-alive default is **version-aware**: HTTP/1.0 defaults to
+  close (§6.3) and no longer marks the socket reusable; all
+  `Connection:` header lines are scanned.
+
+### Added
+
+- `tests/test_http_parser.c` (9 tests) with a new
+  `ECHO_RAW_RESPONSE` mode in the test echo helper: canned raw
+  responses for chunked (single / multi+trailers / 3 KB
+  incremental), smuggling rejections, line-alignment, HTTP/1.0,
+  and case-insensitivity.
+
 ## [0.5.79] - 2026-08-17
 
 One set-attribute engine (internal; behavior unchanged).

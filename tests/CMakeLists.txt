@@ -24,6 +24,13 @@ if(UNIX)
         COMMAND otlp_test_http_echo)
     set_tests_properties(http-echo PROPERTIES LABELS "unit" TIMEOUT 30)
 
+    add_executable(otlp_test_http_parser
+        test_http_parser.c test_helper_echo.c)
+    target_link_libraries(otlp_test_http_parser PRIVATE otlp_c Threads::Threads)
+    add_test(NAME http-parser
+        COMMAND otlp_test_http_parser)
+    set_tests_properties(http-parser PROPERTIES LABELS "unit" TIMEOUT 30)
+
     add_executable(otlp_test_exporter_echo
         test_exporter_echo.c test_helper_echo.c)
     target_link_libraries(otlp_test_exporter_echo PRIVATE otlp_c Threads::Threads)
