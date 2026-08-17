@@ -113,79 +113,51 @@ otlp_log_record_set_attribute_string(otlp_log_record_t *lr,
 	const char *key,
 	const char *val)
 {
-	struct otlp_attribute *a;
-	char *vc;
-	otlp_status_t st;
-
+	otlp_value_t v = { .type = OTLP_VALUE_STRING,
+		.v = { .string_val = val ? val : "" } };
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	vc = otlp_dup_str(val ? val : "");
-	if (!vc)
-		return OTLP_ERR_NOMEM;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-	{
-		otlp_free(vc);
-		return st;
-	}
-	a->type = OTLP_ATTR_STRING;
-	a->v.string_val = vc;
-	return OTLP_OK;
+	return otlp_attr_vec_set(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &v);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_int(otlp_log_record_t *lr,
 	const char *key,
 	int64_t val)
 {
-	struct otlp_attribute *a;
-	otlp_status_t st;
-
+	otlp_value_t v = { .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = val } };
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-		return st;
-	a->type = OTLP_ATTR_INT64;
-	a->v.int64_val = val;
-	return OTLP_OK;
+	return otlp_attr_vec_set(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &v);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_double(otlp_log_record_t *lr,
 	const char *key,
 	double val)
 {
-	struct otlp_attribute *a;
-	otlp_status_t st;
-
+	otlp_value_t v = { .type = OTLP_VALUE_DOUBLE,
+		.v = { .double_val = val } };
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-		return st;
-	a->type = OTLP_ATTR_DOUBLE;
-	a->v.double_val = val;
-	return OTLP_OK;
+	return otlp_attr_vec_set(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &v);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_bool(otlp_log_record_t *lr,
 	const char *key,
 	bool val)
 {
-	struct otlp_attribute *a;
-	otlp_status_t st;
-
+	otlp_value_t v = { .type = OTLP_VALUE_BOOL, .v = { .bool_val = val } };
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-		return st;
-	a->type = OTLP_ATTR_BOOL;
-	a->v.bool_val = val;
-	return OTLP_OK;
+	return otlp_attr_vec_set(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &v);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_bytes(otlp_log_record_t *lr,
@@ -193,28 +165,13 @@ otlp_log_record_set_attribute_bytes(otlp_log_record_t *lr,
 	const uint8_t *bytes,
 	size_t len)
 {
-	struct otlp_attribute *a;
-	uint8_t *bytes_copy;
-	otlp_status_t st;
-
+	otlp_value_t v = { .type = OTLP_VALUE_BYTES,
+		.v = { .bytes_val = { .data = bytes, .len = len } } };
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	if (len > 0 && !bytes)
-		return OTLP_ERR_NULL;
-	bytes_copy = otlp_dup_bytes(bytes, len);
-	if (len > 0 && !bytes_copy)
-		return OTLP_ERR_NOMEM;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-	{
-		otlp_free(bytes_copy);
-		return st;
-	}
-	a->type = OTLP_ATTR_BYTES;
-	a->v.bytes_val.data = bytes_copy;
-	a->v.bytes_val.len = len;
-	return OTLP_OK;
+	return otlp_attr_vec_set(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &v);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_array(otlp_log_record_t *lr,
@@ -222,25 +179,12 @@ otlp_log_record_set_attribute_array(otlp_log_record_t *lr,
 	const otlp_value_t *items,
 	size_t n)
 {
-	struct otlp_attribute *a;
-	struct otlp_attr_array *arr;
-	otlp_status_t st;
-
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_array_build(items, n, &arr);
-	if (st != OTLP_OK)
-		return st;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-	{
-		otlp_attr_array_free(arr);
-		return st;
-	}
-	a->type = OTLP_ATTR_ARRAY;
-	a->v.array_val = arr;
-	return OTLP_OK;
+	return otlp_attr_vec_set_array(
+		&lr->attrs, OTLP_LOG_MAX_ATTRS, key, items, n);
 }
+
 
 otlp_status_t
 otlp_log_record_set_attribute_kvlist(otlp_log_record_t *lr,
@@ -248,25 +192,12 @@ otlp_log_record_set_attribute_kvlist(otlp_log_record_t *lr,
 	const otlp_kv_t *entries,
 	size_t n)
 {
-	struct otlp_attribute *a;
-	struct otlp_attr_kvlist *kvl;
-	otlp_status_t st;
-
 	if (!lr || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_kvlist_build(entries, n, &kvl);
-	if (st != OTLP_OK)
-		return st;
-	st = otlp_attr_vec_reserve(&lr->attrs, OTLP_LOG_MAX_ATTRS, key, &a);
-	if (st != OTLP_OK)
-	{
-		otlp_attr_kvlist_free(kvl);
-		return st;
-	}
-	a->type = OTLP_ATTR_KVLIST;
-	a->v.kvlist_val = kvl;
-	return OTLP_OK;
+	return otlp_attr_vec_set_kvlist(
+		&lr->attrs, OTLP_LOG_MAX_ATTRS, key, entries, n);
 }
+
 
 /* ── Internal accessors ───────────────────────────────────────── */
 
