@@ -50,10 +50,16 @@ struct otlp_span
 	char *status_message; /* owned, may be NULL */
 	bool sampled;
 	char *trace_state; /* owned, may be NULL */
-	struct otlp_event events[OTLP_SPAN_MAX_EVENTS];
+	/* Events/links: grow-on-demand heap arrays (4 -> 8 -> ... slots,
+	 * bounded by the caps). A span with no events/links — the
+	 * common case — pays two NULL pointers, not 5.6KB of inline
+	 * headers (v0.5.76; same model as the attribute vectors). */
+	struct otlp_event *events;
 	size_t n_events;
-	struct otlp_link links[OTLP_SPAN_MAX_LINKS];
+	size_t cap_events;
+	struct otlp_link *links;
 	size_t n_links;
+	size_t cap_links;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -99,8 +105,10 @@ otlp_span_free(otlp_span_t *span)
 		otlp_free(span->events[i].name);
 		otlp_attr_vec_free(&span->events[i].attrs);
 	}
+	otlp_free(span->events);
 	for (i = 0; i < span->n_links; i++)
 		otlp_attr_vec_free(&span->links[i].attrs);
+	otlp_free(span->links);
 	otlp_attr_vec_free(&span->attrs);
 	otlp_free(span);
 }
@@ -423,24 +431,81 @@ otlp_span_set_sampled(otlp_span_t *span, bool sampled)
 
 /* ── Deferred OTLP fields ─────────────────────────────────────── */
 
+/* Grow-on-demand slot for the next event/link (4 -> 8 -> ... slots,
+ * bounded by the cap). Realloc failure leaves the old array intact.
+ * The new slot is zeroed so its attr vec and owned pointers start
+ * valid. Returns NULL on OOM. */
+static struct otlp_event *
+event_grow(otlp_span_t *span)
+{
+	if (span->n_events == span->cap_events)
+	{
+		size_t new_cap = span->cap_events
+			? span->cap_events * 2
+			: (4 < OTLP_SPAN_MAX_EVENTS ? 4 : OTLP_SPAN_MAX_EVENTS);
+		struct otlp_event *grown;
+
+		if (new_cap > OTLP_SPAN_MAX_EVENTS)
+			new_cap = OTLP_SPAN_MAX_EVENTS;
+		grown = otlp_realloc(span->events, new_cap * sizeof(*grown));
+		if (!grown)
+			return NULL;
+		memset(grown + span->cap_events,
+			0,
+			(new_cap - span->cap_events) * sizeof(*grown));
+		span->events = grown;
+		span->cap_events = new_cap;
+	}
+	return &span->events[span->n_events];
+}
+
+static struct otlp_link *
+link_grow(otlp_span_t *span)
+{
+	if (span->n_links == span->cap_links)
+	{
+		size_t new_cap = span->cap_links
+			? span->cap_links * 2
+			: (4 < OTLP_SPAN_MAX_LINKS ? 4 : OTLP_SPAN_MAX_LINKS);
+		struct otlp_link *grown;
+
+		if (new_cap > OTLP_SPAN_MAX_LINKS)
+			new_cap = OTLP_SPAN_MAX_LINKS;
+		grown = otlp_realloc(span->links, new_cap * sizeof(*grown));
+		if (!grown)
+			return NULL;
+		memset(grown + span->cap_links,
+			0,
+			(new_cap - span->cap_links) * sizeof(*grown));
+		span->links = grown;
+		span->cap_links = new_cap;
+	}
+	return &span->links[span->n_links];
+}
+
 otlp_status_t
 otlp_span_add_event(otlp_span_t *span,
 	const char *name,
 	uint64_t time_unix_nano)
 {
+	struct otlp_event *ev;
 	char *name_copy;
 
-	if (!span)
-		return OTLP_ERR_NULL;
-	if (!name)
+	if (!span || !name)
 		return OTLP_ERR_NULL;
 	if (span->n_events >= OTLP_SPAN_MAX_EVENTS)
 		return OTLP_ERR_OVERFLOW;
 	name_copy = otlp_dup_str(name);
 	if (!name_copy)
 		return OTLP_ERR_NOMEM;
-	span->events[span->n_events].name = name_copy;
-	span->events[span->n_events].time_unix_nano = time_unix_nano;
+	ev = event_grow(span);
+	if (!ev)
+	{
+		otlp_free(name_copy);
+		return OTLP_ERR_NOMEM;
+	}
+	ev->name = name_copy;
+	ev->time_unix_nano = time_unix_nano;
 	span->n_events++;
 	return OTLP_OK;
 }
@@ -450,16 +515,19 @@ otlp_span_add_link(otlp_span_t *span,
 	const uint8_t *trace_id,
 	const uint8_t *span_id)
 {
+	struct otlp_link *lk;
+
 	if (!span)
 		return OTLP_ERR_NULL;
 	if (!trace_id || !span_id)
 		return OTLP_ERR_NULL;
 	if (span->n_links >= OTLP_SPAN_MAX_LINKS)
 		return OTLP_ERR_OVERFLOW;
-	memcpy(span->links[span->n_links].trace_id,
-		trace_id,
-		OTLP_TRACE_ID_LEN);
-	memcpy(span->links[span->n_links].span_id, span_id, OTLP_SPAN_ID_LEN);
+	lk = link_grow(span);
+	if (!lk)
+		return OTLP_ERR_NOMEM;
+	memcpy(lk->trace_id, trace_id, OTLP_TRACE_ID_LEN);
+	memcpy(lk->span_id, span_id, OTLP_SPAN_ID_LEN);
 	span->n_links++;
 	return OTLP_OK;
 }
