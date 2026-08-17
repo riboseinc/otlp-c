@@ -27,13 +27,13 @@
  * case statement. */
 enum otlp_attr_type
 {
-	OTLP_ATTR_STRING	    = 0, /* OTLP_AV_FI_STRING  (field 1) */
-	OTLP_ATTR_BOOL		    = 1, /* OTLP_AV_FI_BOOL    (field 2) */
-	OTLP_ATTR_INT64	    = 2, /* OTLP_AV_FI_INT64   (field 3) */
-	OTLP_ATTR_DOUBLE	    = 3, /* OTLP_AV_FI_DOUBLE  (field 4) */
-	OTLP_ATTR_ARRAY	    = 4, /* OTLP_AV_FI_ARRAY_VALUE (field 5) */
-	OTLP_ATTR_KVLIST	    = 5, /* OTLP_AV_FI_KVLIST_VALUE (field 6) */
-	OTLP_ATTR_BYTES	    = 6, /* OTLP_AV_FI_BYTES   (field 7) */
+	OTLP_ATTR_STRING = 0, /* OTLP_AV_FI_STRING  (field 1) */
+	OTLP_ATTR_BOOL = 1, /* OTLP_AV_FI_BOOL    (field 2) */
+	OTLP_ATTR_INT64 = 2, /* OTLP_AV_FI_INT64   (field 3) */
+	OTLP_ATTR_DOUBLE = 3, /* OTLP_AV_FI_DOUBLE  (field 4) */
+	OTLP_ATTR_ARRAY = 4, /* OTLP_AV_FI_ARRAY_VALUE (field 5) */
+	OTLP_ATTR_KVLIST = 5, /* OTLP_AV_FI_KVLIST_VALUE (field 6) */
+	OTLP_ATTR_BYTES = 6, /* OTLP_AV_FI_BYTES   (field 7) */
 };
 
 /* ArrayValue: a list of AnyValue. Each item is an otlp_attribute
@@ -69,43 +69,38 @@ struct otlp_attribute
 			uint8_t *data; /* owned */
 			size_t len;
 		} bytes_val;
-		struct otlp_attr_array  *array_val;  /* owned */
+		struct otlp_attr_array *array_val; /* owned */
 		struct otlp_attr_kvlist *kvlist_val; /* owned */
 	} v;
 };
 
 struct otlp_attr_array
 {
-	struct otlp_attribute *items;  /* owned, count = n */
-	size_t		       n;
+	struct otlp_attribute *items; /* owned, count = n */
+	size_t n;
 };
 
 struct otlp_attr_kvlist_entry
 {
-	char		       *key;   /* owned */
+	char *key; /* owned */
 	struct otlp_attribute value;
 };
 
 struct otlp_attr_kvlist
 {
-	struct otlp_attr_kvlist_entry *entries;  /* owned, count = n */
-	size_t				 n;
+	struct otlp_attr_kvlist_entry *entries; /* owned, count = n */
+	size_t n;
 };
 
 /* Recursively free an attribute's owned memory (key, value, and
  * any nested array/kvlist children). The attribute struct itself
  * is NOT freed (it may be embedded in an array). Safe with NULL. */
-void otlp_attribute_free(struct otlp_attribute *a);
+void
+otlp_attribute_free(struct otlp_attribute *a);
 
 /* Span.Event / Span.Link — each carries name/time + attributes
- * (up to OTLP_EVENT_MAX_ATTRS / OTLP_LINK_MAX_ATTRS).
- *
- * The attrs array is heap-allocated lazily on the first attribute
- * set (calloc'd, so the cap still applies but a typical event/
- * link with zero attributes costs one pointer, not the full
- * array). This keeps sizeof(struct otlp_span) small — with inline
- * arrays the struct was ~139KB because every event/link embedded
- * a full 32-slot attribute array whether used or not (v0.5.68). */
+ * (up to OTLP_EVENT_MAX_ATTRS / OTLP_LINK_MAX_ATTRS), stored in a
+ * grow-on-demand otlp_attr_vec (see below). */
 #ifndef OTLP_EVENT_MAX_ATTRS
 #define OTLP_EVENT_MAX_ATTRS 32
 #endif
@@ -113,20 +108,31 @@ void otlp_attribute_free(struct otlp_attribute *a);
 #define OTLP_LINK_MAX_ATTRS 32
 #endif
 
+/* Grow-on-demand attribute vector — the one storage model for
+ * every attribute-bearing object (span, event, link, metric, log
+ * record). items is NULL with cap==0 until the first attribute;
+ * the array grows 4 → 8 → … slots (bounded by the owner's max),
+ * so an object with a handful of attributes pays for a handful of
+ * slots, not the cap-sized array. n <= cap <= max. */
+struct otlp_attr_vec
+{
+	struct otlp_attribute *items;
+	size_t n;
+	size_t cap;
+};
+
 struct otlp_event
 {
-	char		   *name;
-	uint64_t	    time_unix_nano;
-	struct otlp_attribute *attrs;   /* NULL until first attr set */
-	size_t		    n_attrs;
+	char *name;
+	uint64_t time_unix_nano;
+	struct otlp_attr_vec attrs;
 };
 
 struct otlp_link
 {
 	uint8_t trace_id[OTLP_TRACE_ID_LEN];
 	uint8_t span_id[OTLP_SPAN_ID_LEN];
-	struct otlp_attribute *attrs;   /* NULL until first attr set */
-	size_t			n_attrs;
+	struct otlp_attr_vec attrs;
 };
 
 /* ── Read-only accessors for the encoder ────────────────────────
@@ -139,7 +145,8 @@ struct otlp_link
  * (defined in span.c); tests use this to regression-guard the
  * size budget (see v0.5.68 — the struct was ~139KB with inline
  * event/link attribute arrays, dominating the emit path). */
-size_t otlp_span_struct_size(void);
+size_t
+otlp_span_struct_size(void);
 
 const char *
 otlp_span_get_name(const otlp_span_t *span);
@@ -167,7 +174,8 @@ const char *
 otlp_span_get_status_message(const otlp_span_t *span);
 
 /* Sampling flag (W3C trace-flags bit 0). Default: true. */
-bool otlp_span_is_sampled(const otlp_span_t *span);
+bool
+otlp_span_is_sampled(const otlp_span_t *span);
 
 /* Returns a pointer to the internal attribute array and writes the
  * count to *n_out. The array is owned by the span. */

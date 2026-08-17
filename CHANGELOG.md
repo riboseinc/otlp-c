@@ -4,6 +4,37 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.75] - 2026-08-17
+
+Grow-on-demand attribute vectors; attribute-bearing spans ~4× faster.
+
+### Changed — `otlp_attr_vec`: one storage model, sized to actual use
+
+Lazy allocation (v0.5.68/69) made attribute-less objects cheap, but
+the first attribute still allocated the full cap-sized array (4 KB
+for a one-attribute metric or log record), and the span itself
+carried an inline `attrs[128]` — 4 KB zeroed on every create and
+clone. Every attribute-bearing object (span, event, link, metric,
+log record) now embeds a `struct otlp_attr_vec` that starts empty
+and grows 4 → 8 → … slots (doubling via `realloc`, bounded by the
+owner's cap); clone copies exact-fit. The span's separate inline
+reserve path is deleted — one vector type, three shared helpers,
+five owners.
+
+- `sizeof(struct otlp_span)`: 8,832 → **5,776 B** (−35%).
+- `otlp_bench_emit`, 1-attribute span: ~1,375 → **~350 ns**; 5
+  attributes: ~1,590 → ~530 ns.
+- Struct-size budgets tightened: span ≤ 8 KB, metric ≤ 512 B,
+  log record ≤ 256 B.
+
+### Fixed
+
+- The span-level attribute setters had lost their NULL-span guards
+  when the guard-carrying local reserve was removed in the v0.5.73
+  reorder — `otlp_span_set_attribute_*(NULL, …)` segfaulted instead
+  of returning `OTLP_ERR_NULL`. Caught by `prop_setters_null_safe`;
+  guards restored on all span-level setters.
+
 ## [0.5.74] - 2026-08-17
 
 ARRAY/KVLIST attributes end-to-end; malformed-frame encoder fix.

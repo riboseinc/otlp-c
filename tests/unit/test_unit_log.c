@@ -22,9 +22,10 @@
 static int
 test_log_struct_size(void)
 {
-	/* 80 bytes at v0.5.69. 512B is a generous ceiling that still
-	 * catches a return to the inline-array layout. */
-	assert(otlp_log_struct_size() <= 512);
+	/* 88 bytes at v0.5.75 (vec adds a capacity field). 256B is a
+	 * generous ceiling that still catches a return to the
+	 * inline-array layout. */
+	assert(otlp_log_struct_size() <= 256);
 	printf("[unit-log] sizeof(otlp_log_record)=%zu bytes\n",
 		otlp_log_struct_size());
 	return 0;

@@ -501,25 +501,25 @@ prop_span_clone_preserves_evlink_attrs(uint64_t seed)
 	ok = 1;
 	/* Verify event has the attributes. */
 	ev = otlp_span_get_events(clone, &n);
-	if (n != 1 || ev[0].n_attrs != 2)
+	if (n != 1 || ev[0].attrs.n != 2)
 		ok = 0;
-	else if (strcmp(ev[0].attrs[0].key, "key") != 0 ||
-		strcmp(ev[0].attrs[0].v.string_val, "user_42") != 0)
+	else if (strcmp(ev[0].attrs.items[0].key, "key") != 0 ||
+		strcmp(ev[0].attrs.items[0].v.string_val, "user_42") != 0)
 		ok = 0;
-	else if (ev[0].attrs[1].type != OTLP_ATTR_INT64 ||
-		ev[0].attrs[1].v.int64_val != 7)
+	else if (ev[0].attrs.items[1].type != OTLP_ATTR_INT64 ||
+		ev[0].attrs.items[1].v.int64_val != 7)
 		ok = 0;
 
 	/* Verify link has the attributes. */
 	lk = otlp_span_get_links(clone, &n);
-	if (n != 1 || lk[0].n_attrs != 2)
+	if (n != 1 || lk[0].attrs.n != 2)
 		ok = 0;
-	else if (strcmp(lk[0].attrs[0].key, "reason") != 0 ||
-		strcmp(lk[0].attrs[0].v.string_val, "follows_from") != 0)
+	else if (strcmp(lk[0].attrs.items[0].key, "reason") != 0 ||
+		strcmp(lk[0].attrs.items[0].v.string_val, "follows_from") != 0)
 		ok = 0;
-	else if (lk[0].attrs[1].type != OTLP_ATTR_BYTES ||
-		lk[0].attrs[1].v.bytes_val.len != 3 ||
-		lk[0].attrs[1].v.bytes_val.data[2] != 0xfe)
+	else if (lk[0].attrs.items[1].type != OTLP_ATTR_BYTES ||
+		lk[0].attrs.items[1].v.bytes_val.len != 3 ||
+		lk[0].attrs.items[1].v.bytes_val.data[2] != 0xfe)
 		ok = 0;
 
 out:

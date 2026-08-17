@@ -22,14 +22,8 @@ struct otlp_log_record
 	uint8_t span_id[OTLP_SPAN_ID_LEN];
 	bool has_trace_id;
 	bool has_span_id;
-	/* Attribute array is heap-allocated lazily on the first
-	 * attribute set (calloc'd). A log record with zero attributes
-	 * pays one NULL pointer, not a 4KB inline array (see
-	 * TODO.complete/109; same pattern the span's events/links use
-	 * since v0.5.68). Logs are the highest-volume signal, so this
-	 * dominates per-record cost. */
-	struct otlp_attribute *attrs;
-	size_t n_attrs;
+	/* Attributes (grow-on-demand otlp_attr_vec, v0.5.75). */
+	struct otlp_attr_vec attrs;
 };
 
 otlp_severity_t

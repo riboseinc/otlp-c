@@ -82,7 +82,7 @@ otlp_metric_free(otlp_metric_t *m)
 	otlp_free(m->bucket_counts);
 	otlp_free(m->exp_pos_counts);
 	otlp_free(m->exp_neg_counts);
-	otlp_attr_list_free(&m->attrs, &m->n_attrs);
+	otlp_attr_vec_free(&m->attrs);
 	otlp_free(m);
 }
 
@@ -194,8 +194,7 @@ otlp_metric_set_attribute_string(otlp_metric_t *m,
 	val_copy = otlp_dup_str(val ? val : "");
 	if (!val_copy)
 		return OTLP_ERR_NOMEM;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(val_copy);
@@ -214,8 +213,7 @@ otlp_metric_set_attribute_int(otlp_metric_t *m, const char *key, int64_t val)
 
 	if (!m || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_INT64;
@@ -231,8 +229,7 @@ otlp_metric_set_attribute_double(otlp_metric_t *m, const char *key, double val)
 
 	if (!m || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_DOUBLE;
@@ -248,8 +245,7 @@ otlp_metric_set_attribute_bool(otlp_metric_t *m, const char *key, bool val)
 
 	if (!m || !key)
 		return OTLP_ERR_NULL;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 		return st;
 	a->type = OTLP_ATTR_BOOL;
@@ -274,8 +270,7 @@ otlp_metric_set_attribute_bytes(otlp_metric_t *m,
 	bytes_copy = otlp_dup_bytes(bytes, len);
 	if (len > 0 && !bytes_copy)
 		return OTLP_ERR_NOMEM;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_free(bytes_copy);
@@ -302,8 +297,7 @@ otlp_metric_set_attribute_array(otlp_metric_t *m,
 	st = otlp_attr_array_build(items, n, &arr);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_array_free(arr);
@@ -329,8 +323,7 @@ otlp_metric_set_attribute_kvlist(otlp_metric_t *m,
 	st = otlp_attr_kvlist_build(entries, n, &kvl);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_attr_list_reserve(
-		&m->attrs, &m->n_attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
+	st = otlp_attr_vec_reserve(&m->attrs, OTLP_METRIC_MAX_ATTRS, key, &a);
 	if (st != OTLP_OK)
 	{
 		otlp_attr_kvlist_free(kvl);
@@ -515,8 +508,8 @@ const struct otlp_attribute *
 otlp_metric_get_attrs(const otlp_metric_t *m, size_t *n)
 {
 	if (n)
-		*n = m ? m->n_attrs : 0;
-	return m ? m->attrs : NULL;
+		*n = m ? m->attrs.n : 0;
+	return m ? m->attrs.items : NULL;
 }
 
 size_t
@@ -586,12 +579,7 @@ otlp_metric_clone(const otlp_metric_t *src)
 	dst->max = src->max;
 	dst->has_minmax = src->has_minmax;
 
-	/* Attributes: lazily-styled array via the shared helper. */
-	if (otlp_attr_list_copy(&dst->attrs,
-		    &dst->n_attrs,
-		    OTLP_METRIC_MAX_ATTRS,
-		    src->attrs,
-		    src->n_attrs) != OTLP_OK)
+	if (otlp_attr_vec_copy(&dst->attrs, &src->attrs) != OTLP_OK)
 		goto fail;
 
 	/* Histogram bounds + bucket counts. src was validated at
