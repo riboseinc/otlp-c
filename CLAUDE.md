@@ -104,6 +104,7 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `include/otlp-c/otlp.h` | Umbrella public header |
 | `include/otlp-c/exporter.h` | Exporter — emit/tick/flush for all 3 signals + diagnostics |
 | `include/otlp-c/span.h` | Span type — events, links, attributes, sampling |
+| `include/otlp-c/value.h` | `otlp_value_t` — public scalar AnyValue + `otlp_kv_t` (composite attributes) |
 | `include/otlp-c/metric.h` | Metric types (counter/gauge/histogram/exp-histogram) |
 | `include/otlp-c/log.h` | Log records with trace correlation |
 | `include/otlp-c/sampler.h` | Sampler vtable + 3 built-ins |
@@ -178,6 +179,10 @@ All phases are complete (v0.5.63). The library implements:
   CWE-190): every `count * sizeof(...)` has an explicit check
 
 When extending the library:
+- **All five attribute surfaces** (span/event/link/metric/log)
+  take all seven AnyValue types: string/bool/int64/double/bytes
+  via per-type setters; ARRAY/KVLIST via the composite setters
+  taking `otlp_value_t` arrays.
 - **New attribute type**: add enum value + encoder function +
   `attr_encoders[]` table entry in `otlp_messages.c`. OCP.
 - **New metric type**: add enum + schema + encoder + dispatch
@@ -213,6 +218,17 @@ property tests catch regressions in the encoder immediately.
   (emitted/sent/dropped for spans, metrics, and logs) plus global
   HTTP-level counters (2xx/4xx/5xx/network_err).
 - **Memory**: use the platform's `malloc`/`free`. Custom allocators are a P1 feature; defer.
+- **Attributes are a map** (v0.5.73): setting an existing key
+  replaces its value (last write wins, type may change) — the OTLP
+  data model requires unique keys. All five attribute-bearing
+  surfaces (span, event, link, metric, log) share one
+  grow-on-demand vector model (`struct otlp_attr_vec`) owned by
+  `internal_util`'s `otlp_attr_vec_{reserve,copy,free}`; storage
+  cost tracks actual use (empty objects pay pointers, not
+  cap-sized arrays). Composite values (ARRAY/KVLIST) come from the
+  public `otlp_value_t` / `otlp_kv_t` via the `*_set_attribute_
+  {array,kvlist}` setters — build-then-attach keeps the
+  reserve-and-fill contract (fills never fail).
 
 ## CI
 

@@ -117,9 +117,32 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.61 | ExponentialHistogram schema entry (DRY/MECE — was reusing Histogram's) | #91 |
 | 0.5.62 | **Fix: integer overflow in metric allocations (CWE-190→CWE-787)** | #92 |
 | 0.5.63 | **Fix: integer overflow sweep — all remaining allocation sites** (dup_str, mpsc_queue, resource_attrs, batch_size clamp) | #93 |
+| 0.5.64 | Roadmap + CLAUDE.md catch-up (27 releases) | #94 |
+| 0.5.65 | DNS behavior documentation accuracy | #95 |
+| 0.5.66 | Integration test validates events + status; CI runs it end-to-end | #96 |
+| 0.5.67 | Integration test covers all three signals; sync-flush retry + diagnostics | #97 |
+| 0.5.68 | Span struct 15.7× smaller (139KB → 8.8KB; lazy event/link attrs) — emit 20× faster | #99 |
+| 0.5.69 | Metric/log structs 19×/52× smaller (lazy attrs); log emit ~5× faster | #100 |
+| 0.5.70 | One owner for the lazy attribute-list model (`otlp_attr_list_*` in internal_util; DRY across 4 sites) | #101 |
+| 0.5.71 | Attribute setter type parity (metric bool/bytes; log double/bool/bytes) | #102 |
+| 0.5.72 | Typed event/link attribute setters (int/double/bool/bytes) | #103 |
+| 0.5.73 | **Attributes are a map: last-write-wins upsert** (duplicate keys could reach the wire) | #104 |
+| 0.5.74 | **ARRAY/KVLIST attributes end-to-end + fix: composite AnyValue frames were malformed** (missing LEN prefix) | #105 |
+| 0.5.75 | Grow-on-demand attribute vectors everywhere; span struct 5.8KB; 1-attr span ~4× faster + **fix: NULL-span setter guards** | #106 |
+| 0.5.76 | Span events/links grow on demand; **span struct 176 bytes** (789× smaller than v0.5.67); emit ~150 ns/span | #107 |
 
-**Key metrics (v0.5.63):** 103 TODOs complete, 34 tests, **34+ distinct
-bugs found and fixed**, all sanitizers green, zero warnings.
+**Key metrics (v0.5.76):** 116 TODOs complete, 36 tests, **37+
+distinct bugs found and fixed**, all sanitizers green, zero
+warnings. `sizeof(otlp_span)`: 138,880 → **176 bytes**; emit
+pipeline ~30,000 → **~150 ns/span** (~6.6M spans/s, null
+transport).
+
+**Attribute-model arc (v0.5.68–v0.5.76):** all five
+attribute-bearing surfaces (span, event, link, metric, log) share
+one grow-on-demand vector model with map (upsert) semantics and
+the full AnyValue type set (string/bool/int64/double/bytes/array/
+kvlist), wire-verified by property tests. Storage cost tracks
+actual use: empty objects pay pointers, not cap-sized arrays.
 
 **Bug-class coverage in the v0.5.47–v0.5.63 arc:**
 - Wire format: 10 bugs (schema field numbers, wire types).
