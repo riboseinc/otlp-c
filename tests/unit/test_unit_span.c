@@ -23,11 +23,11 @@
 static int
 test_span_struct_size(void)
 {
-	/* 5.8KB at v0.5.75 (span attrs became a grow-on-demand vec;
-	 * event/link headers dominate: ~40B x 128 slots). 8KB is a
-	 * generous ceiling that still catches a return to inline
-	 * attribute arrays. */
-	assert(otlp_span_struct_size() <= 8 * 1024);
+	/* 176 bytes at v0.5.76 (attrs, events, and links all
+	 * grow-on-demand; the struct is just fixed fields + three
+	 * (items, n, cap) triples). 512B catches any return to inline
+	 * arrays. */
+	assert(otlp_span_struct_size() <= 512);
 	printf("[unit-span] sizeof(otlp_span)=%zu bytes\n",
 		otlp_span_struct_size());
 	return 0;
@@ -328,6 +328,25 @@ test_link_typed_attributes(void)
 }
 
 static int
+test_event_link_overflow(void)
+{
+	uint8_t tid[OTLP_TRACE_ID_LEN] = { 1 };
+	uint8_t sid[OTLP_SPAN_ID_LEN] = { 2 };
+	otlp_span_t *span = otlp_span_create("test");
+	int i;
+
+	assert(span != NULL);
+	for (i = 0; i < 64; i++)
+		assert(otlp_span_add_event(span, "e", 1) == OTLP_OK);
+	assert(otlp_span_add_event(span, "e", 1) == OTLP_ERR_OVERFLOW);
+	for (i = 0; i < 64; i++)
+		assert(otlp_span_add_link(span, tid, sid) == OTLP_OK);
+	assert(otlp_span_add_link(span, tid, sid) == OTLP_ERR_OVERFLOW);
+	otlp_span_free(span);
+	return 0;
+}
+
+static int
 test_event_link_attr_before_add(void)
 {
 	otlp_span_t *span = otlp_span_create("test");
@@ -407,13 +426,14 @@ main(void)
 	failures += test_event_typed_attributes();
 	failures += test_link_typed_attributes();
 	failures += test_event_link_attr_before_add();
+	failures += test_event_link_overflow();
 	failures += test_tracer_start_child();
 	failures += test_tracer_multiple_spans_unique_ids();
 
 	if (failures)
 		printf("[unit-span] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-span] PASS (19 tests)\n");
+		printf("[unit-span] PASS (20 tests)\n");
 
 	return failures ? 1 : 0;
 }

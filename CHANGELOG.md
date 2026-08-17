@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.76] - 2026-08-17
+
+Span events/links grow on demand; span struct 176 bytes (was 5,776).
+
+### Changed — events/links arrays leave the span struct
+
+After v0.5.75 the inline `events[64]` + `links[64]` header arrays
+were 97% of `sizeof(struct otlp_span)` — paid in full by every
+create and clone even for a span with neither (the common case).
+They now follow the same grow-on-demand model as the attribute
+vectors: heap arrays, NULL until first use, growing 4 → 8 → … slots
+via `realloc` (bounded by the unchanged 64/64 caps, new tail
+zeroed). Caps and overflow semantics unchanged; the event/link
+struct layouts are unchanged, so the encoder is untouched.
+
+- `sizeof(struct otlp_span)`: 5,776 → **176 B** (32.9×; the arc
+  from v0.5.67's 138,880 B is 789×).
+- Zero-attribute span emit: ~885 → **~150 ns/span** (~6.6M
+  spans/s through clone + queue + tick); 5 attributes: ~530 →
+  ~375 ns.
+- Struct-size budget: 8 KB → 512 B.
+
+### Added
+
+- `test_event_link_overflow` — the 64-event / 64-link caps had no
+  direct test; now pinned (64 OK, 65th → `OTLP_ERR_OVERFLOW`).
+
 ## [0.5.75] - 2026-08-17
 
 Grow-on-demand attribute vectors; attribute-bearing spans ~4× faster.
