@@ -23,7 +23,7 @@ extern "C" {
 
 #define OTLP_C_VERSION_MAJOR 0
 #define OTLP_C_VERSION_MINOR 5
-#define OTLP_C_VERSION_PATCH 81
+#define OTLP_C_VERSION_PATCH 82
 #define OTLP_C_VERSION_STRING "0.5.68"
 
 #define OTLP_C_VERSION                                                            \
