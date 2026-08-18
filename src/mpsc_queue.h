@@ -33,9 +33,9 @@ struct mpsc_slot
 struct mpsc_queue
 {
 	struct mpsc_slot *slots;
-	size_t mask;	       /* capacity - 1; capacity must be pow2 */
-	otlp_atomic_u64 head;  /* producer-side index */
-	otlp_atomic_u64 tail;  /* consumer-side index */
+	size_t mask; /* capacity - 1; capacity must be pow2 */
+	otlp_atomic_u64 head; /* producer-side index */
+	otlp_atomic_u64 tail; /* consumer-side index */
 };
 
 /* Initialise q with `capacity` slots. Capacity must be a power of
@@ -44,6 +44,8 @@ struct mpsc_queue
 otlp_status_t
 mpsc_queue_init(struct mpsc_queue *q, size_t capacity);
 
+/* Free the slots array. Does NOT drain queued items — the caller
+ * pops (and disposes of) everything first, or the items leak. */
 void
 mpsc_queue_free(struct mpsc_queue *q);
 

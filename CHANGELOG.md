@@ -4,6 +4,43 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.82] - 2026-08-18
+
+MPSC + shutdown-drain audit: contracts documented, protocol pinned.
+
+### Changed — documented contracts
+
+- `otlp_exporter_free()` now states the concurrency requirement:
+  `shutdown()` is a cooperative stop signal, NOT a barrier —
+  emits that already passed the shutdown check may still enqueue
+  afterwards, so the caller must join producer threads after they
+  observe `OTLP_ERR_SHUTDOWN` before freeing. An emit racing
+  `free()` is a use-after-free on the queues.
+- `mpsc_queue_free()` documents that it frees the slots array
+  only; queued items must be drained first or they leak.
+
+### Added — shutdown-protocol stress test
+
+Every existing stress test joined producers *before* shutdown.
+New `tests/test_shutdown_stress.c` exercises the documented
+sequence as written: 4 producers spin on `emit_move` (with
+back-pressure backoff on `OTLP_ERR_BUFFER_FULL`) until they
+observe `OTLP_ERR_SHUTDOWN` themselves, while the owner ticks,
+then shutdown → join → drain → flush → free. Asserts every
+producer observed the stop signal, `emitted` equals the total
+accepted, and the stats contract `emitted == sent + dropped_err`
+holds (`dropped_full` counts rejected emits, never counted in
+`emitted`). Under ASAN + LeakSanitizer this pins use-after-free
+and leak freedom for the protocol.
+
+### Audited — MPSC queue core found correct
+
+Every memory-ordering pair traced by hand (producer
+release-publish of the slot sequence; consumer release-return of
+the slot synchronizing with the next producer's acquire; relaxed
+head/tail as pure index allocators; CAS-failure refresh; exact
+full detection; non-wrapping u64 counters). No changes needed.
+
 ## [0.5.81] - 2026-08-18
 
 W3C context-propagation audit.

@@ -193,6 +193,18 @@ extern "C"
 	OTLP_C_EXPORT
 	otlp_exporter_t *otlp_exporter_create(const otlp_exporter_opts_t *opts);
 
+	/* Free the exporter. Drains and frees anything still queued
+	 * or batched (the safe order is shutdown() -> drain via tick()
+	 * / flush() -> free()).
+	 *
+	 * CONCURRENCY CONTRACT: shutdown() is a cooperative stop
+	 * signal, NOT a barrier — emit*() calls that already passed
+	 * the shutdown check may still return OTLP_OK and enqueue for
+	 * a short window after shutdown() returns. The caller MUST
+	 * ensure no emit*() is executing (or called afterwards) by
+	 * the time free() runs: join producer threads after they
+	 * observe OTLP_ERR_SHUTDOWN before freeing. Violating this is
+	 * a use-after-free on the queues. */
 	OTLP_C_EXPORT
 	void otlp_exporter_free(otlp_exporter_t *exp);
 
