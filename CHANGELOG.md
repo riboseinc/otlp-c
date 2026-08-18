@@ -4,6 +4,35 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.81] - 2026-08-18
+
+W3C context-propagation audit.
+
+### Fixed — traceparent version rules (W3C §3.3.2)
+
+- Version `ff` is now rejected (the spec marks 0xff invalid).
+- Version 00 with trailing content (`…-01-junk`) is now rejected —
+  version 00 is exactly 4 fields.
+- Future versions' extra fields are ignored, now as a documented,
+  tested forward-compatibility rule (previously an accident of not
+  reading past the flags).
+
+### Fixed — control bytes in propagated tracestate/baggage
+
+Extract-side tracestate/baggage rejected CR/LF (v0.5.53) but
+passed other control bytes through, which would produce invalid
+outgoing headers on inject — the same CWE-93 family one step
+removed. Any byte < 0x20 or 0x7F is now rejected; the W3C grammars
+allow only printable ASCII.
+
+Audited and found correct as-is: memory safety on short/malformed
+headers (the NUL short-circuit pattern never reads past the
+terminator), case-insensitive hex parsing, lowercase formatting,
+and the all-zero-ID rejections.
+
+New properties: `prop_traceparent_version_rules`,
+`prop_context_rejects_control_bytes`.
+
 ## [0.5.80] - 2026-08-18
 
 HTTP response parser: chunked support + framing hardening.
