@@ -4,6 +4,37 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.83] - 2026-08-18
+
+Retry/backoff audit: jitter implemented, shift UB fixed, 429 bucket corrected.
+
+### Fixed — backoff shift was undefined behavior for large max_retries
+
+`backoff_initial_ms << (attempt - 1)` operated on `uint32_t` with
+an unbounded shift count — a caller-set `max_retries` above ~33
+shifts past the type width (CWE-190 family). The exponent is now
+computed in `uint64_t` with the shift count clamped, saturating at
+`backoff_max_ms`. Pinned by a `max_retries = 100` retry test that
+traps under UBSAN on the old code.
+
+### Changed — exponential backoff now has full jitter (as documented)
+
+`docs/otlp-spec.md` has claimed "exponential backoff with full
+jitter" since the start — the code had none (deterministic
+delays). The delay is now uniform in
+`[0, min(initial << (attempt-1), max)]` via a tick-thread-only
+PRNG seeded at exporter create. The per-retry upper bound is
+unchanged. The duplicated delay computations (network-error and
+429/5xx paths) collapsed into one `backoff_delay_ms` helper that
+owns the saturation math and the jitter draw.
+
+### Fixed — HTTP 429 counted in the http_5xx bucket
+
+429 is retryable but still a 4xx; it now increments `http_4xx`
+(stats comment updated). New retry-test cases pin the 429 path
+(429 then 200 → sent, `http_4xx >= 1`, `http_5xx == 0`) and the
+shift guard.
+
 ## [0.5.82] - 2026-08-18
 
 MPSC + shutdown-drain audit: contracts documented, protocol pinned.

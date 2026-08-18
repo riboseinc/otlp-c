@@ -307,7 +307,7 @@ Architecture: see [docs/architecture.md](architecture.md).
 Acceptance criteria:
 - [ ] A 1000-span emit produces 2 POST requests (or 1 if flushed
   within 100ms).
-- [ ] Failed POST triggers exponential backoff with full jitter.
+- [x] Failed POST triggers exponential backoff with full jitter (v0.5.83).
 - [ ] Property P-EXPORT-NEVER-CORRUPT: no batch ever reaches the
   collector with malformed protobuf body.
 - [ ] Property P-EXPORT-NO-LEAK: exporter shutdown frees all

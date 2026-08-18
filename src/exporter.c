@@ -141,6 +141,10 @@ struct otlp_exporter
 	bool null_transport;
 	otlp_null_transport_status_fn null_transport_status_fn;
 	void *null_transport_status_ctx;
+	/* Backoff-jitter PRNG (xorshift64s). Tick-thread-only: read
+	 * and written exclusively from the tick caller, so plain
+	 * non-atomic state is correct. */
+	uint64_t jitter_prng;
 };
 
 /* ── Helpers ──────────────────────────────────────────────────── */
@@ -152,6 +156,43 @@ now_mono_ms(void)
 
 	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
 							    : 0;
+}
+
+/* xorshift64s — state must be non-zero. */
+static uint64_t
+jitter_next(uint64_t *s)
+{
+	uint64_t v = *s;
+
+	v ^= v << 13;
+	v ^= v >> 7;
+	v ^= v << 17;
+	*s = v;
+	return v * 0x2545F4914F6CDD1DULL;
+}
+
+/* Retry delay for `attempt` (1-based): exponential backoff with
+ * FULL jitter — uniform in [0, min(initial << (attempt-1), max)].
+ * The shift is computed in uint64_t with the shift count clamped
+ * (a caller-set max_retries above ~33 would otherwise shift a
+ * uint32 by >= its width: undefined behavior). One helper for
+ * every retry path (DRY: the network-error and 429/5xx paths
+ * previously duplicated this computation). */
+static uint32_t
+backoff_delay_ms(const struct otlp_exporter *e, uint32_t attempt)
+{
+	uint64_t exp;
+	uint32_t shift = attempt - 1;
+	uint64_t delay;
+
+	if (shift > 31)
+		shift = 31; /* beyond any uint32 magnitude anyway */
+	exp = (uint64_t) e->backoff_initial_ms << shift;
+	delay = exp > e->backoff_max_ms ? e->backoff_max_ms : exp;
+	if (delay == 0)
+		return 0;
+	return (uint32_t)(
+		jitter_next((uint64_t *) &e->jitter_prng) % (delay + 1));
 }
 
 /* Diagnostic logger. No-op when exp->log_fn is NULL (zero overhead:
@@ -408,6 +449,15 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 		goto fail;
 
 	e->in_flight_signal = 0; /* SPAN */
+	{
+		uint64_t seed = 0;
+
+		(void) otlp_platform_now_mono_nano(&seed);
+		seed ^= (uint64_t)(uintptr_t) e;
+		if (seed == 0)
+			seed = 0x9E3779B97F4A7C15ULL;
+		e->jitter_prng = seed;
+	}
 	otlp_atomic_store_int(
 		&e->shutdown_requested, 0, OTLP_MEMORY_ORDER_RELEASE);
 	return e;
@@ -450,19 +500,19 @@ otlp_exporter_free(otlp_exporter_t *e)
 	/* Drain queues + free pending batches, all signals. The drain
 	 * is table-driven: adding a 4th signal is one entry, not a
 	 * copy-paste of the while + for pair. */
-	drains[0] = (struct signal_drain_path) {
+	drains[0] = (struct signal_drain_path){
 		.queue = &e->queue,
 		.pending = (void **) e->pending,
 		.pending_count = e->pending_count,
 		.free_item = span_free_void,
 	};
-	drains[1] = (struct signal_drain_path) {
+	drains[1] = (struct signal_drain_path){
 		.queue = &e->metric_queue,
 		.pending = (void **) e->metric_pending,
 		.pending_count = e->metric_pending_count,
 		.free_item = metric_free_void,
 	};
-	drains[2] = (struct signal_drain_path) {
+	drains[2] = (struct signal_drain_path){
 		.queue = &e->log_queue,
 		.pending = (void **) e->log_pending,
 		.pending_count = e->log_pending_count,
@@ -734,7 +784,7 @@ record_path_for(struct otlp_exporter *e)
 	switch (e->in_flight_signal)
 	{
 		case SIGNAL_METRIC:
-			return (struct signal_record_path) {
+			return (struct signal_record_path){
 				.pending = (void **) e->metric_pending,
 				.pending_count = &e->metric_pending_count,
 				.first_set = &e->metric_first_set,
@@ -744,7 +794,7 @@ record_path_for(struct otlp_exporter *e)
 				.signal_name = "metrics",
 			};
 		case SIGNAL_LOG:
-			return (struct signal_record_path) {
+			return (struct signal_record_path){
 				.pending = (void **) e->log_pending,
 				.pending_count = &e->log_pending_count,
 				.first_set = &e->log_first_set,
@@ -755,7 +805,7 @@ record_path_for(struct otlp_exporter *e)
 			};
 		case SIGNAL_SPAN:
 		default:
-			return (struct signal_record_path) {
+			return (struct signal_record_path){
 				.pending = (void **) e->pending,
 				.pending_count = &e->pending_count,
 				.first_set = &e->first_pending_set,
@@ -1016,11 +1066,8 @@ record_outcome(struct otlp_exporter *e, int http_status)
 			return;
 		}
 		{
-			uint32_t delay = e->backoff_initial_ms
-				<< (e->attempt - 1);
-			if (delay > e->backoff_max_ms ||
-				delay < e->backoff_initial_ms)
-				delay = e->backoff_max_ms;
+			uint32_t delay = backoff_delay_ms(e, e->attempt);
+
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
 			otlp_log(e,
@@ -1048,8 +1095,12 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
 	{
+		/* 429 is retryable but still a 4xx — count it in its own
+		 * status-class bucket (http_4xx), not http_5xx. */
 		otlp_atomic_fetch_add_u64(
-			&e->http_5xx, 1, OTLP_MEMORY_ORDER_RELAXED);
+			http_status == 429 ? &e->http_4xx : &e->http_5xx,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
@@ -1066,11 +1117,8 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		}
 		else
 		{
-			uint32_t delay = e->backoff_initial_ms
-				<< (e->attempt - 1);
-			if (delay > e->backoff_max_ms ||
-				delay < e->backoff_initial_ms)
-				delay = e->backoff_max_ms;
+			uint32_t delay = backoff_delay_ms(e, e->attempt);
+
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
 			otlp_log(e,
@@ -1110,7 +1158,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 	/* Build the signal descriptor table once. All pointer fields
 	 * point into the exporter struct; mutations through paths[]
 	 * update e directly. */
-	paths[SIGNAL_SPAN] = (struct signal_path) {
+	paths[SIGNAL_SPAN] = (struct signal_path){
 		.queue = &e->queue,
 		.pending = (void **) e->pending,
 		.pending_cap = e->pending_cap,
@@ -1120,7 +1168,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		.signal_kind = SIGNAL_SPAN,
 		.start_post = try_start_post,
 	};
-	paths[SIGNAL_METRIC] = (struct signal_path) {
+	paths[SIGNAL_METRIC] = (struct signal_path){
 		.queue = &e->metric_queue,
 		.pending = (void **) e->metric_pending,
 		.pending_cap = e->metric_pending_cap,
@@ -1130,7 +1178,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		.signal_kind = SIGNAL_METRIC,
 		.start_post = try_start_metric_post,
 	};
-	paths[SIGNAL_LOG] = (struct signal_path) {
+	paths[SIGNAL_LOG] = (struct signal_path){
 		.queue = &e->log_queue,
 		.pending = (void **) e->log_pending,
 		.pending_cap = e->log_pending_cap,
