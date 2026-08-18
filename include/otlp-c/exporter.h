@@ -430,7 +430,8 @@ extern "C"
 		uint64_t dropped_err; /* spans dropped after max_retries */
 		uint64_t sent; /* spans successfully POSTed */
 		uint64_t http_2xx; /* HTTP responses in 2xx (all signals) */
-		uint64_t http_4xx; /* HTTP responses in 4xx (all signals) */
+		uint64_t http_4xx; /* HTTP responses in 4xx, INCLUDING the
+				    * retryable 429 (all signals) */
 		uint64_t http_5xx; /* HTTP responses in 5xx (all signals) */
 		uint64_t network_err; /* network failures (all signals) */
 		uint64_t emitted_metrics; /* metrics accepted by
