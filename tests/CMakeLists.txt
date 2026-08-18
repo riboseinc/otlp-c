@@ -47,6 +47,15 @@ if(UNIX)
         COMMAND otlp_test_concurrency_stress)
     set_tests_properties(concurrency-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
 
+    # Shutdown-protocol stress (v0.5.82): producers observe
+    # ERR_SHUTDOWN and stop by themselves while the owner drains;
+    # pins use-after-free/leak freedom under ASAN.
+    add_executable(otlp_test_shutdown_stress test_shutdown_stress.c)
+    target_link_libraries(otlp_test_shutdown_stress PRIVATE otlp_c Threads::Threads)
+    add_test(NAME shutdown-stress
+        COMMAND otlp_test_shutdown_stress)
+    set_tests_properties(shutdown-stress PROPERTIES LABELS "unit;stress" TIMEOUT 60)
+
     # Multi-signal concurrency stress (v0.5.34): N threads emit
     # spans + metrics + logs; main thread ticks. null_transport.
     add_executable(otlp_test_concurrency_stress_multi
