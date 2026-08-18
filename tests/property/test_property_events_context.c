@@ -695,6 +695,60 @@ out:
 	return ok;
 }
 
+/* Control bytes in tracestate/baggage (not just CRLF) are
+ * rejected on extract: any byte < 0x20 or 0x7f would produce an
+ * invalid outgoing header on inject (CWE-93 hardening, v0.5.81). */
+static int
+prop_context_rejects_control_bytes(uint64_t seed)
+{
+	struct test_carrier c2 = { 0 };
+	otlp_context_t in, ctx;
+	otlp_span_t *span;
+	bool found_ts = false;
+
+	(void) seed;
+	span = otlp_span_create("op");
+	if (!span)
+		return 0;
+	otlp_span_set_trace_id(span,
+		(const uint8_t *) "\x01\x02\x03\x04\x05\x06\x07\x08"
+				  "\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10");
+	otlp_span_set_span_id(
+		span, (const uint8_t *) "\x11\x12\x13\x14\x15\x16\x17\x18");
+	in = otlp_context_from_span(span);
+	otlp_span_free(span);
+	if (!in.has_context)
+		return 0;
+	snprintf(in.tracestate, sizeof(in.tracestate), "vendor=abc");
+	if (otlp_context_inject(in, carrier_set, &c2) != OTLP_OK)
+		return 0;
+	/* Sanity: the carrier holds a tracestate entry. */
+	for (size_t i = 0; i < c2.n; i++)
+		if (strcmp(c2.entries[i].key, "tracestate") == 0)
+			found_ts = true;
+	if (!found_ts)
+		return 0;
+	/* Corrupt it with a 0x01 control byte. */
+	for (size_t i = 0; i < c2.n; i++)
+	{
+		if (strcmp(c2.entries[i].key, "tracestate") == 0)
+		{
+			c2.entries[i].value[9] = 0x01;
+			c2.entries[i].value[10] = 'x';
+			c2.entries[i].value[11] = '\0';
+			break;
+		}
+	}
+	ctx = otlp_context_extract(carrier_get, &c2);
+	/* The context extracts, but the tainted tracestate is
+	 * dropped. */
+	if (!ctx.has_context)
+		return 0;
+	if (ctx.tracestate[0] != '\0')
+		return 0;
+	return 1;
+}
+
 int
 main(void)
 {
@@ -733,6 +787,10 @@ main(void)
 	failures += property_run(prop_context_tracestate_roundtrip,
 		"prop_context_tracestate_roundtrip",
 		50,
+		1);
+	failures += property_run(prop_context_rejects_control_bytes,
+		"prop_context_rejects_control_bytes",
+		1,
 		1);
 
 	if (failures)
