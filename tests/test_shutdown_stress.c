@@ -11,8 +11,15 @@
  *
  * Under ASAN + LeakSanitizer this pins that the protocol is
  * use-after-free-free and leak-free, and that the accounting
- * invariant (emitted == sent + dropped) holds for everything the
- * exporter accepted before shutdown.
+ * invariant (emitted == sent + dropped_err) holds for everything
+ * the exporter accepted before shutdown.
+ *
+ * NOTE: never put side effects in assert() — Release builds
+ * define NDEBUG and the expression is NOT evaluated. The first
+ * draft called pthread_create inside an assert: under Release no
+ * threads were created and pthread_join then read uninitialized
+ * stack (the CI segfault); Debug builds masked it. Side-effecting
+ * calls get explicit rc checks here.
  */
 #if !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
@@ -54,6 +61,8 @@ struct worker_result
 	uint64_t accepted;
 	uint64_t rejected;
 	uint64_t full;
+	uint64_t null_span;
+	uint64_t unexpected;
 };
 
 static otlp_exporter_t *g_exp;
@@ -71,7 +80,10 @@ worker(void *arg)
 		otlp_status_t st;
 
 		if (!span)
+		{
+			r->null_span++;
 			break;
+		}
 		otlp_span_mark_end(span);
 		st = otlp_exporter_emit_move(g_exp, span);
 		if (st == OTLP_OK)
@@ -98,6 +110,7 @@ worker(void *arg)
 			continue;
 		}
 		/* Unexpected failure (e.g. NOMEM): stop. */
+		r->unexpected++;
 		break;
 	}
 	(void) i;
@@ -129,9 +142,18 @@ main(void)
 
 	for (i = 0; i < N_THREADS; i++)
 	{
+		int rc;
+
 		memset(&results[i], 0, sizeof(results[i]));
-		assert(pthread_create(&threads[i], NULL, worker, &results[i]) ==
-			0);
+		rc = pthread_create(&threads[i], NULL, worker, &results[i]);
+		if (rc != 0)
+		{
+			printf("[shutdown-stress] pthread_create(%d) failed: "
+			       "%d\n",
+				i,
+				rc);
+			return 1;
+		}
 	}
 
 	/* Let the producers run concurrently with the shutdown: this
@@ -166,16 +188,29 @@ main(void)
 	 * dropped. Items drained by free() after shutdown also count
 	 * as accepted-by-the-queue here only if they were counted as
 	 * emitted — the invariant the stats contract guarantees. */
+	printf("[shutdown-stress] null_span=%llu unexpected=%llu\n",
+		(unsigned long long) results[0].null_span,
+		(unsigned long long) results[0].unexpected);
 	printf("[shutdown-stress] accepted=%llu rejected=%llu "
-	       "emitted=%llu sent=%llu dropped_full=%llu "
-	       "dropped_err=%llu\n",
+	       "full(thread0)=%llu\n",
 		(unsigned long long) total_accepted,
 		(unsigned long long) total_rejected,
+		(unsigned long long) results[0].full);
+	printf("[shutdown-stress] emitted=%llu sent=%llu full=%llu err=%llu\n",
 		(unsigned long long) stats.emitted,
 		(unsigned long long) stats.sent,
 		(unsigned long long) stats.dropped_full,
 		(unsigned long long) stats.dropped_err);
-
+	{
+		size_t k;
+		for (k = 0; k < N_THREADS; k++)
+			printf("[shutdown-stress] t%zu: acc=%llu rej=%llu "
+			       "full=%llu\n",
+				k,
+				(unsigned long long) results[k].accepted,
+				(unsigned long long) results[k].rejected,
+				(unsigned long long) results[k].full);
+	}
 	otlp_tracer_free(g_tracer);
 	otlp_exporter_free(g_exp);
 
