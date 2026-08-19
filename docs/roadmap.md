@@ -132,12 +132,30 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.76 | Span events/links grow on demand; **span struct 176 bytes** (789× smaller than v0.5.67); emit ~150 ns/span | #107 |
 | 0.5.77 | Documentation catch-up for the attribute-model arc | #108 |
 | 0.5.78 | **Resource attributes are a map** (duplicate opts keys / service.name collisions emitted non-compliant wire data) | #109 |
+| 0.5.79 | One set-attribute engine (`otlp_attr_vec_set/_set_array/_set_kvlist`); all 29 setters are thin wrappers (−145 lines, semantics byte-identical) | #110 |
+| 0.5.80 | **Chunked HTTP responses** (RFC 7230 §4.1 in-place decoder) + framing hardening (line-aligned headers, TE+CL smuggling rejection, version-aware keep-alive) | #111 |
+| 0.5.81 | W3C traceparent version rules (ff invalid; v00 exact) + control-byte rejection in propagated tracestate/baggage | #112 |
+| 0.5.82 | MPSC/shutdown audit: queue verified correct by ordering-pair trace; shutdown concurrency contract documented + protocol stress test | #113 |
+| 0.5.83 | **Backoff full jitter implemented** (docs had promised it since v0.1) + shift-UB fix for large max_retries + 429 → http_4xx bucket | #114 |
+| 0.5.84 | **SENDING-phase I/O inactivity deadline** (send-side slowloris) + big-endian ratio-sampler prefix | #115 |
+| 0.5.85 | **Slab allocator arena-aware realloc** (libc realloc on arena pointers was UB — aborts under macOS libmalloc) | #116 |
+| 0.5.86 | Encode-path audit: SBO 64 → 192 (span envelopes escape was the only heap hit); ~10% on attribute batches, byte-identical | #117 |
 
-**Key metrics (v0.5.76):** 116 TODOs complete, 36 tests, **37+
+**Key metrics (v0.5.86):** 126 TODOs complete, 38 tests, **40+
 distinct bugs found and fixed**, all sanitizers green, zero
-warnings. `sizeof(otlp_span)`: 138,880 → **176 bytes**; emit
-pipeline ~30,000 → **~150 ns/span** (~6.6M spans/s, null
-transport).
+warnings, verified in Debug AND Release configurations.
+`sizeof(otlp_span)`: 138,880 → **176 bytes**; emit pipeline
+~30,000 → **~150 ns/span** (~6.6M spans/s, null transport);
+encode ~990 ns/span at 5 attrs (SBO 192).
+
+**Audit arc (v0.5.78–v0.5.86):** every subsystem passed through a
+dedicated audit — resource attrs, setter engine, HTTP response
+parser, W3C context, MPSC/shutdown, retry/backoff, request
+timeouts + sampler, slab, encoders. Findings per pass: 2–5 real
+bugs each (UB, spec violations, smuggling vectors, doc-vs-code
+lies). Two test-discipline lessons banked: macOS ASAN needs
+`detect_leaks=1` explicitly; side-effecting calls must never sit
+in `assert()` (Release/NDEBUG elides them).
 
 **Attribute-model arc (v0.5.68–v0.5.76):** all five
 attribute-bearing surfaces (span, event, link, metric, log) share

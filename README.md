@@ -61,7 +61,7 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
 
 - **Traces**: spans with attributes, events, links, trace_state,
   status, sampling. Async emit + caller-tick batching with
-  exponential backoff retry.
+  exponential backoff retry (full jitter).
 - **Metrics**: counter, gauge, histogram, exponential histogram.
   Async emit (`emit_metric_move`, v0.5.28) + synchronous flush
   fallback. Configurable aggregation temporality + is_monotonic.
@@ -82,8 +82,14 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
   the attributes they carry, not fixed-cap arrays.
 - **Resource attributes**: typed (string/int64/double/bool) on
   every batch's Resource.
+- **Hardened HTTP client**: chunked-response decoding (RFC 7230),
+  request-smuggling rejection, version-aware keep-alive, and an
+  I/O inactivity deadline across connect/send/read.
+- **W3C-spec-exact propagation**: traceparent version rules,
+  printable-only tracestate/baggage, big-endian sampler prefix.
 - **Slab allocator**: fixed-slot memory pool with malloc fallback.
-  Installable as the process-wide allocator.
+  Installable as the process-wide allocator (any slot size —
+  realloc is arena-aware).
 - **Zero dependencies**: no protobuf-c, no libcurl, no OpenSSL,
   no C++ runtime. Hand-rolled protobuf encoder + HTTP/1.1 client.
 - **No library threads**: caller-driven I/O. The library never

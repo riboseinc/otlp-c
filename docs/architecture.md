@@ -135,7 +135,7 @@ transport-agnostic via callback-based carriers.
 | `otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) | Traces/logs encoding |
 | `otlp_logs_encoder.c` | Logs encoder | Traces/metrics encoding |
 | `otlp_schema.h` | Model-driven field tables (single source of truth) | Encoder logic |
-| `protobuf_encode.c` | Protobuf wire encoding + SBO buffer | OTLP schema, transport |
+| `protobuf_encode.c` | Protobuf wire encoding + SBO buffer (192 B inline — sized so span envelopes and typical attribute KeyValues never touch the heap, v0.5.86) | OTLP schema, transport |
 | `http_client.c` | HTTP/1.1 state machine + keep-alive | OTLP semantics |
 | `platform.c` / `_unix.c` / `_win.c` | Clocks, non-blocking sockets | Public API |
 | `mpsc_queue.c` | Lock-free MPSC ring buffer | Exporter logic |
