@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.84] - 2026-08-19
+
+Send-stall timeout + sampler endianness.
+
+### Fixed — SENDING phase had no deadline (send-side slowloris)
+
+`connect_timeout_ms` covered CONNECTING and `read_timeout_ms`
+covered READING, but a server that accepts the connection yet
+never reads the POST blocked SENDING forever once the kernel send
+buffer filled. The inactivity deadline now covers SENDING too:
+the idle timer (formerly `last_recv_ms`, now `last_io_ms`) resets
+on connect completion and every partial write, and `step_sending`
+fails with `OTLP_ERR_TIMEOUT` when no progress occurs within
+`read_timeout_ms`. A slow-but-steady stream never trips it — the
+timer measures inactivity, not duration; the header documents the
+semantics. Pinned by a sink-server test (accepts, never reads, 4
+MB POST → TIMEOUT) that hangs on the previous code.
+
+### Fixed — ratio sampler read the trace-ID prefix with native endianness
+
+`memcpy(&prefix, trace_id, 8)` is byte-reversed on little-endian:
+the sampling *rate* was correct everywhere, but *which* IDs sample
+was platform-dependent, contradicting the documented cross-SDK
+consistency. Now an explicit big-endian load matching otel-go.
+A known-answer property pins it (ratio 0.5: 0x80..-prefixed IDs
+not sampled, 0x7F.. sampled) on every platform.
+
 ## [0.5.83] - 2026-08-18
 
 Retry/backoff audit: jitter implemented, shift UB fixed, 429 bucket corrected.

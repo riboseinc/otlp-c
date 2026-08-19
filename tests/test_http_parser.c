@@ -12,8 +12,8 @@
  *   - version-aware keep-alive default (HTTP/1.0 -> not reusable)
  *   - case-insensitive header names
  */
-#if !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
+#if !defined(_DEFAULT_SOURCE)
+#define _DEFAULT_SOURCE 1
 #endif
 
 #include "test_helper_echo.h"
@@ -28,6 +28,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #if defined(_WIN32)
 int
@@ -336,6 +341,166 @@ test_case_insensitive_headers(void)
 	return 0;
 }
 
+/* Send-phase inactivity timeout: a server that accepts the
+ * connection but never reads would stall SENDING forever (the
+ * kernel send buffer fills and write() blocks). With
+ * read_timeout_ms set, the request must fail with TIMEOUT
+ * (v0.5.84; before the fix this test hangs). */
+struct sink_args
+{
+	int listen_fd;
+	int conn_fd;
+};
+
+static void *
+sink_thread(void *arg)
+{
+	struct sink_args *a = arg;
+	struct timespec ts = { 5, 0 };
+
+	a->conn_fd = accept(a->listen_fd, NULL, NULL);
+	if (a->conn_fd >= 0)
+		nanosleep(&ts, NULL); /* never read, never close */
+	return NULL;
+}
+
+static int
+test_send_stall_times_out(void)
+{
+	struct sockaddr_in addr;
+	socklen_t alen = sizeof(addr);
+	struct sink_args a;
+	pthread_t tid;
+	otlp_http_request_t *req = NULL;
+	struct otlp_http_url url;
+	char url_str[128];
+	uint8_t *big;
+	size_t big_len = 4 * 1024 * 1024;
+	otlp_status_t st = OTLP_OK;
+	int i;
+
+	a.listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (a.listen_fd < 0)
+		return 1;
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_port = 0;
+	/* Explicit rc checks: side-effecting calls must NEVER sit in
+	 * assert() — Release/NDEBUG compiles the expression out and
+	 * the socket would never be bound (the v0.5.82 lesson, caught
+	 * here a third time). */
+	if (bind(a.listen_fd, (struct sockaddr *) &addr, sizeof(addr)) != 0)
+	{
+		close(a.listen_fd);
+		return 1;
+	}
+	if (listen(a.listen_fd, 8) != 0)
+	{
+		close(a.listen_fd);
+		return 1;
+	}
+	if (getsockname(a.listen_fd, (struct sockaddr *) &addr, &alen) != 0)
+	{
+		close(a.listen_fd);
+		return 1;
+	}
+	snprintf(url_str,
+		sizeof(url_str),
+		"http://127.0.0.1:%u/v1/traces",
+		ntohs(addr.sin_port));
+	{
+		int pst = otlp_http_parse_url(url_str, &url);
+
+		if (pst != OTLP_OK)
+		{
+			close(a.listen_fd);
+			return 1;
+		}
+	}
+
+	big = malloc(big_len);
+	assert(big != NULL);
+	memset(big, 'x', big_len);
+
+	{
+		int prc = pthread_create(&tid, NULL, sink_thread, &a);
+
+		if (prc != 0)
+		{
+			free(big);
+			close(a.listen_fd);
+			return 1;
+		}
+	}
+	st = otlp_http_request_start(&req,
+		&url,
+		"otlp-c/test",
+		big,
+		big_len,
+		0, /* no connect timeout */
+		120 /* read (I/O inactivity) timeout, ms */);
+	if (st != OTLP_OK)
+	{
+		printf("[http-parser] send-stall: start failed st=%d\n",
+			(int) st);
+		free(big);
+		close(a.listen_fd);
+		return 1;
+	}
+
+	{
+		/* Wall-clock bound (Release spins 20k iterations in ~30ms,
+		 * far under the 120ms inactivity timeout being tested). */
+		struct timespec t0;
+		uint64_t deadline_ms;
+
+		clock_gettime(CLOCK_MONOTONIC, &t0);
+		deadline_ms = (uint64_t) t0.tv_sec * 1000 +
+			t0.tv_nsec / 1000000 + 2000;
+		for (i = 0; i < 5000000; i++)
+		{
+			struct timespec now;
+
+			st = otlp_http_request_step(req);
+			if (otlp_http_request_state(req) ==
+					OTLP_HTTP_REQ_FAILED ||
+				otlp_http_request_state(req) ==
+					OTLP_HTTP_REQ_DONE)
+				break;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			if ((uint64_t) now.tv_sec * 1000 +
+					now.tv_nsec / 1000000 >
+				deadline_ms)
+				break;
+			if (st == OTLP_ERR_WOULDBLOCK)
+			{
+				struct timespec ts = { 0, 1000 };
+
+				nanosleep(&ts, NULL);
+			}
+		}
+	}
+	free(big);
+	{
+		int failed =
+			otlp_http_request_state(req) == OTLP_HTTP_REQ_FAILED;
+		int timeout = (st == OTLP_ERR_TIMEOUT);
+
+		otlp_http_request_free(req);
+		pthread_join(tid, NULL);
+		if (a.conn_fd >= 0)
+			close(a.conn_fd);
+		close(a.listen_fd);
+		if (!failed || !timeout)
+		{
+			printf("[http-parser] send-stall: st=%d\n", (int) st);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int
 main(void)
 {
@@ -350,11 +515,12 @@ main(void)
 	failures += test_header_value_not_matched();
 	failures += test_http10_not_reusable();
 	failures += test_case_insensitive_headers();
+	failures += test_send_stall_times_out();
 
 	if (failures)
 		printf("[http-parser] FAIL (%d test(s))\n", failures);
 	else
-		printf("[http-parser] PASS (9 tests)\n");
+		printf("[http-parser] PASS (10 tests)\n");
 	return failures ? 1 : 0;
 }
 

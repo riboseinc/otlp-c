@@ -24,16 +24,17 @@
 static int
 prop_always_on_always_samples(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_always_on();
-	struct prng	      p;
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_always_on();
+	struct prng p;
+	uint8_t trace_id[16];
 
 	prng_seed(&p, seed);
 	for (size_t i = 0; i < 16; i++)
 		trace_id[i] = (uint8_t) prng_u32(&p, 256);
-	for (size_t i = 0; i < 100; i++) {
+	for (size_t i = 0; i < 100; i++)
+	{
 		otlp_sampling_result_t r = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 		if (r.decision != OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED)
 			return 0;
 	}
@@ -43,16 +44,17 @@ prop_always_on_always_samples(uint64_t seed)
 static int
 prop_always_off_never_samples(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_always_off();
-	struct prng	      p;
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_always_off();
+	struct prng p;
+	uint8_t trace_id[16];
 
 	prng_seed(&p, seed);
 	for (size_t i = 0; i < 16; i++)
 		trace_id[i] = (uint8_t) prng_u32(&p, 256);
-	for (size_t i = 0; i < 100; i++) {
+	for (size_t i = 0; i < 100; i++)
+	{
 		otlp_sampling_result_t r = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 		if (r.decision != OTLP_SAMPLING_DECISION_NOT_RECORD)
 			return 0;
 	}
@@ -62,17 +64,19 @@ prop_always_off_never_samples(uint64_t seed)
 static int
 prop_ratio_zero_drops_all(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(0.0);
-	struct prng	      p;
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.0);
+	struct prng p;
+	uint8_t trace_id[16];
 
 	prng_seed(&p, seed);
 	for (size_t i = 0; i < 16; i++)
 		trace_id[i] = (uint8_t) prng_u32(&p, 256);
-	for (size_t i = 0; i < 100; i++) {
+	for (size_t i = 0; i < 100; i++)
+	{
 		otlp_sampling_result_t r = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
-		if (r.decision != OTLP_SAMPLING_DECISION_NOT_RECORD) {
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+		if (r.decision != OTLP_SAMPLING_DECISION_NOT_RECORD)
+		{
 			otlp_sampler_free(s);
 			return 0;
 		}
@@ -84,17 +88,19 @@ prop_ratio_zero_drops_all(uint64_t seed)
 static int
 prop_ratio_one_keeps_all(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(1.0);
-	struct prng	      p;
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(1.0);
+	struct prng p;
+	uint8_t trace_id[16];
 
 	prng_seed(&p, seed);
 	for (size_t i = 0; i < 16; i++)
 		trace_id[i] = (uint8_t) prng_u32(&p, 256);
-	for (size_t i = 0; i < 100; i++) {
+	for (size_t i = 0; i < 100; i++)
+	{
 		otlp_sampling_result_t r = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
-		if (r.decision != OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED) {
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+		if (r.decision != OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED)
+		{
 			otlp_sampler_free(s);
 			return 0;
 		}
@@ -106,18 +112,18 @@ prop_ratio_one_keeps_all(uint64_t seed)
 static int
 prop_ratio_deterministic(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(0.5);
-	struct prng	      p;
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.5);
+	struct prng p;
+	uint8_t trace_id[16];
 
 	prng_seed(&p, seed);
 	for (size_t i = 0; i < 16; i++)
 		trace_id[i] = (uint8_t) prng_u32(&p, 256);
 	{
 		otlp_sampling_result_t r1 = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 		otlp_sampling_result_t r2 = s->should_sample(
-		    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+			s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 		otlp_sampler_free(s);
 		return r1.decision == r2.decision;
 	}
@@ -130,20 +136,22 @@ prop_ratio_distribution(uint64_t seed)
 	 * We sample 1000 random trace_ids and check the kept count is
 	 * within [350, 650] (loose bound; statistically very unlikely
 	 * to fail). */
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(0.5);
-	struct prng	      p;
-	size_t	      kept = 0;
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.5);
+	struct prng p;
+	size_t kept = 0;
 
 	prng_seed(&p, seed);
-	for (size_t i = 0; i < 1000; i++) {
+	for (size_t i = 0; i < 1000; i++)
+	{
 		uint8_t trace_id[16];
 
 		for (size_t j = 0; j < 16; j++)
 			trace_id[j] = (uint8_t) prng_u32(&p, 256);
 		{
 			otlp_sampling_result_t r = s->should_sample(
-			    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
-			if (r.decision == OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED)
+				s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+			if (r.decision ==
+				OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED)
 				kept++;
 		}
 	}
@@ -155,13 +163,14 @@ static int
 prop_default_sampler_is_always_on(uint64_t seed)
 {
 	otlp_tracer_t *tr = otlp_tracer_create("svc", NULL, NULL);
-	otlp_span_t   *span;
+	otlp_span_t *span;
 
 	(void) seed;
 	if (!tr)
 		return 0;
 	span = otlp_tracer_start_span(tr, "op");
-	if (!span) {
+	if (!span)
+	{
 		otlp_tracer_free(tr);
 		return 0;
 	}
@@ -182,14 +191,13 @@ prop_default_sampler_is_always_on(uint64_t seed)
 static int
 prop_ratio_one_samples_max_trace_id(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(1.0);
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(1.0);
+	uint8_t trace_id[16];
 	otlp_sampling_result_t r;
 
 	(void) seed;
 	memset(trace_id, 0xFF, 16);
-	r = s->should_sample(
-	    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+	r = s->should_sample(s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 	otlp_sampler_free(s);
 	return r.decision == OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED;
 }
@@ -200,16 +208,45 @@ prop_ratio_one_samples_max_trace_id(uint64_t seed)
 static int
 prop_ratio_zero_drops_zero_trace_id(uint64_t seed)
 {
-	otlp_sampler_t      *s = otlp_sampler_trace_id_ratio_based(0.0);
-	uint8_t	      trace_id[16];
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.0);
+	uint8_t trace_id[16];
 	otlp_sampling_result_t r;
 
 	(void) seed;
 	memset(trace_id, 0x00, 16);
-	r = s->should_sample(
-	    s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
+	r = s->should_sample(s, trace_id, "x", OTLP_SPAN_KIND_INTERNAL);
 	otlp_sampler_free(s);
 	return r.decision == OTLP_SAMPLING_DECISION_NOT_RECORD;
+}
+
+/* The ratio threshold reads the trace-id prefix BIG-ENDIAN
+ * (matching otel-go), so the decision is identical on every
+ * platform: an ID starting 0x80.. is above the ratio-0.5
+ * threshold (not sampled), an ID starting 0x7F.. is below it
+ * (sampled). */
+static int
+prop_ratio_endian_known_answer(uint64_t seed)
+{
+	otlp_sampler_t *s = otlp_sampler_trace_id_ratio_based(0.5);
+	uint8_t hi[16];
+	uint8_t lo[16];
+	int ok = 0;
+
+	(void) seed;
+	if (!s)
+		return 0;
+	memset(hi, 0, sizeof(hi));
+	hi[0] = 0x80; /* BE prefix = 0x8000... > 0x7FFF... threshold */
+	memset(lo, 0, sizeof(lo));
+	lo[0] = 0x7F; /* BE prefix = 0x7F00... < threshold */
+	if (s->should_sample(s, hi, "op", OTLP_SPAN_KIND_INTERNAL).decision ==
+			OTLP_SAMPLING_DECISION_NOT_RECORD &&
+		s->should_sample(s, lo, "op", OTLP_SPAN_KIND_INTERNAL)
+				.decision ==
+			OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED)
+		ok = 1;
+	otlp_sampler_free(s);
+	return ok;
 }
 
 int
@@ -218,26 +255,41 @@ main(void)
 	int failures = 0;
 
 	failures += property_run(prop_always_on_always_samples,
-				 "prop_always_on_always_samples", 5, 1);
+		"prop_always_on_always_samples",
+		5,
+		1);
 	failures += property_run(prop_always_off_never_samples,
-				 "prop_always_off_never_samples", 5, 1);
-	failures += property_run(prop_ratio_zero_drops_all,
-				 "prop_ratio_zero_drops_all", 5, 1);
-	failures += property_run(prop_ratio_one_keeps_all,
-				 "prop_ratio_one_keeps_all", 5, 1);
-	failures += property_run(prop_ratio_deterministic,
-				 "prop_ratio_deterministic", 100, 1);
-	failures += property_run(prop_ratio_distribution,
-				 "prop_ratio_distribution", 3, 1);
+		"prop_always_off_never_samples",
+		5,
+		1);
+	failures += property_run(
+		prop_ratio_zero_drops_all, "prop_ratio_zero_drops_all", 5, 1);
+	failures += property_run(
+		prop_ratio_one_keeps_all, "prop_ratio_one_keeps_all", 5, 1);
+	failures += property_run(
+		prop_ratio_deterministic, "prop_ratio_deterministic", 100, 1);
+	failures += property_run(
+		prop_ratio_distribution, "prop_ratio_distribution", 3, 1);
 	failures += property_run(prop_default_sampler_is_always_on,
-				 "prop_default_sampler_is_always_on", 1, 1);
+		"prop_default_sampler_is_always_on",
+		1,
+		1);
+	failures += property_run(prop_ratio_endian_known_answer,
+		"prop_ratio_endian_known_answer",
+		1,
+		1);
 	failures += property_run(prop_ratio_one_samples_max_trace_id,
-				 "prop_ratio_one_samples_max_trace_id", 1, 1);
+		"prop_ratio_one_samples_max_trace_id",
+		1,
+		1);
 	failures += property_run(prop_ratio_zero_drops_zero_trace_id,
-				 "prop_ratio_zero_drops_zero_trace_id", 1, 1);
+		"prop_ratio_zero_drops_zero_trace_id",
+		1,
+		1);
 
 	if (failures)
-		printf("[property] %d sampler property(ies) failed\n", failures);
+		printf("[property] %d sampler property(ies) failed\n",
+			failures);
 	else
 		printf("[property] all sampler properties passed\n");
 	return failures ? 1 : 0;
