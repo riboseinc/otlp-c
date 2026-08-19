@@ -10,7 +10,8 @@
 #include <string.h>
 #include <stdio.h>
 
-static int test_varint_zero(void)
+static int
+test_varint_zero(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -27,7 +28,8 @@ static int test_varint_zero(void)
 	return 0;
 }
 
-static int test_varint_one(void)
+static int
+test_varint_one(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -44,7 +46,8 @@ static int test_varint_one(void)
 	return 0;
 }
 
-static int test_varint_127(void)
+static int
+test_varint_127(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -61,7 +64,8 @@ static int test_varint_127(void)
 	return 0;
 }
 
-static int test_varint_128(void)
+static int
+test_varint_128(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -79,7 +83,8 @@ static int test_varint_128(void)
 	return 0;
 }
 
-static int test_varint_300(void)
+static int
+test_varint_300(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -97,7 +102,8 @@ static int test_varint_300(void)
 	return 0;
 }
 
-static int test_fixed64_endian(void)
+static int
+test_fixed64_endian(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -122,7 +128,8 @@ static int test_fixed64_endian(void)
 	return 0;
 }
 
-static int test_fixed32_endian(void)
+static int
+test_fixed32_endian(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -143,7 +150,8 @@ static int test_fixed32_endian(void)
 	return 0;
 }
 
-static int test_string_encoding(void)
+static int
+test_string_encoding(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -162,7 +170,8 @@ static int test_string_encoding(void)
 	return 0;
 }
 
-static int test_tag_encoding(void)
+static int
+test_tag_encoding(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -180,7 +189,8 @@ static int test_tag_encoding(void)
 	return 0;
 }
 
-static int test_buf_growth(void)
+static int
+test_buf_growth(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -192,8 +202,10 @@ static int test_buf_growth(void)
 	assert(buf.cap >= 4);
 	assert(buf.data != NULL);
 
-	/* Write more than SBO capacity (64 bytes). */
-	for (i = 0; i < 100; i++) {
+	/* Write more than SBO capacity (192 bytes since v0.5.86;
+	 * was 64 — each varint ≤ 2 bytes for i < 16384). */
+	for (i = 0; i < 300; i++)
+	{
 		s = otlp_pb_varint(&buf, i);
 		assert(s == OTLP_OK);
 	}
@@ -207,7 +219,8 @@ static int test_buf_growth(void)
 	return 0;
 }
 
-static int test_buf_reset(void)
+static int
+test_buf_reset(void)
 {
 	struct otlp_pb_buf buf = { 0 };
 	otlp_status_t s;
@@ -228,7 +241,8 @@ static int test_buf_reset(void)
 	return 0;
 }
 
-int main(void)
+int
+main(void)
 {
 	int failures = 0;
 

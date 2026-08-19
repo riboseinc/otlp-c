@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.86] - 2026-08-19
+
+Encode-path audit: SBO sized for the span envelope (~10% faster).
+
+### Changed — `OTLP_PB_SBO_SIZE` 64 → 192
+
+The audit found the encoder already tight — the suspected
+per-attribute malloc storm doesn't exist (typical attribute
+KeyValues fit the inline small buffer). The real escape was the
+span sub-message: at ~60–80 bytes it just exceeded the 64-byte
+inline buffer, so every per-span (and most per-event/link)
+sub-message hit the heap plus a growth copy. At 192, span
+envelopes, event/link sub-messages with small attributes, and
+single-record flush bodies encode inline. Measured ~10% on
+attribute-bearing batches (batch=512×5: ~1,090 → ~990 ns/span);
+output is byte-identical (encoded sizes match exactly; 20k-iteration
+wire properties unchanged). `test_buf_growth`'s payload was
+re-sized against the new SBO (the old one now fits inline — caught
+by the ASAN job, since Release elides asserts).
+
 ## [0.5.85] - 2026-08-19
 
 Slab allocator: arena-aware realloc (undefined-behavior fix).
