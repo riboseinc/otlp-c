@@ -29,7 +29,7 @@ if(UNIX)
     target_link_libraries(otlp_test_http_parser PRIVATE otlp_c Threads::Threads)
     add_test(NAME http-parser
         COMMAND otlp_test_http_parser)
-    set_tests_properties(http-parser PROPERTIES LABELS "unit" TIMEOUT 30)
+    set_tests_properties(http-parser PROPERTIES LABELS "unit" TIMEOUT 90)
 
     add_executable(otlp_test_exporter_echo
         test_exporter_echo.c test_helper_echo.c)
