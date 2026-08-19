@@ -296,7 +296,7 @@ otlp_tracer_set_sampler(tracer, otlp_sampler_always_off());
 
 ```c
 /* Install a slab for hot-path small allocations */
-otlp_install_slab_allocator(128, 256);
+otlp_install_slab_allocator(256, 512);
 /* ... all subsequent otlp_malloc calls route through the slab ... */
 otlp_uninstall_slab_allocator();
 
