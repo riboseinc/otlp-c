@@ -138,7 +138,7 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.63). The library implements:
+All phases are complete (v0.5.86). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
   (every OTLP message has its own field-spec entry — v0.5.48/49/61
   fixed 10 field-number/wire-type bugs found by cross-checking
@@ -177,6 +177,20 @@ All phases are complete (v0.5.63). The library implements:
   partial-init cleanup leaks and accounting violations automatically
 - **Integer-overflow defense at all allocation sites** (v0.5.62/63:
   CWE-190): every `count * sizeof(...)` has an explicit check
+- **Hardened HTTP client** (v0.5.80/84): chunked-response decoding
+  (RFC 7230 §4.1, in-place), line-aligned header matching,
+  TE+CL/duplicate-CL smuggling rejection, version-aware
+  keep-alive, and an I/O inactivity deadline covering CONNECTING,
+  SENDING, and READING (send-side slowloris closed)
+- **W3C-spec-exact context propagation** (v0.5.81): traceparent
+  version rules (0xff invalid; version 00 exactly 4 fields;
+  future-version forward compat), printable-ASCII-only propagated
+  tracestate/baggage, big-endian ratio-sampler prefix
+- **Retry with full jitter** (v0.5.83): uniform
+  [0, min(initial<<(attempt−1), max)] via a tick-thread PRNG;
+  shift-count-clamped exponent (no UB at large max_retries)
+- **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
+  growing arena pointers are moved, never libc-realloc'd
 
 When extending the library:
 - **All five attribute surfaces** (span/event/link/metric/log)
@@ -193,6 +207,19 @@ When extending the library:
 
 Run `ctest --test-dir build -L property` after every change; the
 property tests catch regressions in the encoder immediately.
+
+Test-writing rules (paid-for lessons):
+- **Never put side effects in `assert()`** — CI's plain jobs build
+  Release/NDEBUG, which elides the expression entirely
+  (v0.5.82–84: pthread_create, bind/listen/getsockname, and
+  parse_url all vanished under Release). Explicit rc checks.
+- Verify in BOTH Debug and Release locally
+  (`cmake -B build-rel -DCMAKE_BUILD_TYPE=Release`); Release also
+  spins drive loops ~100× faster — bound timeout-waiting loops by
+  wall clock, not iteration count.
+- macOS ASAN does not enable leak detection by default: run
+  `ASAN_OPTIONS=detect_leaks=1` (ignore framework-only leaks in
+  property-url-parse; Linux CI is the authoritative gate).
 
 ## Conventions
 

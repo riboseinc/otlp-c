@@ -4,6 +4,30 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.87] - 2026-08-19
+
+Documentation catch-up for the audit arc (docs only).
+
+### Fixed — stale documentation across eight releases
+
+- `docs/roadmap.md`: version-table rows for v0.5.79–v0.5.86 (PR
+  numbers verified against the merge history), key-metrics block
+  refreshed (126 TODOs, 38 tests, 40+ bugs, Debug-and-Release
+  verification, encode ~990 ns/span @ 5 attrs), and an audit-arc
+  summary naming the two banked test-discipline lessons.
+- `CLAUDE.md`: capability list gained the four audit-arc systems
+  (hardened HTTP client, W3C-exact propagation, jittered retry,
+  arena-aware slab); new test-writing rules section — no
+  side-effecting asserts (NDEBUG elision), verify Debug AND
+  Release with wall-clock-bounded loops, macOS ASAN needs
+  `detect_leaks=1`.
+- `README.md`: retry says "full jitter"; new hardened-HTTP and
+  W3C-exact-propagation bullets; slab notes any-slot-size safety.
+- `docs/architecture.md`: the encoder module entry documents the
+  192-byte SBO and its sizing rationale.
+
+No code changes; build + full suite ran as the gate.
+
 ## [0.5.86] - 2026-08-19
 
 Encode-path audit: SBO sized for the span envelope (~10% faster).
