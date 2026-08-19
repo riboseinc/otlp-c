@@ -12,9 +12,12 @@
  * caller is a per-tracer or per-thread slab used during span
  * construction (which is single-threaded by API contract).
  *
- * Slot size and capacity are caller-controlled. For span-related
- * use, slot_size=128 covers most attribute keys + small string
- * values; capacity=256 covers a typical batch.
+ * Slot size and capacity are caller-controlled. Sizing note: any
+ * slot size is SAFE (the installed wrapper is arena-aware for
+ * realloc — growing buffers move out of the slab, v0.5.85); for a
+ * useful hit rate pick slot_size around the common small
+ * allocation (attribute keys/values, small vectors ~128-256
+ * bytes; spans themselves are ~176 bytes).
  */
 #include <otlp-c/slab.h>
 
@@ -29,24 +32,25 @@
 
 #define OTLP_SLAB_ALIGN _Alignof(void *)
 
-struct otlp_slab {
-	size_t	slot_size;     /* user-requested size, rounded up to alignment */
-	size_t	capacity;
-	uint8_t *arena;        /* slot_size * capacity bytes */
-	bool	   *used; /* capacity bytes */
-	size_t	in_use;
+struct otlp_slab
+{
+	size_t slot_size; /* user-requested size, rounded up to alignment */
+	size_t capacity;
+	uint8_t *arena; /* slot_size * capacity bytes */
+	bool *used; /* capacity bytes */
+	size_t in_use;
 	/* Free-list stack: indices of available slots. Alloc pops,
 	 * free pushes. O(1) per operation (was O(capacity) linear scan). */
-	size_t  *free_stack;
-	size_t	free_top;      /* number of entries in free_stack */
+	size_t *free_stack;
+	size_t free_top; /* number of entries in free_stack */
 	otlp_slab_stats_t stats;
 };
 
 /* ── Process-wide slab allocator integration ──────────────────── */
 
-static otlp_slab_t	    *g_installed_slab = NULL;
-static otlp_allocator_t  g_prev_allocator;
-static bool		       g_slab_installed = false;
+static otlp_slab_t *g_installed_slab = NULL;
+static otlp_allocator_t g_prev_allocator;
+static bool g_slab_installed = false;
 
 static void *
 slab_alloc_hook(size_t n)
@@ -62,18 +66,21 @@ slab_free_hook(void *p)
 	/* Inline the arena check here to avoid recursion: otlp_slab_free_ptr
 	 * falls through to otlp_free for non-arena pointers, which would
 	 * re-enter this hook. */
-	if (g_installed_slab && p) {
-		struct otlp_slab *s   = g_installed_slab;
-		uintptr_t	 base = (uintptr_t) s->arena;
-		uintptr_t	 end  = base + (s->slot_size * s->capacity);
-		uintptr_t	 pp   = (uintptr_t) p;
+	if (g_installed_slab && p)
+	{
+		struct otlp_slab *s = g_installed_slab;
+		uintptr_t base = (uintptr_t) s->arena;
+		uintptr_t end = base + (s->slot_size * s->capacity);
+		uintptr_t pp = (uintptr_t) p;
 
-		if (pp >= base && pp < end) {
+		if (pp >= base && pp < end)
+		{
 			size_t off = pp - base;
-			size_t i   = off / s->slot_size;
+			size_t i = off / s->slot_size;
 
-			if (i < s->capacity && s->used[i]) {
-				s->used[i]      = false;
+			if (i < s->capacity && s->used[i])
+			{
+				s->used[i] = false;
 				s->in_use--;
 				s->stats.free_count++;
 				s->stats.slab_free_hits++;
@@ -86,10 +93,51 @@ slab_free_hook(void *p)
 	g_prev_allocator.free(p);
 }
 
+/* Arena-aware realloc: a pointer served from the arena must be
+ * MOVED (new allocation + copy + slot returned), never handed to
+ * the underlying realloc — libc realloc on a slab pointer is
+ * undefined behavior (v0.5.85; the pre-fix pass-through aborted
+ * under macOS libmalloc). The copy is min(slot_size, n): the
+ * caller's original request was <= slot_size, so the full live
+ * content is preserved (a growth over-copies only dead bytes). */
+static void *
+slab_realloc_hook(void *p, size_t n)
+{
+	struct otlp_slab *s = g_installed_slab;
+	uintptr_t base;
+	uintptr_t end;
+	uintptr_t pp;
+
+	if (!s)
+		return g_prev_allocator.realloc(p, n);
+	if (!p)
+		return slab_alloc_hook(n);
+	if (n == 0)
+	{
+		slab_free_hook(p);
+		return NULL;
+	}
+	base = (uintptr_t) s->arena;
+	end = base + (s->slot_size * s->capacity);
+	pp = (uintptr_t) p;
+	if (pp >= base && pp < end)
+	{
+		void *np = slab_alloc_hook(n);
+		size_t copy = s->slot_size < n ? s->slot_size : n;
+
+		if (!np)
+			return NULL;
+		memcpy(np, p, copy);
+		slab_free_hook(p);
+		return np;
+	}
+	return g_prev_allocator.realloc(p, n);
+}
+
 otlp_status_t
 otlp_install_slab_allocator(size_t slot_size, size_t capacity)
 {
-	otlp_slab_t     *s;
+	otlp_slab_t *s;
 	otlp_allocator_t wrapped;
 
 	if (g_slab_installed)
@@ -97,11 +145,11 @@ otlp_install_slab_allocator(size_t slot_size, size_t capacity)
 	s = otlp_slab_create(slot_size, capacity);
 	if (!s)
 		return OTLP_ERR_NOMEM;
-	g_prev_allocator  = *otlp_get_allocator();
-	g_installed_slab  = s;
-	wrapped.alloc     = slab_alloc_hook;
-	wrapped.realloc   = g_prev_allocator.realloc;
-	wrapped.free      = slab_free_hook;
+	g_prev_allocator = *otlp_get_allocator();
+	g_installed_slab = s;
+	wrapped.alloc = slab_alloc_hook;
+	wrapped.realloc = slab_realloc_hook;
+	wrapped.free = slab_free_hook;
 	otlp_set_allocator(&wrapped);
 	g_slab_installed = true;
 	return OTLP_OK;
@@ -114,8 +162,8 @@ otlp_uninstall_slab_allocator(void)
 		return;
 	otlp_set_allocator(&g_prev_allocator);
 	otlp_slab_free(g_installed_slab);
-	g_installed_slab  = NULL;
-	g_slab_installed  = false;
+	g_installed_slab = NULL;
+	g_slab_installed = false;
 }
 
 static size_t
@@ -128,7 +176,7 @@ otlp_slab_t *
 otlp_slab_create(size_t slot_size, size_t capacity)
 {
 	struct otlp_slab *s;
-	size_t	       aligned_slot;
+	size_t aligned_slot;
 
 	if (slot_size == 0 || capacity == 0)
 		return NULL;
@@ -137,11 +185,11 @@ otlp_slab_create(size_t slot_size, size_t capacity)
 	if (!s)
 		return NULL;
 	s->slot_size = aligned_slot;
-	s->capacity  = capacity;
-	s->arena     = otlp_malloc(aligned_slot * capacity);
+	s->capacity = capacity;
+	s->arena = otlp_malloc(aligned_slot * capacity);
 	if (!s->arena)
 		goto fail;
-	s->used      = otlp_calloc(capacity, sizeof(*s->used));
+	s->used = otlp_calloc(capacity, sizeof(*s->used));
 	if (!s->used)
 		goto fail;
 	s->free_stack = otlp_malloc(capacity * sizeof(*s->free_stack));
@@ -149,10 +197,11 @@ otlp_slab_create(size_t slot_size, size_t capacity)
 		goto fail;
 	/* Initialise free-list: all slots available. */
 	for (size_t i = 0; i < capacity; i++)
-		s->free_stack[i] = capacity - 1 - i;  /* reverse so slot 0 pops first */
+		s->free_stack[i] =
+			capacity - 1 - i; /* reverse so slot 0 pops first */
 	s->free_top = capacity;
 	s->stats.slot_size = aligned_slot;
-	s->stats.capacity  = capacity;
+	s->stats.capacity = capacity;
 	return s;
 fail:
 	otlp_free(s->free_stack);
@@ -177,8 +226,8 @@ static int
 ptr_in_arena(const struct otlp_slab *s, void *ptr)
 {
 	uintptr_t base = (uintptr_t) s->arena;
-	uintptr_t end  = base + (s->slot_size * s->capacity);
-	uintptr_t p    = (uintptr_t) ptr;
+	uintptr_t end = base + (s->slot_size * s->capacity);
+	uintptr_t p = (uintptr_t) ptr;
 
 	return p >= base && p < end;
 }
@@ -189,11 +238,12 @@ otlp_slab_alloc(otlp_slab_t *slab, size_t size)
 	if (!slab)
 		return NULL;
 	slab->stats.alloc_count++;
-	if (size <= slab->slot_size && slab->free_top > 0) {
+	if (size <= slab->slot_size && slab->free_top > 0)
+	{
 		size_t i = slab->free_stack[--slab->free_top];
-		slab->used[i]   = true;
+		slab->used[i] = true;
 		slab->in_use++;
-		slab->stats.in_use	  = slab->in_use;
+		slab->stats.in_use = slab->in_use;
 		slab->stats.slab_hits++;
 		return slab->arena + (i * slab->slot_size);
 	}
@@ -211,14 +261,17 @@ otlp_slab_free_ptr(otlp_slab_t *slab, void *ptr)
 	if (!slab || !ptr)
 		return;
 	slab->stats.free_count++;
-	if (ptr_in_arena(slab, ptr)) {
-		size_t off = (size_t)((uintptr_t) ptr - (uintptr_t) slab->arena);
-		size_t i   = off / slab->slot_size;
+	if (ptr_in_arena(slab, ptr))
+	{
+		size_t off =
+			(size_t)((uintptr_t) ptr - (uintptr_t) slab->arena);
+		size_t i = off / slab->slot_size;
 
-		if (i < slab->capacity && slab->used[i]) {
+		if (i < slab->capacity && slab->used[i])
+		{
 			slab->used[i] = false;
 			slab->in_use--;
-			slab->stats.in_use	    = slab->in_use;
+			slab->stats.in_use = slab->in_use;
 			slab->stats.slab_free_hits++;
 			slab->free_stack[slab->free_top++] = i;
 			return;
@@ -243,7 +296,8 @@ otlp_slab_get_stats(const otlp_slab_t *slab, otlp_slab_stats_t *out)
 {
 	if (!out)
 		return;
-	if (!slab) {
+	if (!slab)
+	{
 		memset(out, 0, sizeof(*out));
 		return;
 	}

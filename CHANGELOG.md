@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.85] - 2026-08-19
+
+Slab allocator: arena-aware realloc (undefined-behavior fix).
+
+### Fixed — libc realloc on arena pointers
+
+`otlp_install_slab_allocator` passed `realloc` straight through to
+the previous allocator, so any arena-served allocation that later
+grew via `otlp_realloc` (e.g. the HTTP response buffer with
+`slot_size >= 4096`) was handed to libc realloc on a pointer libc
+never allocated — undefined behavior that aborts under macOS
+libmalloc and corrupts the glibc heap. The wrapped allocator now
+MOVES arena pointers: allocate at the new size, copy
+`min(slot_size, n)` bytes, return the slot. Any slot size is now
+safe; sizing guidance (and the quickstart/cookbook examples, now
+`(256, 512)`) is purely about hit rate. Pinned by
+`prop_slab_global_realloc_growth`, which aborts the process on the
+pre-fix code.
+
+### Changed
+
+- `slab.c` sizing note rewritten (the old guidance pre-dates the
+  v0.5.75 vector model).
+- Two sign-conversion warnings in `test_http_parser.c` fixed.
+
 ## [0.5.84] - 2026-08-19
 
 Send-stall timeout + sampler endianness.

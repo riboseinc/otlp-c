@@ -457,7 +457,7 @@ test_send_stall_times_out(void)
 
 		clock_gettime(CLOCK_MONOTONIC, &t0);
 		deadline_ms = (uint64_t) t0.tv_sec * 1000 +
-			t0.tv_nsec / 1000000 + 2000;
+			(uint64_t) (t0.tv_nsec / 1000000) + 2000;
 		for (i = 0; i < 5000000; i++)
 		{
 			struct timespec now;
@@ -470,7 +470,7 @@ test_send_stall_times_out(void)
 				break;
 			clock_gettime(CLOCK_MONOTONIC, &now);
 			if ((uint64_t) now.tv_sec * 1000 +
-					now.tv_nsec / 1000000 >
+					(uint64_t) (now.tv_nsec / 1000000) >
 				deadline_ms)
 				break;
 			if (st == OTLP_ERR_WOULDBLOCK)

@@ -161,7 +161,7 @@ otlp_allocator_t my_alloc = {
 otlp_set_allocator(&my_alloc);
 
 /* Or install a slab for hot-path small allocations */
-otlp_install_slab_allocator(128, 256);
+otlp_install_slab_allocator(256, 512);
 ```
 
 ### Further reading
