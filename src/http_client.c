@@ -63,7 +63,7 @@ parse_uint16(const char *s, size_t len, uint16_t *out)
 	{
 		if (s[i] < '0' || s[i] > '9')
 			return -1;
-		v = v * 10u + (uint32_t) (s[i] - '0');
+		v = v * 10u + (uint32_t)(s[i] - '0');
 		if (v > 65535u)
 			return -1;
 	}
@@ -106,7 +106,7 @@ otlp_http_parse_url(const char *url, struct otlp_http_url *out)
 	host_end = host_start;
 	while (*host_end != '\0' && *host_end != ':' && *host_end != '/')
 		host_end++;
-	host_len = (size_t) (host_end - host_start);
+	host_len = (size_t)(host_end - host_start);
 	if (host_len == 0 || host_len >= OTLP_HTTP_HOST_MAX)
 		return OTLP_ERR_INVALID_ARGUMENT;
 	memcpy(out->host, host_start, host_len);
@@ -121,7 +121,7 @@ otlp_http_parse_url(const char *url, struct otlp_http_url *out)
 		while (*port_end != '\0' && *port_end != '/')
 			port_end++;
 		if (parse_uint16(port_start,
-			    (size_t) (port_end - port_start),
+			    (size_t)(port_end - port_start),
 			    &out->port) != 0)
 			return OTLP_ERR_INVALID_ARGUMENT;
 		host_end = port_end;
@@ -180,7 +180,9 @@ struct otlp_http_request
 	uint32_t connect_timeout_ms;
 	uint32_t read_timeout_ms;
 	uint64_t start_ms; /* monotonic ms at _start time */
-	uint64_t last_recv_ms; /* monotonic ms at most recent recv */
+	uint64_t last_io_ms; /* monotonic ms at most recent I/O
+			      * progress (connect done, partial send,
+			      * bytes received) */
 };
 
 static otlp_status_t
@@ -270,7 +272,7 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	r->connect_timeout_ms = connect_timeout_ms;
 	r->read_timeout_ms = read_timeout_ms;
 	r->start_ms = mono_ms();
-	r->last_recv_ms = r->start_ms;
+	r->last_io_ms = r->start_ms;
 
 	st = build_request(r, url, user_agent, body, body_len);
 	if (st != OTLP_OK)
@@ -326,7 +328,7 @@ otlp_http_request_start(otlp_http_request_t **out,
 	 * The blocking DNS lookup can take seconds; measuring the connect
 	 * timeout from before it would make the deadline fire prematurely. */
 	r->start_ms = mono_ms();
-	r->last_recv_ms = r->start_ms;
+	r->last_io_ms = r->start_ms;
 
 	/* If connect() completed synchronously (rare for non-blocking
 	 * on the first call), advance state to SENDING. */
@@ -408,11 +410,11 @@ decode_chunked_in_place(uint8_t *buf, size_t len, size_t *out_len)
 			uint8_t c = buf[line_end];
 
 			if (c >= '0' && c <= '9')
-				size = size * 16 + (size_t) (c - '0');
+				size = size * 16 + (size_t)(c - '0');
 			else if (c >= 'a' && c <= 'f')
-				size = size * 16 + (size_t) (c - 'a' + 10);
+				size = size * 16 + (size_t)(c - 'a' + 10);
 			else if (c >= 'A' && c <= 'F')
-				size = size * 16 + (size_t) (c - 'A' + 10);
+				size = size * 16 + (size_t)(c - 'A' + 10);
 			else
 				return -1;
 			if (size > OTLP_HTTP_RESP_MAX)
@@ -577,7 +579,7 @@ try_parse_response(struct otlp_http_request *r, bool at_eof)
 				/* Only bare "chunked" is decodable; any other
 				 * coding (gzip, identity, ...) is rejected —
 				 * we cannot frame or decode it. */
-				if ((size_t) (eol - v) == 7 &&
+				if ((size_t)(eol - v) == 7 &&
 					otlp_strncasecmp(v, "chunked", 7) == 0)
 					te_chunked = true;
 			}
@@ -589,7 +591,7 @@ try_parse_response(struct otlp_http_request *r, bool at_eof)
 					v++;
 				if (otlp_strncasecmp(v, "close", 5) == 0)
 					r->keepalive_eligible = false;
-				else if ((size_t) (eol - v) >= 10 &&
+				else if ((size_t)(eol - v) >= 10 &&
 					otlp_strncasecmp(v, "keep-alive", 10) ==
 						0)
 					r->keepalive_eligible = true;
@@ -657,6 +659,7 @@ step_connecting(struct otlp_http_request *r)
 	if (st == OTLP_OK)
 	{
 		r->state = OTLP_HTTP_REQ_SENDING;
+		r->last_io_ms = mono_ms();
 		return OTLP_OK;
 	}
 	/* Deadline check: if the caller set a connect timeout and it
@@ -681,8 +684,23 @@ step_sending(struct otlp_http_request *r)
 		r->req_buf + r->req_sent,
 		r->req_len - r->req_sent,
 		&n_written);
+	if (st == OTLP_ERR_WOULDBLOCK)
+	{
+		/* A server that accepts but never reads (send-side
+		 * slowloris) would block SENDING forever: the same
+		 * read_timeout_ms inactivity deadline applies. */
+		if (r->read_timeout_ms != 0 &&
+			mono_ms() - r->last_io_ms >= r->read_timeout_ms)
+		{
+			r->state = OTLP_HTTP_REQ_FAILED;
+			return OTLP_ERR_TIMEOUT;
+		}
+		return OTLP_ERR_WOULDBLOCK;
+	}
 	if (st != OTLP_OK)
 		return st;
+	if (n_written > 0)
+		r->last_io_ms = mono_ms();
 	r->req_sent += n_written;
 	if (r->req_sent == r->req_len)
 	{
@@ -712,7 +730,7 @@ step_reading(struct otlp_http_request *r)
 		 * has elapsed since the last successful recv (or start),
 		 * fail the request. */
 		if (r->read_timeout_ms != 0 &&
-			mono_ms() - r->last_recv_ms >= r->read_timeout_ms)
+			mono_ms() - r->last_io_ms >= r->read_timeout_ms)
 		{
 			r->state = OTLP_HTTP_REQ_FAILED;
 			return OTLP_ERR_TIMEOUT;
@@ -746,7 +764,7 @@ step_reading(struct otlp_http_request *r)
 		r->resp_len += n_read;
 		/* Reset the inter-recv timer: a slow-but-steady stream
 		 * should not time out as long as bytes keep arriving. */
-		r->last_recv_ms = mono_ms();
+		r->last_io_ms = mono_ms();
 	}
 
 	parsed = try_parse_response(r, false);

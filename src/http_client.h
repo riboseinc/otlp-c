@@ -53,10 +53,14 @@ typedef struct otlp_http_request otlp_http_request_t;
 
 /* Start a POST. Copies body. Initiates non-blocking connect.
  *
- * connect_timeout_ms / read_timeout_ms: deadlines for the CONNECTING
- * and READING phases respectively. 0 means no timeout (infinite) —
- * use for tests or when the caller has its own deadline via tick's
- * max_wait_ms / flush_timeout_ms.
+ * connect_timeout_ms: deadline for the CONNECTING phase.
+ * read_timeout_ms: INACTIVITY deadline covering the SENDING and
+ * READING phases — it resets on every send/recv progress, so a
+ * slow-but-steady stream never trips it, but a stalled peer does
+ * (including a server that accepts the connection yet never reads
+ * the request). There is no total-duration cap; callers needing
+ * one use tick's max_wait_ms / flush_timeout_ms.
+ * 0 means no timeout (infinite).
  *
  * Returns:
  *   OTLP_OK             — request started; in CONNECTING state.
@@ -95,7 +99,7 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	size_t body_len,
 	uint32_t connect_timeout_ms,
 	uint32_t read_timeout_ms,
-	otlp_socket_t	       *donated_socket);
+	otlp_socket_t *donated_socket);
 
 /* Detach the underlying socket from a completed (DONE state) request.
  * The request no longer owns the socket; the caller must close it
