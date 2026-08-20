@@ -25,6 +25,14 @@ add_test(NAME unit-metric
     COMMAND otlp_unit_metric)
 set_tests_properties(unit-metric PROPERTIES LABELS "unit")
 
+add_executable(otlp_unit_platform test_unit_platform.c)
+target_link_libraries(otlp_unit_platform PRIVATE otlp_c)
+target_include_directories(otlp_unit_platform PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-platform
+    COMMAND otlp_unit_platform)
+set_tests_properties(unit-platform PROPERTIES LABELS "unit")
+
 add_executable(otlp_unit_log test_unit_log.c)
 target_link_libraries(otlp_unit_log PRIVATE otlp_c)
 target_include_directories(otlp_unit_log PRIVATE

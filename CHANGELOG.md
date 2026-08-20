@@ -4,6 +4,24 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.91] - 2026-08-20
+
+Coverage lap 2: platform + tracer error paths.
+
+### Added — `unit-platform` tests (the v0.5.90 baseline's two
+worst-covered files)
+
+`llvm-cov show` mapped the zero-hit lines: platform NULL guards,
+DNS failure, connection refusal, and tracer NULL/edge paths. New
+tests cover all of them — including DNS failure via the
+RFC 2606-reserved `.invalid` TLD and connection-refused via a
+bind-close-connect sequence that drives the non-blocking
+finish_connect error path. platform_unix 76% → 82%, tracer 81% →
+91% regions (100% functions). Every check is an explicit rc
+comparison (no side-effecting asserts — the first draft's
+Release-only unused-variable warnings were that rule reminding
+us). Child-span trace-id inheritance now has a direct assertion.
+
 ## [0.5.90] - 2026-08-20
 
 Coverage-guided testing: the coverage option actually works now.
