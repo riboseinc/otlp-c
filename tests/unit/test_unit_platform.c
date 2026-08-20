@@ -11,13 +11,22 @@
 #include <otlp-c/tracer.h>
 
 #include <assert.h>
-#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#if defined(_WIN32)
+int
+main(void)
+{
+	printf("[unit-platform] skipped on Windows\n");
+	return 0;
+}
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 
 static int
 test_socket_null_guards(void)
@@ -134,3 +143,5 @@ main(void)
 		printf("[unit-platform] PASS (4 tests)\n");
 	return failures ? 1 : 0;
 }
+
+#endif /* !_WIN32 */
