@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.89] - 2026-08-20
+
+Fuzz coverage for the response parser; spot audits (clean).
+
+### Added — fuzz properties
+
+- `prop_fuzz_http_response`: random or mutated (byte flips /
+  truncation / extension of a valid chunked response, including
+  size-lines and trailers) raw responses served through the real
+  request state machine via the raw echo mode — must always reach
+  DONE or FAILED within a wall-clock bound, never hang or crash.
+  The v0.5.80 chunked decoder previously had only hand-written
+  cases. Verified at 5,000 iterations, including under ASAN +
+  LeakSanitizer.
+- `prop_fuzz_context_extract`: arbitrary printable carrier values
+  for traceparent/tracestate/baggage; extract never crashes
+  (5,000 iterations).
+
+### Audited — verified correct, no changes
+
+- `otlp_strerror()` coverage diffed against the status enum: every
+  case has a message.
+- `platform_unix.c` socket wrappers: EINTR retry, EAGAIN mapping,
+  EOF flag semantics, MSG_NOSIGNAL — all correct.
+
 ## [0.5.88] - 2026-08-20
 
 Examples audit; runtime version-string drift fixed.
