@@ -57,62 +57,34 @@ extern "C"
 	 * attributes. STRING is the default (0) for backward
 	 * compatibility — callers who only set `.value` get string
 	 * encoding with no code change. */
-	typedef enum
-	{
-		OTLP_RESOURCE_ATTR_STRING = 0,
-		OTLP_RESOURCE_ATTR_INT64 = 1,
-		OTLP_RESOURCE_ATTR_DOUBLE = 2,
-		OTLP_RESOURCE_ATTR_BOOL = 3,
-	} otlp_resource_attr_type_t;
-
-	/* A key-value pair attached to the OTLP Resource of every batch
-	 * this exporter emits. Resource attributes describe the process
-	 * being instrumented (service.version, deployment.environment,
-	 * host.name, process.pid, host.cpu.count, etc.) and are constant
-	 * for the exporter's lifetime. See the OpenTelemetry semantic-
-	 * conventions spec for standard keys.
+	/* A key-value pair attached to the OTLP Resource of every
+	 * batch this exporter emits. Resource attributes describe the
+	 * process being instrumented (service.version,
+	 * deployment.environment, host.name, process.pid, ...) and are
+	 * constant for the exporter's lifetime. See the OpenTelemetry
+	 * semantic-conventions spec for standard keys.
 	 *
-	 * Value selection: set `.type` to the desired variant, then fill
-	 * the matching value field. When `.type` is omitted (zero-
-	 * initialized = STRING), `.value` is used as the string. This
-	 * means existing callers who write `{.key = "k", .value = "v"}`
-	 * need no changes.
+	 * Model (v0.5.92): one key + one otlp_value_t - the same value
+	 * model as every other attribute surface, supporting all seven
+	 * AnyValue types. The library deep-copies everything at
+	 * otlp_exporter_create() time; the caller may free the input
+	 * array immediately after.
 	 *
-	 * Example — typed values:
+	 * Map semantics (v0.5.78): duplicate keys collapse
+	 * last-write-wins; a "service.name" entry is dropped when the
+	 * dedicated service_name opt is set.
+	 *
+	 * Example:
 	 *   otlp_resource_attr_t pid = {
 	 *       .key = "process.pid",
-	 *       .type = OTLP_RESOURCE_ATTR_INT64,
-	 *       .int64_val = 4242,
+	 *       .value = {.type = OTLP_VALUE_INT64,
+	 *                 .v = {.int64_val = 4242}},
 	 *   };
-	 *   otlp_resource_attr_t ratio = {
-	 *       .key = "system.memory.utilization",
-	 *       .type = OTLP_RESOURCE_ATTR_DOUBLE,
-	 *       .double_val = 0.87,
-	 *   };
-	 *   otlp_resource_attr_t flag = {
-	 *       .key = "feature.flag_enabled",
-	 *       .type = OTLP_RESOURCE_ATTR_BOOL,
-	 *       .bool_val = true,
-	 *   };
-	 *
-	 * The library deep-copies all fields at otlp_exporter_create()
-	 * time; the caller may free the input array immediately after.
-	 *
-	 * Map semantics (v0.5.78): resource-attribute keys MUST be
-	 * unique (OTLP data model). Duplicate keys in the opts array
-	 * collapse last-write-wins at create time, and a
-	 * "service.name" entry is dropped when the dedicated
-	 * service_name opt is set (the documented field wins — the
-	 * attrs entry would otherwise duplicate the auto-emitted
-	 * service.name KeyValue). */
+	 */
 	typedef struct
 	{
 		const char *key;
-		const char *value; /* used when type == STRING (default) */
-		otlp_resource_attr_type_t type; /* 0 = STRING; see enum above */
-		int64_t int64_val; /* used when type == INT64 */
-		double double_val; /* used when type == DOUBLE */
-		bool bool_val; /* used when type == BOOL */
+		otlp_value_t value;
 	} otlp_resource_attr_t;
 
 	/* Configuration for otlp_exporter_create. Pass zero-initialized +

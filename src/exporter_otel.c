@@ -37,24 +37,35 @@ static otlp_status_t
 start_post_common(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
-	const uint8_t *body, size_t body_len,
+	const uint8_t *body,
+	size_t body_len,
 	uint32_t connect_timeout_ms,
 	uint32_t read_timeout_ms,
 	otlp_socket_t *reuse_socket)
 {
 	if (reuse_socket)
-		return otlp_http_request_start_with_socket(out, url,
-			user_agent, body, body_len,
-			connect_timeout_ms, read_timeout_ms, reuse_socket);
-	return otlp_http_request_start(out, url, user_agent, body, body_len,
-		connect_timeout_ms, read_timeout_ms);
+		return otlp_http_request_start_with_socket(out,
+			url,
+			user_agent,
+			body,
+			body_len,
+			connect_timeout_ms,
+			read_timeout_ms,
+			reuse_socket);
+	return otlp_http_request_start(out,
+		url,
+		user_agent,
+		body,
+		body_len,
+		connect_timeout_ms,
+		read_timeout_ms);
 }
 
 otlp_status_t
 otlp_exporter_otel_build_span_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
@@ -64,7 +75,7 @@ otlp_exporter_otel_build_span_request(const struct otlp_http_url *url,
 	otlp_http_request_t **out)
 {
 	struct otlp_pb_buf body = { 0 };
-	otlp_status_t     st;
+	otlp_status_t st;
 
 	if (!url || !out)
 		return OTLP_ERR_NULL;
@@ -72,18 +83,28 @@ otlp_exporter_otel_build_span_request(const struct otlp_http_url *url,
 	st = otlp_pb_buf_init(&body, n_spans * 256 + 1024);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_encode_export_trace_service_request(
-		&body, service_name,
-		resource_attributes, n_resource_attributes,
-		NULL, NULL, spans, n_spans);
+	st = otlp_encode_export_trace_service_request(&body,
+		service_name,
+		resource_attributes,
+		n_resource_attributes,
+		NULL,
+		NULL,
+		spans,
+		n_spans);
 	if (st != OTLP_OK)
 	{
 		otlp_pb_buf_free(&body);
 		return st;
 	}
 
-	st = start_post_common(out, url, user_agent, body.data, body.len,
-		connect_timeout_ms, read_timeout_ms, reuse_socket);
+	st = start_post_common(out,
+		url,
+		user_agent,
+		body.data,
+		body.len,
+		connect_timeout_ms,
+		read_timeout_ms,
+		reuse_socket);
 	otlp_pb_buf_free(&body);
 	return st;
 }
@@ -92,7 +113,7 @@ otlp_status_t
 otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_metric_t *const *metrics,
 	size_t n_metrics,
@@ -101,9 +122,9 @@ otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out)
 {
-	struct otlp_pb_buf    body = { 0 };
-	struct otlp_http_url  u;
-	otlp_status_t	     st;
+	struct otlp_pb_buf body = { 0 };
+	struct otlp_http_url u;
+	otlp_status_t st;
 
 	if (!url || !out)
 		return OTLP_ERR_NULL;
@@ -111,10 +132,14 @@ otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 	st = otlp_pb_buf_init(&body, n_metrics * 128 + 512);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_encode_export_metrics_service_request(
-		&body, service_name,
-		resource_attributes, n_resource_attributes,
-		NULL, NULL, metrics, n_metrics);
+	st = otlp_encode_export_metrics_service_request(&body,
+		service_name,
+		resource_attributes,
+		n_resource_attributes,
+		NULL,
+		NULL,
+		metrics,
+		n_metrics);
 	if (st != OTLP_OK)
 	{
 		otlp_pb_buf_free(&body);
@@ -123,8 +148,14 @@ otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 
 	u = *url;
 	(void) snprintf(u.path, sizeof(u.path), "/v1/metrics");
-	st = start_post_common(out, &u, user_agent, body.data, body.len,
-		connect_timeout_ms, read_timeout_ms, reuse_socket);
+	st = start_post_common(out,
+		&u,
+		user_agent,
+		body.data,
+		body.len,
+		connect_timeout_ms,
+		read_timeout_ms,
+		reuse_socket);
 	otlp_pb_buf_free(&body);
 	return st;
 }
@@ -133,7 +164,7 @@ otlp_status_t
 otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_log_record_t *const *logs,
 	size_t n_logs,
@@ -142,9 +173,9 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out)
 {
-	struct otlp_pb_buf    body = { 0 };
-	struct otlp_http_url  u;
-	otlp_status_t	     st;
+	struct otlp_pb_buf body = { 0 };
+	struct otlp_http_url u;
+	otlp_status_t st;
 
 	if (!url || !out)
 		return OTLP_ERR_NULL;
@@ -152,10 +183,14 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	st = otlp_pb_buf_init(&body, n_logs * 128 + 512);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_encode_export_logs_service_request(
-		&body, service_name,
-		resource_attributes, n_resource_attributes,
-		NULL, NULL, logs, n_logs);
+	st = otlp_encode_export_logs_service_request(&body,
+		service_name,
+		resource_attributes,
+		n_resource_attributes,
+		NULL,
+		NULL,
+		logs,
+		n_logs);
 	if (st != OTLP_OK)
 	{
 		otlp_pb_buf_free(&body);
@@ -164,8 +199,14 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 
 	u = *url;
 	(void) snprintf(u.path, sizeof(u.path), "/v1/logs");
-	st = start_post_common(out, &u, user_agent, body.data, body.len,
-		connect_timeout_ms, read_timeout_ms, reuse_socket);
+	st = start_post_common(out,
+		&u,
+		user_agent,
+		body.data,
+		body.len,
+		connect_timeout_ms,
+		read_timeout_ms,
+		reuse_socket);
 	otlp_pb_buf_free(&body);
 	return st;
 }

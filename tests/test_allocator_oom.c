@@ -43,9 +43,9 @@
  * with a free (either via successful cleanup or via the
  * operation's destructor). */
 
-static int alloc_count   = 0;
-static int free_count    = 0;
-static int fail_at       = -1;  /* -1: never fail; N: fail on Nth alloc */
+static int alloc_count = 0;
+static int free_count = 0;
+static int fail_at = -1; /* -1: never fail; N: fail on Nth alloc */
 
 static void *
 fail_alloc(size_t n)
@@ -61,9 +61,18 @@ fail_alloc(size_t n)
 static void *
 fail_realloc(void *p, size_t n)
 {
+	/* Accounting model (v0.5.92): realloc(p!=NULL, n) is modeled
+	 * as free(p) + alloc(n) — the old pointer is consumed by the
+	 * libc realloc without a counted free otherwise, so any
+	 * grow-on-demand pattern (the attribute vectors) showed a
+	 * phantom +1 leak per growth. realloc(NULL, n) is alloc-only;
+	 * a failed realloc leaves the old pointer alive (nothing
+	 * counted). */
 	if (fail_at > 0 && alloc_count + 1 >= fail_at)
 		return NULL;
 	alloc_count++;
+	if (p)
+		free_count++;
 	return realloc(p, n);
 }
 
@@ -76,17 +85,17 @@ fail_free(void *p)
 }
 
 static const otlp_allocator_t fail_allocator = {
-	.alloc   = fail_alloc,
+	.alloc = fail_alloc,
 	.realloc = fail_realloc,
-	.free    = fail_free,
+	.free = fail_free,
 };
 
 static void
 reset_counters(int fail_at_value)
 {
 	alloc_count = 0;
-	free_count  = 0;
-	fail_at     = fail_at_value;
+	free_count = 0;
+	fail_at = fail_at_value;
 }
 
 /* ── Test 1: exporter create with resource attributes ──────────
@@ -100,36 +109,40 @@ static int
 test_exporter_create_oom(void)
 {
 	otlp_resource_attr_t attrs[5];
-	int		      i;
-	int		      leaks = 0;
-	int		      crashes = 0;
+	int i;
+	int leaks = 0;
+	int crashes = 0;
 
-	for (i = 0; i < 5; i++) {
-		attrs[i].key         = "key.x";
-		attrs[i].value       = "value.x";
-		attrs[i].type        = OTLP_RESOURCE_ATTR_STRING;
-		attrs[i].int64_val   = 0;
-		attrs[i].double_val  = 0.0;
-		attrs[i].bool_val    = false;
-	}
-	/* Distinct keys/values so dup_str produces unique pointers. */
-	attrs[0].key = "service.version"; attrs[0].value = "1.0.0";
-	attrs[1].key = "host.name";       attrs[1].value = "host-001";
-	attrs[2].key = "region";          attrs[2].value = "us-west-2";
-	attrs[3].key = "instance.id";     attrs[3].value = "i-abc123";
-	attrs[4].key = "runtime";         attrs[4].value = "go1.21";
+	/* Distinct keys/values so dup_str produces unique pointers.
+	 * v0.5.92 model: one key + one otlp_value_t. */
+	attrs[0].key = "service.version";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "1.0.0" } };
+	attrs[1].key = "host.name";
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "host-001" } };
+	attrs[2].key = "region";
+	attrs[2].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "us-west-2" } };
+	attrs[3].key = "instance.id";
+	attrs[3].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "i-abc123" } };
+	attrs[4].key = "runtime";
+	attrs[4].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "go1.21" } };
 
 	otlp_set_allocator(&fail_allocator);
 
 	/* Probe fail_at from 1 to 60. Each iteration either succeeds
 	 * (exporter returned, then freed) or fails partway (NULL
 	 * returned, partial state cleaned up internally). */
-	for (int n = 1; n <= 60; n++) {
+	for (int n = 1; n <= 60; n++)
+	{
 		otlp_exporter_opts_t opts;
-		otlp_exporter_t     *exp;
+		otlp_exporter_t *exp;
 
 		memset(&opts, 0, sizeof(opts));
-		opts.service_name        = "test";
+		opts.service_name = "test";
 		opts.resource_attributes = attrs;
 		opts.n_resource_attributes = 5;
 
@@ -138,18 +151,23 @@ test_exporter_create_oom(void)
 		if (exp)
 			otlp_exporter_free(exp);
 
-		if (alloc_count != free_count) {
+		if (alloc_count != free_count)
+		{
 			printf("[oom] leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 	}
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0 || crashes > 0) {
+	if (leaks > 0 || crashes > 0)
+	{
 		printf("[oom] exporter_create FAIL — %d leaks, %d crashes\n",
-		       leaks, crashes);
+			leaks,
+			crashes);
 		return 1;
 	}
 	printf("[oom] exporter_create PASS — 60 OOM iterations, "
@@ -170,7 +188,8 @@ test_span_clone_oom(void)
 
 	otlp_set_allocator(&fail_allocator);
 
-	for (int n = 1; n <= 50; n++) {
+	for (int n = 1; n <= 50; n++)
+	{
 		otlp_span_t *span;
 		otlp_span_t *clone;
 
@@ -178,7 +197,8 @@ test_span_clone_oom(void)
 		 * (so the source is always valid). */
 		otlp_set_allocator(NULL);
 		span = otlp_span_create("src");
-		if (!span) {
+		if (!span)
+		{
 			printf("[oom] span setup failed unexpectedly\n");
 			return 1;
 		}
@@ -194,9 +214,13 @@ test_span_clone_oom(void)
 		if (clone)
 			otlp_span_free(clone);
 
-		if (alloc_count != free_count) {
-			printf("[oom] clone leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+		if (alloc_count != free_count)
+		{
+			printf("[oom] clone leak at fail_at=%d: alloc=%d "
+			       "free=%d\n",
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 
@@ -207,7 +231,8 @@ test_span_clone_oom(void)
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0) {
+	if (leaks > 0)
+	{
 		printf("[oom] span_clone FAIL — %d leaks\n", leaks);
 		return 1;
 	}
@@ -224,33 +249,42 @@ test_span_clone_oom(void)
 static int
 test_metric_create_histogram_oom(void)
 {
-	double bounds[3] = {1.0, 10.0, 100.0};
+	double bounds[3] = { 1.0, 10.0, 100.0 };
 	int leaks = 0;
 
 	otlp_set_allocator(&fail_allocator);
 
-	for (int n = 1; n <= 30; n++) {
+	for (int n = 1; n <= 30; n++)
+	{
 		otlp_metric_t *m;
 
 		reset_counters(n);
-		m = otlp_metric_create(OTLP_METRIC_HISTOGRAM, "latency",
-				       "ms", "request latency",
-				       bounds, 3);
+		m = otlp_metric_create(OTLP_METRIC_HISTOGRAM,
+			"latency",
+			"ms",
+			"request latency",
+			bounds,
+			3);
 		if (m)
 			otlp_metric_free(m);
 
-		if (alloc_count != free_count) {
-			printf("[oom] metric_create leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+		if (alloc_count != free_count)
+		{
+			printf("[oom] metric_create leak at fail_at=%d: "
+			       "alloc=%d free=%d\n",
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 	}
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0) {
+	if (leaks > 0)
+	{
 		printf("[oom] metric_create_histogram FAIL — %d leaks\n",
-		       leaks);
+			leaks);
 		return 1;
 	}
 	printf("[oom] metric_create_histogram PASS — 30 OOM iterations, "
@@ -269,24 +303,27 @@ test_metric_clone_oom(void)
 {
 	int leaks = 0;
 
-	for (int n = 1; n <= 50; n++) {
+	for (int n = 1; n <= 50; n++)
+	{
 		otlp_metric_t *src;
 		otlp_metric_t *clone;
-		double bounds[2] = {1.0, 10.0};
-		uint64_t pos_counts[3] = {1, 2, 3};
+		double bounds[2] = { 1.0, 10.0 };
+		uint64_t pos_counts[3] = { 1, 2, 3 };
 
 		/* Build source under default allocator. */
 		otlp_set_allocator(NULL);
-		src = otlp_metric_create(OTLP_METRIC_EXP_HISTOGRAM, "src",
-					 "", "", bounds, 2);
-		if (!src) {
+		src = otlp_metric_create(
+			OTLP_METRIC_EXP_HISTOGRAM, "src", "", "", bounds, 2);
+		if (!src)
+		{
 			printf("[oom] metric_clone setup failed\n");
 			return 1;
 		}
 		otlp_metric_set_attribute_string(src, "k1", "v1");
 		otlp_metric_set_attribute_int(src, "k2", 42);
-		if (otlp_metric_set_exp_histogram(src,
-			20, 0, pos_counts, 3, 0, NULL, 0) != OTLP_OK) {
+		if (otlp_metric_set_exp_histogram(
+			    src, 20, 0, pos_counts, 3, 0, NULL, 0) != OTLP_OK)
+		{
 			otlp_metric_free(src);
 			return 1;
 		}
@@ -298,9 +335,13 @@ test_metric_clone_oom(void)
 		if (clone)
 			otlp_metric_free(clone);
 
-		if (alloc_count != free_count) {
-			printf("[oom] metric_clone leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+		if (alloc_count != free_count)
+		{
+			printf("[oom] metric_clone leak at fail_at=%d: "
+			       "alloc=%d free=%d\n",
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 
@@ -310,7 +351,8 @@ test_metric_clone_oom(void)
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0) {
+	if (leaks > 0)
+	{
 		printf("[oom] metric_clone FAIL — %d leaks\n", leaks);
 		return 1;
 	}
@@ -324,13 +366,15 @@ test_log_record_clone_oom(void)
 {
 	int leaks = 0;
 
-	for (int n = 1; n <= 40; n++) {
+	for (int n = 1; n <= 40; n++)
+	{
 		otlp_log_record_t *src;
 		otlp_log_record_t *clone;
 
 		otlp_set_allocator(NULL);
 		src = otlp_log_record_create(OTLP_SEVERITY_ERROR, "body");
-		if (!src) {
+		if (!src)
+		{
 			printf("[oom] log_clone setup failed\n");
 			return 1;
 		}
@@ -344,9 +388,13 @@ test_log_record_clone_oom(void)
 		if (clone)
 			otlp_log_record_free(clone);
 
-		if (alloc_count != free_count) {
-			printf("[oom] log_clone leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+		if (alloc_count != free_count)
+		{
+			printf("[oom] log_clone leak at fail_at=%d: alloc=%d "
+			       "free=%d\n",
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 
@@ -356,7 +404,8 @@ test_log_record_clone_oom(void)
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0) {
+	if (leaks > 0)
+	{
 		printf("[oom] log_record_clone FAIL — %d leaks\n", leaks);
 		return 1;
 	}
@@ -373,7 +422,8 @@ test_tracer_create_oom(void)
 
 	otlp_set_allocator(&fail_allocator);
 
-	for (int n = 1; n <= 20; n++) {
+	for (int n = 1; n <= 20; n++)
+	{
 		otlp_tracer_t *t;
 
 		reset_counters(n);
@@ -381,16 +431,21 @@ test_tracer_create_oom(void)
 		if (t)
 			otlp_tracer_free(t);
 
-		if (alloc_count != free_count) {
-			printf("[oom] tracer_create leak at fail_at=%d: alloc=%d free=%d\n",
-			       n, alloc_count, free_count);
+		if (alloc_count != free_count)
+		{
+			printf("[oom] tracer_create leak at fail_at=%d: "
+			       "alloc=%d free=%d\n",
+				n,
+				alloc_count,
+				free_count);
 			leaks++;
 		}
 	}
 
 	otlp_set_allocator(NULL);
 
-	if (leaks > 0) {
+	if (leaks > 0)
+	{
 		printf("[oom] tracer_create FAIL — %d leaks\n", leaks);
 		return 1;
 	}
@@ -410,14 +465,14 @@ static int
 test_flush_metric_oom_accounting(void)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_metric_t       *src;
-	int		      bad_accounting = 0;
+	otlp_exporter_t *exp = NULL;
+	otlp_metric_t *src;
+	int bad_accounting = 0;
 
 	/* Build source metric under default allocator. */
-	src = otlp_metric_create(OTLP_METRIC_COUNTER, "m", "", "",
-				 NULL, 0);
-	if (!src) {
+	src = otlp_metric_create(OTLP_METRIC_COUNTER, "m", "", "", NULL, 0);
+	if (!src)
+	{
 		printf("[oom] flush_metric setup failed\n");
 		return 1;
 	}
@@ -430,7 +485,8 @@ test_flush_metric_oom_accounting(void)
 	opts.service_name = "test";
 	otlp_set_allocator(NULL);
 	exp = otlp_exporter_create(&opts);
-	if (!exp) {
+	if (!exp)
+	{
 		otlp_metric_free(src);
 		return 1;
 	}
@@ -438,9 +494,10 @@ test_flush_metric_oom_accounting(void)
 
 	/* Probe flush_metric under fail-injecting allocator. */
 	otlp_set_allocator(&fail_allocator);
-	for (int n = 1; n <= 15; n++) {
+	for (int n = 1; n <= 15; n++)
+	{
 		otlp_exporter_stats_t stats;
-		otlp_status_t	     st;
+		otlp_status_t st;
 
 		reset_counters(n);
 		st = otlp_exporter_flush_metric(exp, src);
@@ -450,15 +507,16 @@ test_flush_metric_oom_accounting(void)
 		 * flush_metric increments emitted at start; either
 		 * sent or dropped_err must follow. */
 		if (stats.emitted_metrics !=
-		    stats.sent_metrics + stats.dropped_metrics_err) {
+			stats.sent_metrics + stats.dropped_metrics_err)
+		{
 			printf("[oom] flush_metric accounting broken at "
 			       "fail_at=%d: emitted=%llu sent=%llu "
 			       "dropped=%llu (st=%d)\n",
-			       n,
-			       (unsigned long long)stats.emitted_metrics,
-			       (unsigned long long)stats.sent_metrics,
-			       (unsigned long long)stats.dropped_metrics_err,
-			       (int)st);
+				n,
+				(unsigned long long) stats.emitted_metrics,
+				(unsigned long long) stats.sent_metrics,
+				(unsigned long long) stats.dropped_metrics_err,
+				(int) st);
 			bad_accounting++;
 		}
 	}
@@ -467,9 +525,10 @@ test_flush_metric_oom_accounting(void)
 	otlp_metric_free(src);
 	otlp_exporter_free(exp);
 
-	if (bad_accounting > 0) {
+	if (bad_accounting > 0)
+	{
 		printf("[oom] flush_metric FAIL — %d accounting breaks\n",
-		       bad_accounting);
+			bad_accounting);
 		return 1;
 	}
 	printf("[oom] flush_metric PASS — 15 OOM iterations, "
@@ -482,12 +541,13 @@ static int
 test_flush_log_oom_accounting(void)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_log_record_t   *src;
-	int		      bad_accounting = 0;
+	otlp_exporter_t *exp = NULL;
+	otlp_log_record_t *src;
+	int bad_accounting = 0;
 
 	src = otlp_log_record_create(OTLP_SEVERITY_INFO, "body");
-	if (!src) {
+	if (!src)
+	{
 		printf("[oom] flush_log setup failed\n");
 		return 1;
 	}
@@ -496,31 +556,34 @@ test_flush_log_oom_accounting(void)
 	opts.service_name = "test";
 	otlp_set_allocator(NULL);
 	exp = otlp_exporter_create(&opts);
-	if (!exp) {
+	if (!exp)
+	{
 		otlp_log_record_free(src);
 		return 1;
 	}
 	otlp_exporter_set_null_transport(exp, true);
 
 	otlp_set_allocator(&fail_allocator);
-	for (int n = 1; n <= 15; n++) {
+	for (int n = 1; n <= 15; n++)
+	{
 		otlp_exporter_stats_t stats;
-		otlp_status_t	     st;
+		otlp_status_t st;
 
 		reset_counters(n);
 		st = otlp_exporter_flush_log(exp, src);
 		otlp_exporter_get_stats(exp, &stats);
 
 		if (stats.emitted_logs !=
-		    stats.sent_logs + stats.dropped_logs_err) {
+			stats.sent_logs + stats.dropped_logs_err)
+		{
 			printf("[oom] flush_log accounting broken at "
 			       "fail_at=%d: emitted=%llu sent=%llu "
 			       "dropped=%llu (st=%d)\n",
-			       n,
-			       (unsigned long long)stats.emitted_logs,
-			       (unsigned long long)stats.sent_logs,
-			       (unsigned long long)stats.dropped_logs_err,
-			       (int)st);
+				n,
+				(unsigned long long) stats.emitted_logs,
+				(unsigned long long) stats.sent_logs,
+				(unsigned long long) stats.dropped_logs_err,
+				(int) st);
 			bad_accounting++;
 		}
 	}
@@ -529,9 +592,10 @@ test_flush_log_oom_accounting(void)
 	otlp_log_record_free(src);
 	otlp_exporter_free(exp);
 
-	if (bad_accounting > 0) {
+	if (bad_accounting > 0)
+	{
 		printf("[oom] flush_log FAIL — %d accounting breaks\n",
-		       bad_accounting);
+			bad_accounting);
 		return 1;
 	}
 	printf("[oom] flush_log PASS — 15 OOM iterations, "
