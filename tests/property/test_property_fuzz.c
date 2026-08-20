@@ -165,6 +165,7 @@ prop_fuzz_traceparent(uint64_t seed)
 
 /* ── main ─────────────────────────────────────────────────────── */
 
+#if !defined(_WIN32)
 /* The response served by the current fuzz iteration (the raw
  * handler hands it back verbatim). */
 static uint8_t g_resp[2048];
@@ -304,6 +305,8 @@ prop_fuzz_http_response(uint64_t seed)
 		return ok;
 	}
 }
+
+#endif /* !_WIN32 */
 
 /* ── Context extract fuzz ───────────────────────────────────────
  * A carrier returning arbitrary bytes for traceparent/tracestate/
