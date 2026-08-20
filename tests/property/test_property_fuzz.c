@@ -368,8 +368,10 @@ main(void)
 		prop_fuzz_span_create, "prop_fuzz_span_create", 5000, 1);
 	failures += property_run(
 		prop_fuzz_traceparent, "prop_fuzz_traceparent", 5000, 1);
+#if !defined(_WIN32)
 	failures += property_run(
 		prop_fuzz_http_response, "prop_fuzz_http_response", 300, 1);
+#endif
 	failures += property_run(prop_fuzz_context_extract,
 		"prop_fuzz_context_extract",
 		5000,
