@@ -33,11 +33,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if !defined(_WIN32)
 #if !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include <time.h>
 #include "test_helper_echo.h"
+#endif
 
 /* ── URL parser fuzz ────────────────────────────────────────────
  * Feed random byte sequences (including NULs, non-ASCII, very long)
