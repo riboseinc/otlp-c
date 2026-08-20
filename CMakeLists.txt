@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(otlp-c
-    VERSION 0.5.89
+    VERSION 0.5.90
     DESCRIPTION "Pure-C OTLP/HTTP client for OpenTelemetry"
     HOMEPAGE_URL "https://github.com/riboseinc/otlp-c"
     LANGUAGES C
@@ -249,12 +249,16 @@ include(CPack)
 
 # ── Code coverage instrumentation ───────────────────────────────
 # `cmake -DOTLP_C_ENABLE_COVERAGE=ON` adds gcov / llvm-cov flags.
-# Use with `ctest --test-dir build` then `gcovr` or `llvm-cov report`.
+# Use with `LLVM_PROFILE_FILE=... ctest --test-dir build` then
+# `llvm-cov report`. NOTE: the flags are target-scoped (PUBLIC) —
+# the old directory-scope add_compile_options sat AFTER the
+# otlp_c target definition, so nothing was ever instrumented and
+# the option produced no data (found by measurement, v0.5.90).
 option(OTLP_C_ENABLE_COVERAGE "Instrument for code coverage (gcov/llvm-cov)" OFF)
 if(OTLP_C_ENABLE_COVERAGE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-fprofile-instr-generate -fcoverage-mapping -O0 -g)
-        add_link_options(-fprofile-instr-generate)
+        target_compile_options(otlp_c PUBLIC -fprofile-instr-generate -fcoverage-mapping -O0 -g)
+        target_link_options(otlp_c PUBLIC -fprofile-instr-generate)
         message(STATUS "Coverage instrumentation enabled (clang Profile)")
     else()
         message(WARNING "OTLP_C_ENABLE_COVERAGE: unsupported compiler; ignoring")
