@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.90] - 2026-08-20
+
+Coverage-guided testing: the coverage option actually works now.
+
+### Fixed — OTLP_C_ENABLE_COVERAGE never instrumented anything
+
+The instrumentation flags were added via directory-scope
+`add_compile_options` AFTER the `otlp_c` target was defined —
+CMake applies those only to targets created later, so the option
+silently produced zero coverage data since it was introduced. The
+flags are now target-scoped (`target_compile_options/link_options
+... PUBLIC`), propagating to every test binary that links the
+library. Verified end-to-end: llvm-profdata merge + llvm-cov
+report over all 38 test runs.
+
+### Coverage findings → tests
+
+First real measurement showed `exporter_otel.c` at **30% region
+coverage** (100% of prior tests exercised spans or
+null_transport — the metric/log HTTP POST-build paths had zero
+coverage). New exporter-echo cases drive real-HTTP metric and log
+exports (async `emit_metric_move`/`emit_log_move` + flush):
+`exporter_otel.c` now at **75% regions / 100% functions**.
+Remaining misses are OOM/failure branches.
+
 ## [0.5.89] - 2026-08-20
 
 Fuzz coverage for the response parser; spot audits (clean).
