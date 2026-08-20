@@ -18,23 +18,33 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #define OTLP_C_VERSION_MAJOR 0
 #define OTLP_C_VERSION_MINOR 5
-#define OTLP_C_VERSION_PATCH 87
-#define OTLP_C_VERSION_STRING "0.5.68"
+#define OTLP_C_VERSION_PATCH 88
 
-#define OTLP_C_VERSION                                                            \
-	(((uint32_t)OTLP_C_VERSION_MAJOR << 24) |                                 \
-	 ((uint32_t)OTLP_C_VERSION_MINOR << 16) |                                 \
-	 ((uint32_t)OTLP_C_VERSION_PATCH))
+/* Derived from the numeric macros so the string can never drift
+ * (it was a hand-maintained literal until v0.5.88 — stuck at
+ * "0.5.68" for nineteen releases while the numbers were bumped). */
+#define OTLP_C_STR2(x) #x
+#define OTLP_C_STR(x) OTLP_C_STR2(x)
+#define OTLP_C_VERSION_STRING                                \
+	OTLP_C_STR(OTLP_C_VERSION_MAJOR)                     \
+	"." OTLP_C_STR(OTLP_C_VERSION_MINOR) "." OTLP_C_STR( \
+		OTLP_C_VERSION_PATCH)
 
-/* Returns the runtime version string. Same as OTLP_C_VERSION_STRING
- * but accessible to dynamic callers. */
-OTLP_C_EXPORT
-const char *otlp_version(void);
+#define OTLP_C_VERSION                                    \
+	(((uint32_t) OTLP_C_VERSION_MAJOR << 24) |        \
+		((uint32_t) OTLP_C_VERSION_MINOR << 16) | \
+		((uint32_t) OTLP_C_VERSION_PATCH))
+
+	/* Returns the runtime version string. Same as OTLP_C_VERSION_STRING
+	 * but accessible to dynamic callers. */
+	OTLP_C_EXPORT
+	const char *otlp_version(void);
 
 #ifdef __cplusplus
 }

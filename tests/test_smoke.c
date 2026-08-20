@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int
 main(void)
@@ -21,6 +22,19 @@ main(void)
 		OTLP_C_VERSION_MINOR,
 		OTLP_C_VERSION_PATCH);
 	assert(otlp_version() != NULL);
+	/* The runtime string must match the numeric macros (v0.5.88:
+	 * the literal had drifted to "0.5.68" for nineteen releases). */
+	{
+		char expect[32];
+
+		snprintf(expect,
+			sizeof(expect),
+			"%d.%d.%d",
+			OTLP_C_VERSION_MAJOR,
+			OTLP_C_VERSION_MINOR,
+			OTLP_C_VERSION_PATCH);
+		assert(strcmp(otlp_version(), expect) == 0);
+	}
 
 	/* Status code strings are populated. */
 	for (int i = -100; i < 1; i++)
