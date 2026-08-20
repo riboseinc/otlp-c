@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.92] - 2026-08-21
+
+Resource attributes on the one value model (breaking change).
+
+### Changed — `otlp_resource_attr_t` = `{ key, otlp_value_t }`
+
+Resource attributes were the last surface on a parallel-fields
+struct with 4 of 7 types. They now use the same public value
+model as every other attribute surface — all AnyValue types
+including BYTES (newly supported here). Migration:
+`.type = OTLP_RESOURCE_ATTR_INT64, .int64_val = 5` →
+`.value = {.type = OTLP_VALUE_INT64, .v = {.int64_val = 5}}`.
+
+Internally the exporter stores an owned attribute vector built by
+the set-attribute engine (map semantics, deep copy, grow-on-demand
+— the engine's behavior, not a copy of it), and the encoder's
+4-way type switch is deleted: encoding flows through the one
+`otlp_encode_any_value` dispatch.
+
+### Fixed — OOM-injection realloc accounting (test infrastructure)
+
+`fail_realloc` modeled realloc as alloc-only; growth reallocs
+consumed the old pointer without a counted free, so any
+grow-on-demand pattern showed a phantom leak per growth. LSAN
+confirmed no real leak. Realloc(p≠NULL) now counts free+alloc.
+
 ## [0.5.91] - 2026-08-20
 
 Coverage lap 2: platform + tracer error paths.

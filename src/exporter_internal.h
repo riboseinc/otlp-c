@@ -16,7 +16,7 @@
  * last-write-wins; "service.name" dropped when the dedicated
  * service_name opt is set). Points into the exporter; valid until
  * otlp_exporter_free(). */
-const otlp_resource_attr_t *
+const struct otlp_attribute *
 otlp_exporter_get_resource_attrs(const otlp_exporter_t *e, size_t *n);
 
 #endif

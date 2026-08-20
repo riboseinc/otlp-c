@@ -20,6 +20,8 @@
 #include <otlp-c/metric.h>
 #include <otlp-c/span.h>
 
+struct otlp_attribute;
+
 #include "http_client.h"
 
 #include <stddef.h>
@@ -40,7 +42,7 @@ otlp_status_t
 otlp_exporter_otel_build_span_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_span_t *const *spans,
 	size_t n_spans,
@@ -55,7 +57,7 @@ otlp_status_t
 otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_metric_t *const *metrics,
 	size_t n_metrics,
@@ -70,7 +72,7 @@ otlp_status_t
 otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *resource_attributes,
+	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const otlp_log_record_t *const *logs,
 	size_t n_logs,

@@ -158,9 +158,11 @@ main(void)
 	/* Resource attributes describing the process. */
 	otlp_resource_attr_t rsrc[2];
 	rsrc[0].key = "service.version";
-	rsrc[0].value = "1.0.0";
+	rsrc[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "1.0.0" } };
 	rsrc[1].key = "deployment.environment";
-	rsrc[1].value = "demo";
+	rsrc[1].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "demo" } };
 
 	opts.service_name = "multithread-demo";
 	opts.resource_attributes = rsrc;

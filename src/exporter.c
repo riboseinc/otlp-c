@@ -54,6 +54,7 @@
 #define OTLP_MAX_BATCH_SIZE (1024u * 1024u)
 #define OTLP_DEFAULT_BATCH_MS 100
 #define OTLP_DEFAULT_MAX_RETRIES 5
+#define OTLP_RESOURCE_MAX_ATTRS 128
 #define OTLP_DEFAULT_BACKOFF_INIT_MS 1000
 #define OTLP_DEFAULT_BACKOFF_MAX_MS 30000
 #define OTLP_DEFAULT_CONNECT_TIMEOUT 5000
@@ -67,8 +68,7 @@ struct otlp_exporter
 	struct otlp_http_url url;
 	char *user_agent;
 	char *service_name;
-	otlp_resource_attr_t *resource_attributes;
-	size_t n_resource_attributes;
+	struct otlp_attr_vec resource_attrs;
 	size_t batch_size;
 	uint32_t batch_ms;
 	uint32_t max_retries;
@@ -313,12 +313,12 @@ drain_signal(const struct signal_drain_path *p)
 		p->free_item(p->pending[i]);
 }
 
-const otlp_resource_attr_t *
+const struct otlp_attribute *
 otlp_exporter_get_resource_attrs(const otlp_exporter_t *e, size_t *n)
 {
 	if (n)
-		*n = e ? e->n_resource_attributes : 0;
-	return e ? e->resource_attributes : NULL;
+		*n = e ? e->resource_attrs.n : 0;
+	return e ? e->resource_attrs.items : NULL;
 }
 
 otlp_exporter_t *
@@ -350,68 +350,39 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	{
 		size_t i;
 		bool svc_set = o.service_name && o.service_name[0];
-		/* Overflow check before the count * sizeof multiplication.
-		 * See the v0.5.62/63 integer-overflow audit. */
-		if (o.n_resource_attributes >
-			SIZE_MAX / sizeof(*e->resource_attributes))
-			goto fail;
-		/* otlp_calloc (not otlp_malloc): the fail path iterates
-		 * every slot and frees key/value pointers. If a partial
-		 * copy fails partway, slots beyond the failure index are
-		 * uninitialized — otlp_malloc leaves garbage there, and
-		 * otlp_free on garbage pointers is UB. otlp_calloc
-		 * guarantees unset slots are NULL/NULL, which otlp_free
-		 * handles as no-ops. */
-		e->resource_attributes = otlp_calloc(o.n_resource_attributes,
-			sizeof(*e->resource_attributes));
-		if (!e->resource_attributes)
-			goto fail;
-		/* Resource attributes are a map (OTLP data model: keys
-		 * MUST be unique): duplicate keys in opts collapse
-		 * last-write-wins, and a "service.name" entry is dropped
-		 * when the dedicated service_name opt is set — the
-		 * documented field wins, otherwise the attrs entry would
-		 * duplicate the auto-emitted service.name KeyValue
-		 * (v0.5.78). */
-		e->n_resource_attributes = 0;
+
+		/* Resource attributes on the ONE model (v0.5.92): the
+		 * set-attribute engine gives map semantics (duplicate
+		 * keys collapse last-write-wins), deep copy, and all
+		 * seven AnyValue types. "service.name" yields to the
+		 * dedicated opt (v0.5.78). Empty keys and empty string
+		 * values are skipped (pre-v0.5.92 behavior preserved). */
 		for (i = 0; i < o.n_resource_attributes; i++)
 		{
 			const otlp_resource_attr_t *src =
 				&o.resource_attributes[i];
-			otlp_resource_attr_t *dst;
-			size_t j;
 
-			if (!src->key)
-				goto fail;
+			if (!src->key || !src->key[0])
+				continue;
 			if (svc_set && strcmp(src->key, "service.name") == 0)
 				continue;
-			for (j = 0; j < e->n_resource_attributes; j++)
-				if (strcmp(e->resource_attributes[j].key,
-					    src->key) == 0)
-					break;
-			dst = &e->resource_attributes[j];
-			if (j == e->n_resource_attributes)
+			if (src->value.type == OTLP_VALUE_STRING &&
+				(!src->value.v.string_val ||
+					!src->value.v.string_val[0]))
+				continue;
 			{
-				dst->key = otlp_dup_str(src->key);
-				if (!dst->key)
+				otlp_status_t rst =
+					otlp_attr_vec_set(&e->resource_attrs,
+						OTLP_RESOURCE_MAX_ATTRS,
+						src->key,
+						&src->value);
+
+				if (rst != OTLP_OK)
 					goto fail;
-				e->n_resource_attributes++;
 			}
-			else
-				otlp_free((char *) dst->value);
-			dst->type = src->type;
-			dst->int64_val = src->int64_val;
-			dst->double_val = src->double_val;
-			dst->bool_val = src->bool_val;
-			/* NULL the value before duplicating so the slot stays
-			 * free-path-safe if the dup fails mid-replace. */
-			dst->value = NULL;
-			dst->value =
-				src->value ? otlp_dup_str(src->value) : NULL;
-			if (src->value && !dst->value)
-				goto fail;
 		}
 	}
+
 	e->batch_size = o.batch_size;
 	e->batch_ms = o.batch_ms;
 	e->max_retries = o.max_retries;
@@ -465,16 +436,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 fail:
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
-	if (e->resource_attributes)
-	{
-		size_t i;
-		for (i = 0; i < e->n_resource_attributes; i++)
-		{
-			otlp_free((char *) e->resource_attributes[i].key);
-			otlp_free((char *) e->resource_attributes[i].value);
-		}
-		otlp_free(e->resource_attributes);
-	}
+	otlp_attr_vec_free(&e->resource_attrs);
 	otlp_free(e->pending);
 	otlp_free(e->metric_pending);
 	otlp_free(e->log_pending);
@@ -534,15 +496,7 @@ otlp_exporter_free(otlp_exporter_t *e)
 	otlp_free(e->log_pending);
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
-	if (e->resource_attributes)
-	{
-		for (i = 0; i < e->n_resource_attributes; i++)
-		{
-			otlp_free((char *) e->resource_attributes[i].key);
-			otlp_free((char *) e->resource_attributes[i].value);
-		}
-		otlp_free(e->resource_attributes);
-	}
+	otlp_attr_vec_free(&e->resource_attrs);
 	otlp_free(e);
 }
 
@@ -857,7 +811,7 @@ static otlp_status_t
 build_span_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *res_attrs,
+	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
 	size_t n_items,
@@ -883,7 +837,7 @@ static otlp_status_t
 build_metric_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *res_attrs,
+	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
 	size_t n_items,
@@ -909,7 +863,7 @@ static otlp_status_t
 build_log_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
 	const char *service_name,
-	const otlp_resource_attr_t *res_attrs,
+	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
 	size_t n_items,
@@ -944,7 +898,7 @@ struct signal_start_path
 	otlp_status_t (*build_request)(const struct otlp_http_url *,
 		const char *,
 		const char *,
-		const otlp_resource_attr_t *,
+		const struct otlp_attribute *,
 		size_t,
 		const void *const *,
 		size_t,
@@ -971,8 +925,8 @@ try_start_post_common(struct otlp_exporter *e,
 	st = p->build_request(&e->url,
 		e->user_agent,
 		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
+		e->resource_attrs.items,
+		e->resource_attrs.n,
 		(const void *const *) p->pending,
 		p->pending_count,
 		e->connect_timeout_ms,
@@ -1580,8 +1534,8 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 	arr[0] = m;
 	st = otlp_encode_export_metrics_service_request(&body,
 		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
+		e->resource_attrs.items,
+		e->resource_attrs.n,
 		NULL,
 		NULL,
 		arr,
@@ -1622,8 +1576,8 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 	arr[0] = lr;
 	st = otlp_encode_export_logs_service_request(&body,
 		e->service_name,
-		e->resource_attributes,
-		e->n_resource_attributes,
+		e->resource_attrs.items,
+		e->resource_attrs.n,
 		NULL,
 		NULL,
 		arr,

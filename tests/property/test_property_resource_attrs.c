@@ -21,7 +21,10 @@
 #include "../src/protobuf_encode.h"
 
 #include <otlp-c/exporter.h>
+#include <otlp-c/exporter.h>
 #include <otlp-c/span.h>
+
+#include "../src/exporter_internal.h"
 
 #include "../src/exporter_internal.h"
 
@@ -137,6 +140,35 @@ descend_to_resource_attrs(const uint8_t *data,
 	return 1;
 }
 
+/* Encode traces with a public attr array by building the owned
+ * internal attributes through the exporter (the same path the
+ * library itself uses). */
+static otlp_status_t
+encode_traces_with_attrs(struct otlp_pb_buf *buf,
+	const char *service,
+	const otlp_resource_attr_t *attrs,
+	size_t n)
+{
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	const struct otlp_attribute *internal;
+	size_t n_internal = 0;
+	otlp_status_t st;
+
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = service;
+	opts.resource_attributes = attrs;
+	opts.n_resource_attributes = n;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return OTLP_ERR_NOMEM;
+	internal = otlp_exporter_get_resource_attrs(exp, &n_internal);
+	st = otlp_encode_export_trace_service_request(
+		buf, service, internal, n_internal, NULL, NULL, NULL, 0);
+	otlp_exporter_free(exp);
+	return st;
+}
+
 static int
 prop_resource_empty(uint64_t seed)
 {
@@ -195,17 +227,19 @@ prop_resource_extra_attrs_encoded(uint64_t seed)
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "service.version";
-	attrs[0].value = "1.2.3";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "1.2.3" } };
 	attrs[1].key = "deployment.environment";
-	attrs[1].value = "production";
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "production" } };
 	attrs[2].key = "host.name";
-	attrs[2].value = "web-01";
+	attrs[2].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "web-01" } };
 
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st != OTLP_OK)
 		return 0;
-	st = otlp_encode_export_trace_service_request(
-		&buf, "billing", attrs, 3, NULL, NULL, NULL, 0);
+	st = encode_traces_with_attrs(&buf, "billing", attrs, 3);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
@@ -244,15 +278,16 @@ prop_resource_attrs_skip_empty(uint64_t seed)
 	/* Empty-key or empty-value entries should be omitted. */
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "";
-	attrs[0].value = "has-empty-key";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "has-empty-key" } };
 	attrs[1].key = "has-empty-value";
-	attrs[1].value = "";
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "" } };
 
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st != OTLP_OK)
 		return 0;
-	st = otlp_encode_export_trace_service_request(
-		&buf, "svc", attrs, 2, NULL, NULL, NULL, 0);
+	st = encode_traces_with_attrs(&buf, "svc", attrs, 2);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
@@ -322,14 +357,13 @@ prop_resource_typed_int64(uint64_t seed)
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "process.pid";
-	attrs[0].type = OTLP_RESOURCE_ATTR_INT64;
-	attrs[0].int64_val = 4242;
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = 4242 } };
 
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st != OTLP_OK)
 		return 0;
-	st = otlp_encode_export_trace_service_request(
-		&buf, "svc", attrs, 1, NULL, NULL, NULL, 0);
+	st = encode_traces_with_attrs(&buf, "svc", attrs, 1);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
@@ -356,14 +390,13 @@ prop_resource_typed_bool(uint64_t seed)
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "cloud.auto_scale";
-	attrs[0].type = OTLP_RESOURCE_ATTR_BOOL;
-	attrs[0].bool_val = true;
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_BOOL,
+		.v = { .bool_val = true } };
 
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st != OTLP_OK)
 		return 0;
-	st = otlp_encode_export_trace_service_request(
-		&buf, "svc", attrs, 1, NULL, NULL, NULL, 0);
+	st = encode_traces_with_attrs(&buf, "svc", attrs, 1);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
@@ -388,22 +421,22 @@ prop_resource_mixed_types(uint64_t seed)
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "service.version";
-	attrs[0].value = "1.0.0"; /* STRING (default) */
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "1.0.0" } };
 	attrs[1].key = "process.pid";
-	attrs[1].type = OTLP_RESOURCE_ATTR_INT64;
-	attrs[1].int64_val = 999;
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = 999 } };
 	attrs[2].key = "system.crashed";
-	attrs[2].type = OTLP_RESOURCE_ATTR_BOOL;
-	attrs[2].bool_val = false;
+	attrs[2].value = (otlp_value_t){ .type = OTLP_VALUE_BOOL,
+		.v = { .bool_val = false } };
 	attrs[3].key = "cpu.load";
-	attrs[3].type = OTLP_RESOURCE_ATTR_DOUBLE;
-	attrs[3].double_val = 3.14;
+	attrs[3].value = (otlp_value_t){ .type = OTLP_VALUE_DOUBLE,
+		.v = { .double_val = 3.14 } };
 
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st != OTLP_OK)
 		return 0;
-	st = otlp_encode_export_trace_service_request(
-		&buf, "svc", attrs, 4, NULL, NULL, NULL, 0);
+	st = encode_traces_with_attrs(&buf, "svc", attrs, 4);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))
@@ -437,19 +470,21 @@ prop_resource_attrs_dedup(uint64_t seed)
 	otlp_resource_attr_t attrs[3];
 	otlp_exporter_opts_t opts;
 	otlp_exporter_t *exp;
-	const otlp_resource_attr_t *stored;
+	const struct otlp_attribute *stored;
 	size_t n = 99;
 	int ok = 0;
 
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "host.name";
-	attrs[0].value = "web-01";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "web-01" } };
 	attrs[1].key = "host.name";
-	attrs[1].type = OTLP_RESOURCE_ATTR_INT64;
-	attrs[1].int64_val = 77;
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = 77 } };
 	attrs[2].key = "zone";
-	attrs[2].value = "a";
+	attrs[2].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "a" } };
 
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "svc";
@@ -460,8 +495,9 @@ prop_resource_attrs_dedup(uint64_t seed)
 		return 0;
 	stored = otlp_exporter_get_resource_attrs(exp, &n);
 	ok = (n == 2) && stored && strcmp(stored[0].key, "host.name") == 0 &&
-		stored[0].type == OTLP_RESOURCE_ATTR_INT64 &&
-		stored[0].int64_val == 77 && strcmp(stored[1].key, "zone") == 0;
+		stored[0].type == OTLP_ATTR_INT64 &&
+		stored[0].v.int64_val == 77 &&
+		strcmp(stored[1].key, "zone") == 0;
 	otlp_exporter_free(exp);
 	return ok;
 }
@@ -475,7 +511,7 @@ prop_resource_service_name_wins(uint64_t seed)
 	otlp_resource_attr_t attrs[2];
 	otlp_exporter_opts_t opts;
 	otlp_exporter_t *exp;
-	const otlp_resource_attr_t *stored;
+	const struct otlp_attribute *stored;
 	size_t n = 99;
 	size_t i;
 	int saw_svc = 0;
@@ -484,9 +520,11 @@ prop_resource_service_name_wins(uint64_t seed)
 	(void) seed;
 	memset(attrs, 0, sizeof(attrs));
 	attrs[0].key = "service.name";
-	attrs[0].value = "from-attrs";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "from-attrs" } };
 	attrs[1].key = "zone";
-	attrs[1].value = "a";
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_STRING,
+		.v = { .string_val = "a" } };
 
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "from-opt";
@@ -500,6 +538,44 @@ prop_resource_service_name_wins(uint64_t seed)
 		if (strcmp(stored[i].key, "service.name") == 0)
 			saw_svc = 1;
 	ok = (n == 1) && !saw_svc && strcmp(stored[0].key, "zone") == 0;
+	otlp_exporter_free(exp);
+	return ok;
+}
+
+/* v0.5.92: resource attributes take the full otlp_value_t model.
+ * BYTES (newly supported) round-trips through the exporter. */
+static int
+prop_resource_full_value_model(uint64_t seed)
+{
+	const uint8_t payload[3] = { 0xde, 0xad, 0x00 };
+	otlp_resource_attr_t attrs[2];
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	const struct otlp_attribute *stored;
+	size_t n = 0;
+	int ok = 0;
+
+	(void) seed;
+	memset(attrs, 0, sizeof(attrs));
+	attrs[0].key = "blob";
+	attrs[0].value = (otlp_value_t){ .type = OTLP_VALUE_BYTES,
+		.v = { .bytes_val = { .data = payload, .len = 3 } } };
+	attrs[1].key = "pid";
+	attrs[1].value = (otlp_value_t){ .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = 42 } };
+
+	memset(&opts, 0, sizeof(opts));
+	opts.service_name = "svc";
+	opts.resource_attributes = attrs;
+	opts.n_resource_attributes = 2;
+	exp = otlp_exporter_create(&opts);
+	if (!exp)
+		return 0;
+	stored = otlp_exporter_get_resource_attrs(exp, &n);
+	ok = (n == 2) && stored && stored[0].type == OTLP_ATTR_BYTES &&
+		stored[0].v.bytes_val.len == 3 &&
+		stored[0].v.bytes_val.data[0] == 0xde &&
+		stored[1].v.int64_val == 42;
 	otlp_exporter_free(exp);
 	return ok;
 }
