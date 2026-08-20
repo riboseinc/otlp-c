@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.88] - 2026-08-20
+
+Examples audit; runtime version-string drift fixed.
+
+### Fixed — otlp_version() returned "0.5.68" for nineteen releases
+
+`OTLP_C_VERSION_STRING` was a hand-maintained literal last touched
+at v0.5.68; every subsequent release bumped the numeric macros
+(and CMakeLists + vcpkg.json) but not the string. Found by
+running the refreshed minimal example. The string is now DERIVED
+from the macros via token-pasting — it cannot drift again — and a
+smoke-test assertion pins `otlp_version()` against the numeric
+macros.
+
+### Changed — examples refreshed
+
+- `minimal.c`: demonstrates the composite ArrayValue attribute
+  (`otlp_span_set_attribute_array` from `otlp_value_t`) and the
+  map semantics (re-setting a key replaces its value) — its
+  "full API surface" claim now holds.
+- `multithread.c`: verified against the v0.5.82 concurrency
+  contract (workers join before flush+free — exactly right); the
+  header now documents WHY, and notes `emit_move` as the
+  clone-free hot-path alternative.
+
 ## [0.5.87] - 2026-08-19
 
 Documentation catch-up for the audit arc (docs only).

@@ -19,9 +19,9 @@ int
 main(void)
 {
 	otlp_exporter_opts_t opts = { 0 };
-	otlp_exporter_t    *exp;
-	otlp_tracer_t      *tracer;
-	otlp_span_t        *span;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	otlp_span_t *span;
 
 	/* ── Exporter ────────────────────────────────────────────────
 	 * Zero-initialized opts picks library defaults for endpoint
@@ -29,7 +29,8 @@ main(void)
 	 * batch_ms (100), retry/backoff. */
 	opts.service_name = "demo-service";
 	exp = otlp_exporter_create(&opts);
-	if (!exp) {
+	if (!exp)
+	{
 		fprintf(stderr, "exporter create failed\n");
 		return 1;
 	}
@@ -38,7 +39,8 @@ main(void)
 
 	/* ── Tracer with sampler ──────────────────────────────────── */
 	tracer = otlp_tracer_create("demo-service", "demo", otlp_version());
-	if (!tracer) {
+	if (!tracer)
+	{
 		otlp_exporter_free(exp);
 		return 1;
 	}
@@ -50,13 +52,32 @@ main(void)
 
 	/* ── Span: traces with attributes + events ────────────────── */
 	span = otlp_tracer_start_span(tracer, "process-request");
-	if (!span) {
+	if (!span)
+	{
 		/* Sampler dropped this span — not an error. */
 		printf("span was sampled out (ratio sampler)\n");
-	} else {
+	}
+	else
+	{
 		otlp_span_set_attribute_string(span, "http.method", "GET");
 		otlp_span_set_attribute_string(span, "http.route", "/api/data");
 		otlp_span_set_attribute_int(span, "http.status", 200);
+		/* Attributes are a map: re-setting a key replaces its
+		 * value (last write wins, type may change). */
+		otlp_span_set_attribute_int(span, "http.status", 201);
+		/* Composite (ArrayValue) attribute from otlp_value_t: */
+		{
+			const otlp_value_t segments[3] = {
+				{ .type = OTLP_VALUE_STRING,
+					.v = { .string_val = "auth" } },
+				{ .type = OTLP_VALUE_STRING,
+					.v = { .string_val = "handler" } },
+				{ .type = OTLP_VALUE_DOUBLE,
+					.v = { .double_val = 0.42 } },
+			};
+			otlp_span_set_attribute_array(
+				span, "pipeline", segments, 3);
+		}
 		otlp_span_add_event(span, "cache-miss", 0);
 		otlp_span_set_event_attribute_string(span, "key", "user_42");
 		otlp_span_set_status(span, OTLP_STATUS_CODE_OK, NULL);
@@ -68,10 +89,14 @@ main(void)
 
 	/* ── Metric: counter ──────────────────────────────────────── */
 	{
-		otlp_metric_t *m = otlp_metric_create(
-		    OTLP_METRIC_COUNTER, "requests_total", "1",
-		    "Total HTTP requests", NULL, 0);
-		if (m) {
+		otlp_metric_t *m = otlp_metric_create(OTLP_METRIC_COUNTER,
+			"requests_total",
+			"1",
+			"Total HTTP requests",
+			NULL,
+			0);
+		if (m)
+		{
 			otlp_metric_record(m, 1.0);
 			otlp_metric_mark_time(m);
 			otlp_metric_set_attribute_string(m, "method", "GET");
@@ -83,11 +108,12 @@ main(void)
 	/* ── Log: structured log record ───────────────────────────── */
 	{
 		otlp_log_record_t *lr = otlp_log_record_create(
-		    OTLP_SEVERITY_INFO, "Request completed successfully");
-		if (lr) {
+			OTLP_SEVERITY_INFO, "Request completed successfully");
+		if (lr)
+		{
 			otlp_log_record_mark_timestamp(lr);
-			otlp_log_record_set_attribute_string(lr, "request_id",
-							     "req-123");
+			otlp_log_record_set_attribute_string(
+				lr, "request_id", "req-123");
 			otlp_exporter_flush_log(exp, lr);
 			otlp_log_record_free(lr);
 		}
@@ -96,15 +122,17 @@ main(void)
 	/* ── Context propagation ──────────────────────────────────── */
 	{
 		otlp_span_t *root = otlp_tracer_start_span(tracer, "root");
-		if (root) {
+		if (root)
+		{
 			otlp_context_t ctx = otlp_context_from_span(root);
 			char header[OTLP_TRACEPARENT_BUF_SIZE];
 			size_t len;
 
-			if (otlp_traceparent_format(root, true, header,
-			    sizeof(header), &len) == OTLP_OK)
+			if (otlp_traceparent_format(
+				    root, true, header, sizeof(header), &len) ==
+				OTLP_OK)
 				printf("traceparent: %s\n", header);
-			(void)ctx;
+			(void) ctx;
 			otlp_span_free(root);
 		}
 	}
@@ -113,6 +141,6 @@ main(void)
 	otlp_exporter_free(exp);
 
 	printf("otlp-c %s — demo emitted span + metric + log + context\n",
-	       otlp_version());
+		otlp_version());
 	return 0;
 }
