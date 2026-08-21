@@ -140,13 +140,27 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.84 | **SENDING-phase I/O inactivity deadline** (send-side slowloris) + big-endian ratio-sampler prefix | #115 |
 | 0.5.85 | **Slab allocator arena-aware realloc** (libc realloc on arena pointers was UB — aborts under macOS libmalloc) | #116 |
 | 0.5.86 | Encode-path audit: SBO 64 → 192 (span envelopes escape was the only heap hit); ~10% on attribute batches, byte-identical | #117 |
+| 0.5.87 | Documentation catch-up for the audit arc (CLAUDE.md test rules distilled from the three NDEBUG/leak lessons) | #118 |
+| 0.5.88 | **Fix: `otlp_version()` returned "0.5.68" for 19 releases** (hand-maintained string literal; now derived from the macros); examples refreshed | #119 |
+| 0.5.89 | Fuzz coverage: raw/mutated HTTP responses through the real state machine (chunked decoder); context-extract fuzz | #120 |
+| 0.5.90 | **Fix: `OTLP_C_ENABLE_COVERAGE` never instrumented anything** (flags after the target); exporter_otel 30% → 75% via real-HTTP metric/log tests | #121 |
+| 0.5.91 | Coverage lap 2: platform + tracer error paths (DNS failure, connection refused, NULL guards); platform 76→82%, tracer 81→91% | #122 |
+| 0.5.92 | **Resource attributes on the one value model** (breaking: `{key, otlp_value_t}`; all AnyValue types; encoder type-switch deleted) + OOM realloc-accounting fix | #123 |
 
-**Key metrics (v0.5.86):** 126 TODOs complete, 38 tests, **40+
+**Key metrics (v0.5.92):** 132 TODOs complete, 39 tests, **43+
 distinct bugs found and fixed**, all sanitizers green, zero
-warnings, verified in Debug AND Release configurations.
-`sizeof(otlp_span)`: 138,880 → **176 bytes**; emit pipeline
-~30,000 → **~150 ns/span** (~6.6M spans/s, null transport);
-encode ~990 ns/span at 5 attrs (SBO 192).
+warnings, verified in Debug AND Release configurations, every
+library file at 82%+ region coverage. `sizeof(otlp_span)`:
+138,880 → **176 bytes**; emit pipeline ~30,000 → **~150 ns/span**
+(~6.6M spans/s, null transport); encode ~990 ns/span at 5 attrs
+(SBO 192).
+
+**Unification arc (v0.5.68–v0.5.92):** every attribute surface —
+span, event, link, metric, log record, resource — now shares one
+public value type (`otlp_value_t`), one storage model
+(grow-on-demand `otlp_attr_vec`), one set engine
+(`otlp_attr_vec_set/_set_array/_set_kvlist`), and one encoder
+dispatch (`otlp_encode_any_value`).
 
 **Audit arc (v0.5.78–v0.5.86):** every subsystem passed through a
 dedicated audit — resource attrs, setter engine, HTTP response

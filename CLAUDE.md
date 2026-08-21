@@ -155,8 +155,10 @@ All phases are complete (v0.5.86). The library implements:
 - W3C Trace Context propagation (traceparent + tracestate) +
   **W3C Baggage** (v0.5.22); ID setters reject all-zero (v0.5.54);
   context extract rejects CRLF in tracestate/baggage (v0.5.53)
-- Resource attributes: **typed** (string/int64/double/bool, v0.5.24) +
-  configurable aggregation temporality + is_monotonic (v0.5.26)
+- Resource attributes: **on the one value model** (v0.5.92:
+  `{key, otlp_value_t}` with all AnyValue types; map semantics at
+  create time via the set engine) + configurable aggregation
+  temporality + is_monotonic (v0.5.26)
 - Sampler interface (always_on / always_off / trace_id_ratio_based)
 - Lock-free MPSC queue + caller-tick exporter (no library threads)
 - Non-blocking HTTP/1.1 client with keep-alive +
@@ -193,9 +195,10 @@ All phases are complete (v0.5.86). The library implements:
   growing arena pointers are moved, never libc-realloc'd
 
 When extending the library:
-- **All five attribute surfaces** (span/event/link/metric/log)
-  take all seven AnyValue types: string/bool/int64/double/bytes
-  via per-type setters; ARRAY/KVLIST via the composite setters
+- **All six attribute surfaces** (span/event/link/metric/log/
+  resource) take all seven AnyValue types: string/bool/int64/
+  double/bytes via per-type setters (or the `otlp_value_t` field
+  for resource attrs); ARRAY/KVLIST via the composite setters
   taking `otlp_value_t` arrays.
 - **New attribute type**: add enum value + encoder function +
   `attr_encoders[]` table entry in `otlp_messages.c`. OCP.

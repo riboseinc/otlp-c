@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.93] - 2026-08-21
+
+Documentation catch-up for v0.5.87–v0.5.92 (docs only).
+
+### Fixed — stale documentation after the v0.5.92 breaking change
+
+- `docs/cookbook.md`: the resource-attributes example still used
+  the deleted parallel-fields struct (`OTLP_RESOURCE_ATTR_INT64`
+  etc.) — broken since the moment v0.5.92 shipped. Rewritten to
+  the value model.
+- `docs/roadmap.md`: version rows for v0.5.87–v0.5.92, key-metrics
+  refreshed (132 TODOs, 39 tests, 43+ bugs, every file at 82%+
+  coverage), and a unification-arc summary paragraph.
+- `CLAUDE.md`: resource attributes documented as the sixth
+  attribute surface on the value model; conventions updated from
+  five surfaces to six.
+
+No code changes; build + full suite ran as the gate.
+
 ## [0.5.92] - 2026-08-21
 
 Resource attributes on the one value model (breaking change).

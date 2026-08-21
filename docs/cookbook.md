@@ -372,15 +372,15 @@ Describe the process being instrumented:
 
 ```c
 otlp_resource_attr_t attrs[] = {
-    /* String (default) */
-    {.key = "service.version", .value = "1.2.3"},
-    /* Typed values (v0.5.24) */
-    {.key = "process.pid", .type = OTLP_RESOURCE_ATTR_INT64,
-     .int64_val = 4242},
+    /* One key + one otlp_value_t (v0.5.92; all AnyValue types) */
+    {.key = "service.version",
+     .value = {.type = OTLP_VALUE_STRING, .v = {.string_val = "1.2.3"}}},
+    {.key = "process.pid",
+     .value = {.type = OTLP_VALUE_INT64, .v = {.int64_val = 4242}}},
     {.key = "system.memory.utilization",
-     .type = OTLP_RESOURCE_ATTR_DOUBLE, .double_val = 0.87},
-    {.key = "cloud.auto_scale", .type = OTLP_RESOURCE_ATTR_BOOL,
-     .bool_val = true},
+     .value = {.type = OTLP_VALUE_DOUBLE, .v = {.double_val = 0.87}}},
+    {.key = "cloud.auto_scale",
+     .value = {.type = OTLP_VALUE_BOOL, .v = {.bool_val = true}}},
 };
 
 otlp_exporter_opts_t opts = {0};
