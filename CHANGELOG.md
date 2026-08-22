@@ -4,6 +4,40 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.103] - 2026-08-22
+
+UTF-8 conformance at the API boundary.
+
+### Fixed — one invalid string could kill a whole batch at the collector
+
+OTLP string fields are proto3 `string` — they must be valid
+UTF-8, and the Go protobuf runtime used by otelcol rejects the
+entire ExportRequest on unmarshal when any string field is not.
+A single attribute value with invalid bytes (a Latin-1 filename,
+a truncated multi-byte sequence) made the exporter retry and
+eventually drop the WHOLE batch with only a confusing HTTP 400
+to show for it. Nothing validated this: `OTLP_ERR_UTF8` has sat
+unused in the status enum since v0.1.
+
+The library now validates UTF-8 at the string-ingestion
+boundary and fails the setter instead: the set-attribute engine
+covers all six attribute surfaces at once (keys, string values,
+and composite ARRAY/KVLIST items/entries — whose builders now
+propagate the real status instead of flattening failures to
+NOMEM), plus the scalar wire strings (span name/trace_state/
+status/event name, metric name/unit/description, log body/
+severity_text, service_name). `bytes` values are exempt
+(proto3 `bytes` accepts anything). Invalid input returns
+`OTLP_ERR_UTF8` from setters and NULL from creates — one bad
+value fails itself, not the batch.
+
+Also: `get_stats()` is reclassified as thread-safe (it was
+already atomic-loads-only; the header overstated the
+restriction), and the golden-vector corpus now includes ARRAY
+and KVLIST attributes — the composite encoders are
+reference-validated for the first time, including oneof
+presence for an explicitly-set false bool (420 = 420 bytes).
+
 ## [0.5.102] - 2026-08-22
 
 Hygiene catch-up.

@@ -22,7 +22,9 @@ typedef enum
 	OTLP_ERR_NOMEM = -2,
 	OTLP_ERR_NULL = -3,
 	OTLP_ERR_OVERFLOW = -4,
-	OTLP_ERR_UTF8 = -5,
+	OTLP_ERR_UTF8 = -5, /* string input is not valid UTF-8
+			     * (proto3 string contract); rejected at the
+			     * setter so the collector never sees it */
 
 	/* Network errors (recoverable with backoff). */
 	OTLP_ERR_NETWORK = -10,

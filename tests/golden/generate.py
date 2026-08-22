@@ -73,6 +73,25 @@ def traces_payload():
             common_pb2.KeyValue(
                 key="raw",
                 value=common_pb2.AnyValue(bytes_value=b"\x00\x01\xfe\xff")),
+            common_pb2.KeyValue(
+                key="list",
+                value=common_pb2.AnyValue(array_value=common_pb2.ArrayValue(
+                    values=[
+                        common_pb2.AnyValue(string_value="a"),
+                        common_pb2.AnyValue(int_value=7),
+                        common_pb2.AnyValue(bool_value=False),
+                    ]))),
+            common_pb2.KeyValue(
+                key="map",
+                value=common_pb2.AnyValue(kvlist_value=common_pb2.KeyValueList(
+                    values=[
+                        common_pb2.KeyValue(
+                            key="inner",
+                            value=common_pb2.AnyValue(string_value="v")),
+                        common_pb2.KeyValue(
+                            key="n",
+                            value=common_pb2.AnyValue(double_value=1.5)),
+                    ]))),
         ],
         events=[trace_pb2.Span.Event(
             time_unix_nano=T_BASE + 500000000,

@@ -45,6 +45,14 @@ otlp_calloc(size_t count, size_t size);
 char *
 otlp_dup_str(const char *s);
 
+/* True iff `s` is valid UTF-8 (protobuf proto3 `string` contract).
+ * NULL counts as valid (treated as absent). OTLP string fields MUST
+ * be valid UTF-8 — Go-based collectors (otelcol) reject the whole
+ * ExportRequest on unmarshal otherwise, so the library validates at
+ * the API boundary and fails the setter instead (OTLP_ERR_UTF8). */
+bool
+otlp_str_is_utf8(const char *s);
+
 /* Heap-allocate a copy of `len` bytes from `src`. NULL on OOM or
  * when len > 0 && src == NULL. */
 uint8_t *

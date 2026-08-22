@@ -156,8 +156,9 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.100 | **Structured diagnostics events**: `otlp_exporter_set_event_logger()` delivers every diagnostic as an `otlp_event_t` (code/signal/counts/drop reason); string messages now DERIVED from the event by one formatter (14 printf sites removed) | #131 |
 | 0.5.101 | **Golden vectors**: payloads built by the reference opentelemetry-proto serialization and compared as canonical field trees (zigzag/packing/presence validated, not just field numbers); decoder gains fixed32/64 readers | #132 |
 | 0.5.102 | Hygiene: concurrency-stress echo worker stop + checked joins (last `(void)` joins in the tree); minimal example demos the event callback | #133 |
+| 0.5.103 | **Fix: UTF-8 validated at the API boundary** (proto3 string contract — otelcol rejects whole requests otherwise; OTLP_ERR_UTF8 finally used); composite ARRAY/KVLIST golden vectors; get_stats() documented thread-safe | #134 |
 
-**Key metrics (v0.5.102):** 142 TODOs complete, 45 tests, **48+
+**Key metrics (v0.5.103):** 143 TODOs complete, 46 tests, **49+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:

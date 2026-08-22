@@ -314,6 +314,27 @@ build_traces(struct otlp_pb_buf *out)
 
 		check_ok(otlp_span_set_attribute_bytes(s, "raw", raw, 4));
 	}
+	{
+		static const otlp_value_t list_items[3] = {
+			{ .type = OTLP_VALUE_STRING,
+				.v = { .string_val = "a" } },
+			{ .type = OTLP_VALUE_INT64, .v = { .int64_val = 7 } },
+			{ .type = OTLP_VALUE_BOOL, .v = { .bool_val = false } },
+		};
+		static const otlp_kv_t map_entries[2] = {
+			{ .key = "inner",
+				.value = { .type = OTLP_VALUE_STRING,
+					.v = { .string_val = "v" } } },
+			{ .key = "n",
+				.value = { .type = OTLP_VALUE_DOUBLE,
+					.v = { .double_val = 1.5 } } },
+		};
+
+		check_ok(otlp_span_set_attribute_array(
+			s, "list", list_items, 3));
+		check_ok(otlp_span_set_attribute_kvlist(
+			s, "map", map_entries, 2));
+	}
 
 	check_ok(otlp_span_set_status(s, OTLP_STATUS_CODE_ERROR, "boom"));
 	check_ok(otlp_span_add_event(s, "evt", T_BASE + 500000000));

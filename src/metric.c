@@ -31,6 +31,13 @@ otlp_metric_create(otlp_metric_type_t type,
 	if (!m)
 		return NULL;
 	m->type = type;
+	if ((name && !otlp_str_is_utf8(name)) ||
+		(unit && !otlp_str_is_utf8(unit)) ||
+		(description && !otlp_str_is_utf8(description)))
+	{
+		otlp_free(m);
+		return NULL;
+	}
 	m->name = otlp_dup_str(name ? name : "");
 	m->unit = otlp_dup_str(unit ? unit : "");
 	m->description = otlp_dup_str(description ? description : "");

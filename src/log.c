@@ -23,6 +23,11 @@ otlp_log_record_create(otlp_severity_t severity, const char *body)
 	if (!lr)
 		return NULL;
 	lr->severity = severity;
+	if (body && !otlp_str_is_utf8(body))
+	{
+		otlp_free(lr);
+		return NULL;
+	}
 	lr->body = otlp_dup_str(body ? body : "");
 	if (!lr->body)
 	{
@@ -101,6 +106,8 @@ otlp_log_record_set_severity_text(otlp_log_record_t *lr, const char *text)
 {
 	if (!lr)
 		return OTLP_ERR_NULL;
+	if (text && !otlp_str_is_utf8(text))
+		return OTLP_ERR_UTF8;
 	otlp_free(lr->severity_text);
 	lr->severity_text = otlp_dup_str(text ? text : "");
 	if (text && !lr->severity_text)

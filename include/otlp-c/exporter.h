@@ -21,10 +21,20 @@
  * The library does not cache DNS results (the OS resolver
  * usually does).
  *
- * Thread-safety: emit() is safe to call from any thread. tick(),
- * flush(), shutdown(), free(), and get_stats() are NOT — the caller
- * must serialise them (typically by always calling from the same
- * thread that owns the exporter's lifetime).
+ * Thread-safety: emit() is safe to call from any thread, and so
+ * is get_stats() (every counter is an atomic load; safe from any
+ * thread during the exporter's lifetime). tick(), flush(),
+ * shutdown(), and free() are NOT — the caller must serialise them
+ * (typically by always calling from the same thread that owns the
+ * exporter's lifetime).
+ *
+ * UTF-8: every string the library puts on the wire (attribute
+ * keys/values, span/metric/log names, service_name, ...) is
+ * validated as UTF-8 at the API boundary. proto3 string fields
+ * must be valid UTF-8, and Go-based collectors (otelcol) reject
+ * the whole request otherwise — so invalid input fails the setter
+ * with OTLP_ERR_UTF8 instead of poisoning a batch. `bytes` values
+ * are exempt.
  *
  * Flow:
  *   1. Caller calls otlp_exporter_emit() once per span from any

@@ -137,10 +137,10 @@ otlp_attribute_release_value(struct otlp_attribute *a)
 				for (i = 0; i < a->v.kvlist_val->n; i++)
 				{
 					otlp_free(a->v.kvlist_val->entries[i]
-							.key);
+							  .key);
 					otlp_attribute_free(
 						&a->v.kvlist_val->entries[i]
-							.value);
+							 .value);
 				}
 				otlp_free(a->v.kvlist_val->entries);
 				otlp_free(a->v.kvlist_val);
@@ -268,7 +268,7 @@ attr_copy_one(struct otlp_attribute *dst, const struct otlp_attribute *src)
 					do
 						otlp_attribute_free(
 							&dst->v.array_val
-								->items[i]);
+								 ->items[i]);
 					while (i-- > 0);
 					otlp_free(dst->v.array_val->items);
 					otlp_free(dst->v.array_val);
@@ -322,10 +322,10 @@ attr_copy_one(struct otlp_attribute *dst, const struct otlp_attribute *src)
 				do
 				{
 					otlp_free(dst->v.kvlist_val->entries[i]
-							.key);
+							  .key);
 					otlp_attribute_free(
 						&dst->v.kvlist_val->entries[i]
-							.value);
+							 .value);
 				} while (i-- > 0);
 				otlp_free(dst->v.kvlist_val->entries);
 				otlp_free(dst->v.kvlist_val);
@@ -377,6 +377,8 @@ value_fill(struct otlp_attribute *a, const otlp_value_t *v)
 	switch (v->type)
 	{
 		case OTLP_VALUE_STRING:
+			if (!otlp_str_is_utf8(v->v.string_val))
+				return OTLP_ERR_UTF8;
 			a->type = OTLP_ATTR_STRING;
 			a->v.string_val = otlp_dup_str(
 				v->v.string_val ? v->v.string_val : "");
@@ -437,15 +439,19 @@ otlp_attr_array_build(const otlp_value_t *items,
 		arr->n = n;
 	}
 	for (i = 0; i < n; i++)
-		if (value_fill(&arr->items[i], &items[i]) != OTLP_OK)
+	{
+		otlp_status_t st = value_fill(&arr->items[i], &items[i]);
+
+		if (st != OTLP_OK)
 		{
 			do
 				otlp_attribute_free(&arr->items[i]);
 			while (i-- > 0);
 			otlp_free(arr->items);
 			otlp_free(arr);
-			return OTLP_ERR_NOMEM;
+			return st;
 		}
+	}
 	*out = arr;
 	return OTLP_OK;
 }
@@ -478,9 +484,16 @@ otlp_attr_kvlist_build(const otlp_kv_t *entries,
 	}
 	for (i = 0; i < n; i++)
 	{
-		if (!entries[i].key ||
-			value_fill(&kvl->entries[i].value, &entries[i].value) !=
-				OTLP_OK)
+		otlp_status_t st;
+
+		if (!entries[i].key)
+			st = OTLP_ERR_NULL;
+		else if (!otlp_str_is_utf8(entries[i].key))
+			st = OTLP_ERR_UTF8;
+		else
+			st = value_fill(
+				&kvl->entries[i].value, &entries[i].value);
+		if (st != OTLP_OK)
 		{
 			do
 			{
@@ -489,7 +502,7 @@ otlp_attr_kvlist_build(const otlp_kv_t *entries,
 			} while (i-- > 0);
 			otlp_free(kvl->entries);
 			otlp_free(kvl);
-			return entries[i].key ? OTLP_ERR_NOMEM : OTLP_ERR_NULL;
+			return st;
 		}
 		kvl->entries[i].key = otlp_dup_str(entries[i].key);
 		if (!kvl->entries[i].key)
@@ -601,6 +614,8 @@ otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
 		vec->items = grown;
 		vec->cap = new_cap;
 	}
+	if (!otlp_str_is_utf8(key))
+		return OTLP_ERR_UTF8;
 	kc = otlp_dup_str(key);
 	if (!kc)
 		return OTLP_ERR_NOMEM;
@@ -612,6 +627,65 @@ otlp_attr_vec_reserve(struct otlp_attr_vec *vec,
 	vec->n++;
 	*out = slot;
 	return OTLP_OK;
+}
+
+bool
+otlp_str_is_utf8(const char *s)
+{
+	const unsigned char *p = (const unsigned char *) s;
+
+	if (!s)
+		return true;
+	while (*p)
+	{
+		unsigned char c = *p;
+		size_t need;
+		uint32_t cp, cp_min;
+
+		if (c < 0x80)
+		{
+			p++;
+			continue;
+		}
+		else if ((c & 0xe0) == 0xc0)
+		{
+			need = 1;
+			cp = c & 0x1f;
+			cp_min = 0x80;
+		}
+		else if ((c & 0xf0) == 0xe0)
+		{
+			need = 2;
+			cp = c & 0x0f;
+			cp_min = 0x800;
+		}
+		else if ((c & 0xf8) == 0xf0)
+		{
+			need = 3;
+			cp = c & 0x07;
+			cp_min = 0x10000;
+		}
+		else
+			return false; /* stray continuation or 0xf8+ lead */
+		for (size_t i = 0; i < need; i++)
+		{
+			unsigned char cc = p[1 + i];
+
+			/* Also stops at the NUL terminator: a truncated
+			 * sequence can never pass. */
+			if ((cc & 0xc0) != 0x80)
+				return false;
+			cp = (cp << 6) | (cc & 0x3f);
+		}
+		if (cp < cp_min) /* overlong encoding */
+			return false;
+		if (cp >= 0xd800 && cp <= 0xdfff) /* UTF-16 surrogate */
+			return false;
+		if (cp > 0x10ffff)
+			return false;
+		p += need + 1;
+	}
+	return true;
 }
 
 /* ── The set-attribute engine ─────────────────────────────────── */
@@ -635,6 +709,8 @@ otlp_attr_vec_set(struct otlp_attr_vec *vec,
 	switch (v->type)
 	{
 		case OTLP_VALUE_STRING:
+			if (!otlp_str_is_utf8(v->v.string_val))
+				return OTLP_ERR_UTF8;
 			s_copy = otlp_dup_str(
 				v->v.string_val ? v->v.string_val : "");
 			if (!s_copy)
