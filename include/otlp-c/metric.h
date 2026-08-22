@@ -18,6 +18,13 @@
  * Lifetime: caller-owned. Construct via otlp_metric_create(); free
  * via otlp_metric_free().
  *
+ * Return codes (every otlp_status_t setter): OTLP_OK on success;
+ * OTLP_ERR_NULL for a NULL metric or key; OTLP_ERR_NOMEM on
+ * allocation failure; OTLP_ERR_OVERFLOW past the 128-distinct-key
+ * attribute cap; OTLP_ERR_INVALID_ARGUMENT for wrong-type
+ * operations (e.g. exp-histogram data on a counter) or count
+ * overflows. Inputs are deep-copied where owned.
+ *
  * Thread-safety: single-threaded, same as spans. The caller builds
  * a metric on one thread, then passes it to the encoder/exporter.
  */
@@ -114,19 +121,6 @@ extern "C"
 		const char *key,
 		const uint8_t *bytes,
 		size_t len);
-
-	/* Set an ArrayValue / KeyValueList attribute (deep-copied;
-	 * same upsert semantics as the scalar setters). */
-	OTLP_C_EXPORT
-	otlp_status_t otlp_metric_set_attribute_array(otlp_metric_t *m,
-		const char *key,
-		const otlp_value_t *items,
-		size_t n);
-	OTLP_C_EXPORT
-	otlp_status_t otlp_metric_set_attribute_kvlist(otlp_metric_t *m,
-		const char *key,
-		const otlp_kv_t *entries,
-		size_t n);
 
 	/* Set an ArrayValue / KeyValueList attribute (deep-copied;
 	 * same upsert semantics as the scalar setters). */

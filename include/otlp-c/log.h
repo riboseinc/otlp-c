@@ -8,6 +8,13 @@
  * Lifetime: caller-owned. Construct via otlp_log_record_create();
  * free via otlp_log_record_free().
  *
+ * Return codes (every otlp_status_t setter): OTLP_OK on success;
+ * OTLP_ERR_NULL for a NULL record or (where applicable) NULL
+ * key; OTLP_ERR_NOMEM on allocation failure; OTLP_ERR_OVERFLOW
+ * past the 128-distinct-key attribute cap; OTLP_ERR_INVALID_ARGUMENT
+ * for all-zero trace/span IDs (W3C) or a NULL entry key in a
+ * composite value. Inputs are deep-copied where owned.
+ *
  * Thread-safety: single-threaded (same model as spans and metrics).
  */
 #ifndef OTLP_C_LOG_H
