@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.97] - 2026-08-22
+
+Metrics wire-schema audit against opentelemetry-proto.
+
+### Fixed — HistogramDataPoint min/max emitted at wrong field numbers
+
+`src/otlp_schema.h` had histogram `min` at field 10 and `max` at
+11 since the metrics signal shipped. Upstream metrics.proto is
+`flags = 10` (uint32 varint), `min = 11`, `max = 12`: our FIXED64
+min at 10 was dropped by collectors as an unknown field, and our
+max at 11 was decoded as the collector's min — exported
+histograms lost their minimum and reported a doubled max. Fixed
+to the upstream numbers. Also fixed the dormant
+ExponentialHistogramDataPoint `flags` entry (declared fixed32;
+upstream is uint32 varint — the field is not yet emitted, so no
+wire impact) and a LogRecord table comment that mislabeled
+reserved field 4 as observed_time.
+
+### Added — upstream-literal wire test (the guard that was missing)
+
+Every existing test walked the wire using the schema's own field
+numbers — a self-referential check that can only agree with the
+schema, bug included; that is how the min/max drift survived
+since the signal shipped. New `tests/unit/test_unit_wire_numbers`
+pins the encoded bytes (HDP min@11/max@12/count@4/sum@5/
+buckets@6/bounds@7; EHDP scale zigzag@6, buckets@8 with offset
+zigzag@1 and varint-packed counts@2) and the schema tables
+themselves against literals copied from opentelemetry-proto —
+never derived from `otlp_schema.h`, breaking the circle.
+
 ## [0.5.96] - 2026-08-22
 
 Server-side data-loss reporting (OTLP PartialSuccess).
