@@ -155,7 +155,11 @@ run_span_scenario(const uint8_t *body,
 	g_saw_partial_warn = false;
 	g_last_msg[0] = '\0';
 
-	st = echo_server_start(&srv, raw_200_handler, 4);
+	/* Exactly ONE POST arrives per scenario (batch_size == the
+	 * emitted count), so requests_to_serve=1 makes the worker
+	 * exit deterministically — a lingering worker touching `srv`
+	 * after this frame returns is stack-use-after-return. */
+	st = echo_server_start(&srv, raw_200_handler, 1);
 	assert(st == OTLP_OK);
 	snprintf(endpoint,
 		sizeof(endpoint),
@@ -188,7 +192,10 @@ run_span_scenario(const uint8_t *body,
 	st = otlp_exporter_flush(exp);
 	assert(st == OTLP_OK);
 
-	(void) echo_server_join(&srv, 2 * 1000 * 1000);
+	/* Checked, not assumed: the worker must have exited before
+	 * this frame goes away. */
+	st = echo_server_join(&srv, 2 * 1000 * 1000);
+	assert(st == OTLP_OK);
 	echo_server_stop(&srv);
 	otlp_exporter_get_stats(exp, &stats);
 
@@ -227,7 +234,7 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	g_saw_partial_warn = false;
 	g_last_msg[0] = '\0';
 
-	st = echo_server_start(&srv, raw_200_handler, 4);
+	st = echo_server_start(&srv, raw_200_handler, 1);
 	assert(st == OTLP_OK);
 	snprintf(endpoint,
 		sizeof(endpoint),
@@ -255,7 +262,10 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	st = otlp_exporter_flush(exp);
 	assert(st == OTLP_OK);
 
-	(void) echo_server_join(&srv, 2 * 1000 * 1000);
+	/* Checked, not assumed: the worker must have exited before
+	 * this frame goes away. */
+	st = echo_server_join(&srv, 2 * 1000 * 1000);
+	assert(st == OTLP_OK);
 	echo_server_stop(&srv);
 	otlp_exporter_get_stats(exp, &stats);
 
