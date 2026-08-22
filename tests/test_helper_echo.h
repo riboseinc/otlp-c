@@ -9,8 +9,12 @@
  *
  * Optional: a custom handler lets a test return a canned status.
  *
- * Cross-thread state (`running`, `requests_served`, `requests_seen`)
- * is atomic so ThreadSanitizer sees clean happens-before edges.
+ * Cross-thread state (`running`, `requests_served`, `requests_seen`,
+ * `sock_fd`) is atomic so ThreadSanitizer sees clean happens-before
+ * edges. The listen fd is CLOSED only by the worker thread;
+ * echo_server_stop() sets `stopping` and wakes the worker with a
+ * self-connect (shutdown()/close() do not reliably wake a
+ * blocked accept() on macOS).
  * The worker thread writes; the test main thread reads via
  * echo_server_join() or directly. Memory ordering: increments and
  * the running=false store use RELEASE; loads use ACQUIRE.
@@ -43,8 +47,13 @@ typedef int (*echo_handler_t)(const uint8_t *req_body,
 struct echo_server
 {
 	uint16_t port;
-	int sock_fd;
+	otlp_atomic_int
+		sock_fd; /* listen fd; ATOMIC: _stop (main
+			  * thread) shuts it down while the worker closes it on
+			  * exit — single closer: the worker */
 	otlp_atomic_int running; /* 0/1; written by worker, polled by main */
+	otlp_atomic_int stopping; /* set by _stop; checked by worker
+				   * around accept() */
 	echo_handler_t handler;
 	size_t requests_to_serve; /* const after _start; no sync needed */
 	otlp_atomic_u64

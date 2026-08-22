@@ -51,10 +51,21 @@ with `requests_to_serve = 16` for a ~4-request scenario: it
 stayed blocked in accept() and was still running when main
 returned — the same stack-use-after-return hazard class fixed
 for partial-success in v0.5.96. Fixed with `echo_server_stop()`
-(listen-fd close → deterministic worker exit) + checked join.
-This is the third confirmed instance of the worker-lifetime
-lesson; the memory file now generalizes it: **never `(void)` a
-join**.
++ checked join. This is the third confirmed instance of the
+worker-lifetime lesson; the memory file now generalizes it:
+**never `(void)` a join**.
+
+**Second latent bug the fix exposed** (CI TSAN failed the first
+run): `echo_server_stop()` and the worker's exit path both
+closed/wrote the plain-int `sock_fd` — a data race and potential
+double-close present since the helper was written, never
+triggered because all prior callers stopped already-exited
+workers. Helper rewritten: `sock_fd` atomic, worker is the
+single closer, `stop()` sets an atomic `stopping` flag and wakes
+accept() via self-connect — the only portable wake (neither
+shutdown() nor close() on a listening socket reliably unblocks
+accept() on macOS; the old close-based mechanism had never been
+exercised on a live worker). Full local TSAN suite: 43/43.
 
 **Docs catch-up**: CLAUDE.md version line 0.5.86 → 0.5.97,
 capability bullets for v0.5.95–97 (Retry-After was present;

@@ -187,10 +187,10 @@ main(void)
 		otlp_exporter_free(exp);
 	}
 
-	/* 16 offered, ~5 arrive: stop deterministically (v0.5.96
+	/* 16 offered, ~4 arrive: stop deterministically (v0.5.96
 	 * lesson — a worker still in accept() outlives this frame).
-	 * _stop closes the listen fd; the worker exits and the join
-	 * below must succeed. */
+	 * _stop wakes the worker (self-connect) and it exits, closing
+	 * the listen fd; the join below must succeed. */
 	echo_server_stop(&srv);
 	check_ok(echo_server_join(&srv, 1 * 1000 * 1000));
 	printf("[exporter-echo] PASS — spans + metrics + logs over HTTP\n");
