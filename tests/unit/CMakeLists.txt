@@ -40,3 +40,14 @@ target_include_directories(otlp_unit_log PRIVATE
 add_test(NAME unit-log
     COMMAND otlp_unit_log)
 set_tests_properties(unit-log PROPERTIES LABELS "unit")
+
+# Known-answer wire test (v0.5.97): pins encoded field numbers and
+# the schema tables against opentelemetry-proto literals — the
+# independent reference otlp_schema.h must match.
+add_executable(otlp_unit_wire_numbers test_unit_wire_numbers.c)
+target_link_libraries(otlp_unit_wire_numbers PRIVATE otlp_c)
+target_include_directories(otlp_unit_wire_numbers PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-wire-numbers
+    COMMAND otlp_unit_wire_numbers)
+set_tests_properties(unit-wire-numbers PROPERTIES LABELS "unit")

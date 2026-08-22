@@ -784,19 +784,20 @@ static const struct otlp_field_spec OTLP_HDP_FIELDS[] = {
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		true },
-	/* Field 8 (exemplars) not emitted. */
+	/* Fields 8 (exemplars) and 10 (flags, uint32 varint) not
+	 * emitted. */
 	[OTLP_HDP_FI_ATTRIBUTES] = { "attributes",
 		9,
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		true },
 	[OTLP_HDP_FI_MIN] = { "min",
-		10,
+		11,
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
 	[OTLP_HDP_FI_MAX] = { "max",
-		11,
+		12,
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
@@ -867,7 +868,7 @@ static const struct otlp_field_spec OTLP_EHDP_FIELDS[] = {
 		false },
 	[OTLP_EHDP_FI_FLAGS] = { "flags",
 		10,
-		OTLP_PB_WIRE_FIXED32,
+		OTLP_PB_WIRE_VARINT,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
 };
@@ -1002,7 +1003,8 @@ static const struct otlp_field_spec OTLP_LOG_FIELDS[] = {
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	/* [4] observed_time_unix_nano — not emitted */
+	/* Field 4 is reserved in opentelemetry-proto.
+	 * observed_time_unix_nano = 11 — not emitted. */
 	[OTLP_LOG_FI_BODY] = { "body",
 		5,
 		OTLP_PB_WIRE_LEN,
