@@ -107,9 +107,13 @@ struct otlp_exporter
 	otlp_atomic_u64 rejected_logs;
 	otlp_atomic_int shutdown_requested;
 
-	/* Optional diagnostic callback (NULL = no-op). */
+	/* Optional diagnostic callbacks (NULL = no-op). The event
+	 * callback receives the structured model; the string logger
+	 * receives the message derived from it by format_event(). */
 	otlp_log_fn log_fn;
 	void *log_ctx;
+	otlp_event_fn event_fn;
+	void *event_ctx;
 
 	/* Tick-private state (no synchronisation needed). */
 	otlp_span_t **pending;
@@ -198,23 +202,159 @@ backoff_delay_ms(const struct otlp_exporter *e, uint32_t attempt)
 		jitter_next((uint64_t *) &e->jitter_prng) % (delay + 1));
 }
 
-/* Diagnostic logger. No-op when exp->log_fn is NULL (zero overhead:
- * the check happens before any formatting work). */
-static void
-otlp_log(const struct otlp_exporter *e,
-	otlp_log_level_t level,
-	const char *fmt,
-	...)
+static const char *
+signal_name(otlp_signal_id_t s)
 {
-	char buf[256];
-	va_list ap;
+	switch (s)
+	{
+		case OTLP_SIGNAL_METRICS:
+			return "metrics";
+		case OTLP_SIGNAL_LOGS:
+			return "logs";
+		default:
+			return "spans";
+	}
+}
 
-	if (!e || !e->log_fn)
+/* Render the event's human-readable line. THE single presentation
+ * point: every diagnostic string is derived from the otlp_event_t
+ * model here, so the structured and string views cannot diverge. */
+static void
+format_event(char *buf, size_t cap, const otlp_event_t *ev)
+{
+	switch (ev->code)
+	{
+		case OTLP_EVT_QUEUE_FULL:
+			snprintf(buf,
+				cap,
+				"%s dropped: queue full",
+				signal_name(ev->signal));
+			break;
+		case OTLP_EVT_BATCH_SENT:
+			snprintf(buf,
+				cap,
+				"batch sent: %llu %s",
+				(unsigned long long) ev->count,
+				signal_name(ev->signal));
+			break;
+		case OTLP_EVT_RETRY_ARMED:
+			if (ev->http_status == 0)
+				snprintf(buf,
+					cap,
+					"network error; %s retry %u/%u in %ums",
+					signal_name(ev->signal),
+					ev->attempt,
+					ev->max_retries,
+					ev->delay_ms);
+			else
+				snprintf(buf,
+					cap,
+					"%s HTTP %d; retry %u/%u in %ums%s",
+					signal_name(ev->signal),
+					ev->http_status,
+					ev->attempt,
+					ev->max_retries,
+					ev->delay_ms,
+					ev->server_driven
+						? " (server Retry-After)"
+						: "");
+			break;
+		case OTLP_EVT_ITEMS_DROPPED:
+			if (ev->drop_reason == OTLP_DROP_HTTP_STATUS)
+				snprintf(buf,
+					cap,
+					"HTTP %d: %llu %s dropped (permanent)",
+					ev->http_status,
+					(unsigned long long) ev->count,
+					signal_name(ev->signal));
+			else if (ev->http_status == 0)
+				snprintf(buf,
+					cap,
+					"network error: %llu %s dropped "
+					"(max retries %u)",
+					(unsigned long long) ev->count,
+					signal_name(ev->signal),
+					ev->max_retries);
+			else
+				snprintf(buf,
+					cap,
+					"HTTP %d: %llu %s dropped "
+					"(max retries %u)",
+					ev->http_status,
+					(unsigned long long) ev->count,
+					signal_name(ev->signal),
+					ev->max_retries);
+			break;
+		case OTLP_EVT_PARTIAL_SUCCESS:
+			if (ev->count > 0)
+				snprintf(buf,
+					cap,
+					"collector partial success: %llu of "
+					"%llu "
+					"%s rejected",
+					(unsigned long long) ev->rejected,
+					(unsigned long long) ev->count,
+					signal_name(ev->signal));
+			else
+				snprintf(buf,
+					cap,
+					"collector partial success: %llu %s "
+					"rejected",
+					(unsigned long long) ev->rejected,
+					signal_name(ev->signal));
+			if (ev->detail_len > 0 && ev->detail)
+				snprintf(buf + strlen(buf),
+					cap - strlen(buf),
+					": %.*s",
+					(int) (ev->detail_len > 128
+							? 128
+							: ev->detail_len),
+					ev->detail);
+			break;
+		case OTLP_EVT_SYNC_FLUSH_FAILED:
+			if (ev->status == OTLP_ERR_TIMEOUT)
+				snprintf(buf,
+					cap,
+					"sync flush %s: timeout after %ums",
+					signal_name(ev->signal),
+					ev->timeout_ms);
+			else if (ev->http_status > 0)
+				snprintf(buf,
+					cap,
+					"sync flush %s: HTTP %d",
+					signal_name(ev->signal),
+					ev->http_status);
+			else
+				snprintf(buf,
+					cap,
+					"sync flush %s: failed (st=%d)",
+					signal_name(ev->signal),
+					(int) ev->status);
+			break;
+		default:
+			snprintf(buf, cap, "event %d", (int) ev->code);
+			break;
+	}
+}
+
+/* Dispatch one diagnostic: structured callback first, then the
+ * string logger (if installed) with the message derived from the
+ * same event. No-ops when neither callback is set — zero overhead
+ * beyond building the struct. */
+static void
+event_log(const struct otlp_exporter *e, const otlp_event_t *ev)
+{
+	if (!e)
 		return;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-	e->log_fn(e->log_ctx, level, buf);
+	if (e->event_fn)
+		e->event_fn(e->event_ctx, ev);
+	if (e->log_fn)
+	{
+		char buf[256];
+
+		format_event(buf, sizeof(buf), ev);
+		e->log_fn(e->log_ctx, ev->level, buf);
+	}
 }
 
 static size_t
@@ -537,7 +677,7 @@ struct signal_emit_path
 	otlp_atomic_u64 *dropped_full_counter;
 	void (*free_item)(void *);
 	void *(*clone_item)(const void *);
-	const char *signal_name;
+	otlp_signal_id_t signal;
 };
 
 /* Core of every emit_move variant. NULL + shutdown + push + stats
@@ -563,14 +703,18 @@ emit_move_common(struct otlp_exporter *e,
 	st = mpsc_queue_push(p->queue, item);
 	if (st != OTLP_OK)
 	{
+		otlp_event_t ev = {
+			.code = OTLP_EVT_QUEUE_FULL,
+			.level = OTLP_LOG_WARN,
+			.signal = p->signal,
+			.count = 1,
+			.drop_reason = OTLP_DROP_QUEUE_FULL,
+		};
+
 		p->free_item(item);
 		otlp_atomic_fetch_add_u64(
 			p->dropped_full_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
-		otlp_log(e,
-			OTLP_LOG_WARN,
-			"%s dropped: queue full (size=%zu)",
-			p->signal_name,
-			mpsc_queue_size(p->queue));
+		event_log(e, &ev);
 		return st;
 	}
 	otlp_atomic_fetch_add_u64(
@@ -609,7 +753,7 @@ otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 		.dropped_full_counter = &e->dropped_full,
 		.free_item = span_free_void,
 		.clone_item = span_clone_void,
-		.signal_name = "span",
+		.signal = OTLP_SIGNAL_TRACES,
 	};
 	return emit_move_common(e, &p, span);
 }
@@ -623,7 +767,7 @@ otlp_exporter_emit_metric_move(otlp_exporter_t *e, otlp_metric_t *metric)
 		.dropped_full_counter = &e->dropped_metrics_full,
 		.free_item = metric_free_void,
 		.clone_item = metric_clone_void,
-		.signal_name = "metric",
+		.signal = OTLP_SIGNAL_METRICS,
 	};
 	return emit_move_common(e, &p, metric);
 }
@@ -637,7 +781,7 @@ otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 		.dropped_full_counter = &e->dropped_logs_full,
 		.free_item = log_free_void,
 		.clone_item = log_clone_void,
-		.signal_name = "log",
+		.signal = OTLP_SIGNAL_LOGS,
 	};
 	return emit_move_common(e, &p, log);
 }
@@ -651,7 +795,7 @@ otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 		.dropped_full_counter = &e->dropped_full,
 		.free_item = span_free_void,
 		.clone_item = span_clone_void,
-		.signal_name = "span",
+		.signal = OTLP_SIGNAL_TRACES,
 	};
 	return emit_clone_common(e, &p, span);
 }
@@ -665,7 +809,7 @@ otlp_exporter_emit_metric(otlp_exporter_t *e, const otlp_metric_t *metric)
 		.dropped_full_counter = &e->dropped_metrics_full,
 		.free_item = metric_free_void,
 		.clone_item = metric_clone_void,
-		.signal_name = "metric",
+		.signal = OTLP_SIGNAL_METRICS,
 	};
 	return emit_clone_common(e, &p, metric);
 }
@@ -679,7 +823,7 @@ otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
 		.dropped_full_counter = &e->dropped_logs_full,
 		.free_item = log_free_void,
 		.clone_item = log_clone_void,
-		.signal_name = "log",
+		.signal = OTLP_SIGNAL_LOGS,
 	};
 	return emit_clone_common(e, &p, log);
 }
@@ -732,7 +876,7 @@ struct signal_record_path
 	otlp_atomic_u64 *sent_counter;
 	otlp_atomic_u64 *dropped_err_counter;
 	otlp_atomic_u64 *rejected_counter;
-	const char *signal_name;
+	otlp_signal_id_t signal;
 };
 
 /* Look up the record-path descriptor for the in-flight signal. */
@@ -750,7 +894,7 @@ record_path_for(struct otlp_exporter *e)
 				.sent_counter = &e->sent_metrics,
 				.dropped_err_counter = &e->dropped_metrics_err,
 				.rejected_counter = &e->rejected_metrics,
-				.signal_name = "metrics",
+				.signal = OTLP_SIGNAL_METRICS,
 			};
 		case SIGNAL_LOG:
 			return (struct signal_record_path){
@@ -761,7 +905,7 @@ record_path_for(struct otlp_exporter *e)
 				.sent_counter = &e->sent_logs,
 				.dropped_err_counter = &e->dropped_logs_err,
 				.rejected_counter = &e->rejected_logs,
-				.signal_name = "logs",
+				.signal = OTLP_SIGNAL_LOGS,
 			};
 		case SIGNAL_SPAN:
 		default:
@@ -773,7 +917,7 @@ record_path_for(struct otlp_exporter *e)
 				.sent_counter = &e->sent,
 				.dropped_err_counter = &e->dropped_err,
 				.rejected_counter = &e->rejected_spans,
-				.signal_name = "spans",
+				.signal = OTLP_SIGNAL_TRACES,
 			};
 	}
 }
@@ -1020,12 +1164,18 @@ struct http_outcome
  * rejected items are gone server-side. */
 static void
 report_partial_success(struct otlp_exporter *e,
-	const char *signal_name,
+	otlp_signal_id_t signal,
 	otlp_atomic_u64 *rejected_counter,
 	uint64_t count,
 	const uint8_t *body,
 	size_t body_len)
 {
+	otlp_event_t ev = {
+		.code = OTLP_EVT_PARTIAL_SUCCESS,
+		.level = OTLP_LOG_WARN,
+		.signal = signal,
+		.count = count,
+	};
 	int64_t rejected = 0;
 	const char *msg = NULL;
 	size_t msg_len = 0;
@@ -1035,30 +1185,20 @@ report_partial_success(struct otlp_exporter *e,
 		return;
 	if (rejected <= 0 && msg_len == 0)
 		return;
-	if (rejected > 0 && rejected_counter)
-		otlp_atomic_fetch_add_u64(rejected_counter,
-			(uint64_t) rejected,
-			OTLP_MEMORY_ORDER_RELAXED);
-	if (count > 0)
-		otlp_log(e,
-			OTLP_LOG_WARN,
-			"collector partial success: %lld of %llu %s "
-			"rejected%s%.*s",
-			(long long) (rejected > 0 ? rejected : 0),
-			(unsigned long long) count,
-			signal_name,
-			msg_len > 0 ? ": " : "",
-			(int) msg_len,
-			msg ? msg : "");
-	else
-		otlp_log(e,
-			OTLP_LOG_WARN,
-			"collector partial success: %lld %s rejected%s%.*s",
-			(long long) (rejected > 0 ? rejected : 0),
-			signal_name,
-			msg_len > 0 ? ": " : "",
-			(int) msg_len,
-			msg ? msg : "");
+	if (rejected > 0)
+	{
+		ev.rejected = (uint64_t) rejected;
+		if (rejected_counter)
+			otlp_atomic_fetch_add_u64(rejected_counter,
+				(uint64_t) rejected,
+				OTLP_MEMORY_ORDER_RELAXED);
+	}
+	if (msg_len > 0 && msg)
+	{
+		ev.detail = msg;
+		ev.detail_len = msg_len;
+	}
+	event_log(e, &ev);
 }
 
 static void
@@ -1078,28 +1218,34 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_ITEMS_DROPPED,
+				.level = OTLP_LOG_ERROR,
+				.signal = p.signal,
+				.count = count,
+				.max_retries = e->max_retries,
+				.drop_reason = OTLP_DROP_MAX_RETRIES,
+			};
+
 			add_dropped_err_for_signal(&p, count);
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"network error: %llu %s dropped (max retries "
-				"%u)",
-				(unsigned long long) count,
-				p.signal_name,
-				e->max_retries);
+			event_log(e, &ev);
 			clear_in_flight_batch(e, &p);
 			return;
 		}
 		{
 			uint32_t delay = backoff_delay_ms(e, e->attempt);
+			otlp_event_t ev = {
+				.code = OTLP_EVT_RETRY_ARMED,
+				.level = OTLP_LOG_WARN,
+				.signal = p.signal,
+				.attempt = e->attempt,
+				.max_retries = e->max_retries,
+				.delay_ms = delay,
+			};
 
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
-			otlp_log(e,
-				OTLP_LOG_WARN,
-				"network error; retry %u/%u in %ums",
-				e->attempt,
-				e->max_retries,
-				delay);
+			event_log(e, &ev);
 		}
 		return;
 	}
@@ -1108,16 +1254,22 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 		otlp_atomic_fetch_add_u64(
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 		add_sent_for_signal(&p, count);
-		otlp_log(e,
-			OTLP_LOG_DEBUG,
-			"batch sent: %llu %s",
-			(unsigned long long) count,
-			p.signal_name);
+		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_BATCH_SENT,
+				.level = OTLP_LOG_DEBUG,
+				.signal = p.signal,
+				.count = count,
+				.http_status = http_status,
+			};
+
+			event_log(e, &ev);
+		}
 		/* A 200 can still report server-side data loss via
 		 * PartialSuccess in the response body (v0.5.96). */
 		if (o->body && o->body_len > 0)
 			report_partial_success(e,
-				p.signal_name,
+				p.signal,
 				p.rejected_counter,
 				count,
 				o->body,
@@ -1137,14 +1289,18 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 		e->attempt++;
 		if (e->attempt > e->max_retries)
 		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_ITEMS_DROPPED,
+				.level = OTLP_LOG_ERROR,
+				.signal = p.signal,
+				.count = count,
+				.http_status = http_status,
+				.max_retries = e->max_retries,
+				.drop_reason = OTLP_DROP_MAX_RETRIES,
+			};
+
 			add_dropped_err_for_signal(&p, count);
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"HTTP %d: %llu %s dropped (max retries %u)",
-				http_status,
-				(unsigned long long) count,
-				p.signal_name,
-				e->max_retries);
+			event_log(e, &ev);
 			/* Permanent failure — free the pending batch. */
 			clear_in_flight_batch(e, &p);
 		}
@@ -1162,28 +1318,41 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 				delay = o->retry_after_ms;
 			if (delay > e->backoff_max_ms)
 				delay = e->backoff_max_ms;
-			e->backoff_deadline_mono = now_mono_ms() + delay;
-			e->backoff_armed = true;
-			otlp_log(e,
-				OTLP_LOG_WARN,
-				"HTTP %d; retry %u/%u in %ums%s",
-				http_status,
-				e->attempt,
-				e->max_retries,
-				delay,
-				server_driven ? " (server Retry-After)" : "");
+			{
+				otlp_event_t ev = {
+					.code = OTLP_EVT_RETRY_ARMED,
+					.level = OTLP_LOG_WARN,
+					.signal = p.signal,
+					.http_status = http_status,
+					.attempt = e->attempt,
+					.max_retries = e->max_retries,
+					.delay_ms = delay,
+					.server_driven = server_driven,
+				};
+
+				e->backoff_deadline_mono =
+					now_mono_ms() + delay;
+				e->backoff_armed = true;
+				event_log(e, &ev);
+			}
 		}
 		return;
 	}
 	/* Permanent 4xx (non-429). */
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
 	add_dropped_err_for_signal(&p, count);
-	otlp_log(e,
-		OTLP_LOG_ERROR,
-		"HTTP %d: %llu %s dropped (permanent)",
-		http_status,
-		(unsigned long long) count,
-		p.signal_name);
+	{
+		otlp_event_t ev = {
+			.code = OTLP_EVT_ITEMS_DROPPED,
+			.level = OTLP_LOG_ERROR,
+			.signal = p.signal,
+			.count = count,
+			.http_status = http_status,
+			.drop_reason = OTLP_DROP_HTTP_STATUS,
+		};
+
+		event_log(e, &ev);
+	}
 	/* Permanent failure — free the pending batch. */
 	clear_in_flight_batch(e, &p);
 }
@@ -1454,6 +1623,16 @@ otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
 	}
 }
 
+void
+otlp_exporter_set_event_logger(otlp_exporter_t *e, otlp_event_fn fn, void *ctx)
+{
+	if (e)
+	{
+		e->event_fn = fn;
+		e->event_ctx = ctx;
+	}
+}
+
 /* ── Synchronous metric / log flush ───────────────────────────── */
 
 /* One POST attempt. Returns OTLP_OK on 2xx; sets *got_response
@@ -1463,6 +1642,7 @@ otlp_exporter_set_logger(otlp_exporter_t *e, otlp_log_fn fn, void *ctx)
  * budget. A non-2xx response is permanent for the sync path. */
 static otlp_status_t
 flush_post_once(struct otlp_exporter *e,
+	otlp_signal_id_t signal,
 	const struct otlp_http_url *url,
 	const char *path,
 	const uint8_t *body,
@@ -1486,11 +1666,14 @@ flush_post_once(struct otlp_exporter *e,
 		e->read_timeout_ms);
 	if (st != OTLP_OK)
 	{
-		otlp_log(e,
-			OTLP_LOG_ERROR,
-			"sync flush %s: request start failed (st=%d)",
-			path,
-			(int) st);
+		otlp_event_t ev = {
+			.code = OTLP_EVT_SYNC_FLUSH_FAILED,
+			.level = OTLP_LOG_ERROR,
+			.signal = signal,
+			.status = st,
+		};
+
+		event_log(e, &ev);
 		return st;
 	}
 	deadline = now_mono_ms() + e->flush_timeout_ms;
@@ -1515,47 +1698,61 @@ flush_post_once(struct otlp_exporter *e,
 
 				if (b && blen > 0)
 					report_partial_success(
-						e, path + 5, NULL, 0, b, blen);
+						e, signal, NULL, 0, b, blen);
 			}
 			otlp_http_request_free(req);
 			*got_response = true;
 			if (http >= 200 && http < 300)
 				return OTLP_OK;
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"sync flush %s: HTTP %d",
-				path,
-				http);
+			otlp_event_t ev = {
+				.code = OTLP_EVT_SYNC_FLUSH_FAILED,
+				.level = OTLP_LOG_ERROR,
+				.signal = signal,
+				.http_status = http,
+			};
+
+			event_log(e, &ev);
 			return OTLP_ERR_NETWORK;
 		}
 		if (s == OTLP_HTTP_REQ_FAILED)
 		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_SYNC_FLUSH_FAILED,
+				.level = OTLP_LOG_ERROR,
+				.signal = signal,
+				.status = OTLP_ERR_NETWORK,
+			};
+
 			otlp_http_request_free(req);
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"sync flush %s: request failed (network)",
-				path);
+			event_log(e, &ev);
 			return OTLP_ERR_NETWORK;
 		}
 		if (st != OTLP_OK && st != OTLP_ERR_WOULDBLOCK)
 		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_SYNC_FLUSH_FAILED,
+				.level = OTLP_LOG_ERROR,
+				.signal = signal,
+				.status = st,
+			};
+
 			otlp_http_request_free(req);
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"sync flush %s: step failed (st=%d)",
-				path,
-				(int) st);
+			event_log(e, &ev);
 			return st;
 		}
 		now = now_mono_ms();
 		if (now >= deadline)
 		{
+			otlp_event_t ev = {
+				.code = OTLP_EVT_SYNC_FLUSH_FAILED,
+				.level = OTLP_LOG_ERROR,
+				.signal = signal,
+				.status = OTLP_ERR_TIMEOUT,
+				.timeout_ms = e->flush_timeout_ms,
+			};
+
 			otlp_http_request_free(req);
-			otlp_log(e,
-				OTLP_LOG_ERROR,
-				"sync flush %s: timeout after %ums",
-				path,
-				e->flush_timeout_ms);
+			event_log(e, &ev);
 			return OTLP_ERR_TIMEOUT;
 		}
 #if defined(_WIN32)
@@ -1573,6 +1770,7 @@ flush_post_once(struct otlp_exporter *e,
 
 static otlp_status_t
 flush_sync(struct otlp_exporter *e,
+	otlp_signal_id_t signal,
 	const char *path,
 	const uint8_t *body,
 	size_t body_len)
@@ -1594,24 +1792,31 @@ flush_sync(struct otlp_exporter *e,
 	 * timeouts are permanent (no retry). */
 	for (attempt = 0; attempt <= e->max_retries; attempt++)
 	{
-		st = flush_post_once(
-			e, &e->url, path, body, body_len, &got_response);
+		st = flush_post_once(e,
+			signal,
+			&e->url,
+			path,
+			body,
+			body_len,
+			&got_response);
 		if (st == OTLP_OK || got_response)
 			return st;
 		if (attempt < e->max_retries)
 		{
 			uint32_t delay = e->backoff_initial_ms;
+			otlp_event_t ev = {
+				.code = OTLP_EVT_RETRY_ARMED,
+				.level = OTLP_LOG_WARN,
+				.signal = signal,
+				.attempt = attempt + 1,
+				.max_retries = e->max_retries,
+				.delay_ms = delay > 100 ? 100 : delay,
+			};
 
 			if (delay > 100)
 				delay = 100; /* sync path: short backoff */
-			otlp_log(e,
-				OTLP_LOG_WARN,
-				"sync flush %s: transient failure; "
-				"retry %u/%u in %ums",
-				path,
-				attempt + 1,
-				e->max_retries,
-				delay);
+			ev.delay_ms = delay;
+			event_log(e, &ev);
 #if defined(_WIN32)
 			Sleep(delay);
 #else
@@ -1657,7 +1862,11 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		arr,
 		1);
 	if (st == OTLP_OK)
-		st = flush_sync(e, "/v1/metrics", body.data, body.len);
+		st = flush_sync(e,
+			OTLP_SIGNAL_METRICS,
+			"/v1/metrics",
+			body.data,
+			body.len);
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
 		otlp_atomic_fetch_add_u64(
@@ -1699,7 +1908,8 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		arr,
 		1);
 	if (st == OTLP_OK)
-		st = flush_sync(e, "/v1/logs", body.data, body.len);
+		st = flush_sync(
+			e, OTLP_SIGNAL_LOGS, "/v1/logs", body.data, body.len);
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
 		otlp_atomic_fetch_add_u64(

@@ -194,6 +194,12 @@ All phases are complete (v0.5.97). The library implements:
   shift-count-clamped exponent (no UB at large max_retries);
   **Retry-After honored** (v0.5.95): delay = max(jitter, server
   floor) clamped by backoff_max_ms on 429/503/5xx
+- **Structured diagnostics events** (v0.5.100):
+  `otlp_exporter_set_event_logger()` delivers every diagnostic as
+  an `otlp_event_t` (QUEUE_FULL / BATCH_SENT / RETRY_ARMED /
+  ITEMS_DROPPED / PARTIAL_SUCCESS / SYNC_FLUSH_FAILED + signal id
+  + counts + drop reason); the legacy string messages are derived
+  from the same event by one formatter
 - **PartialSuccess decoding** (v0.5.96): 200-OK bodies carry
   server-reported data loss (rejected counts + message) —
   surfaced via WARN diagnostic + per-signal rejected_* stats.
@@ -271,10 +277,13 @@ Test-writing rules (paid-for lessons):
   priority and POSTs one signal at a time to /v1/traces, /v1/metrics,
   or /v1/logs. `emit()` / `emit_move()` (spans), `emit_metric_move()`,
   and `emit_log_move()` are all safe to call from any thread.
-- **Diagnostics**: `otlp_exporter_set_logger()` installs an optional
-  callback that fires at notable events (queue full, HTTP error,
-  retry, drop, success). Default: no callback, zero overhead (NULL
-  check). Thread-safe by contract.
+- **Diagnostics**: two views of one model. Every diagnostic the
+  exporter emits is an `otlp_event_t` (code, signal, counts,
+  level, drop reason) — `otlp_exporter_set_event_logger()`
+  delivers the struct; `otlp_exporter_set_logger()` receives the
+  message DERIVED from it by one formatter (`format_event`), so
+  the views cannot diverge. Install either/both/neither; default
+  none, zero overhead (NULL checks). Thread-safe by contract.
 - **Stats**: `otlp_exporter_get_stats()` returns per-signal counters
   (emitted/sent/dropped for spans, metrics, and logs) plus global
   HTTP-level counters (2xx/4xx/5xx/network_err).

@@ -4,6 +4,38 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.100] - 2026-08-22
+
+Structured diagnostics events.
+
+### Added — otlp_exporter_set_event_logger(): diagnostics as data
+
+The string logger renders diagnostics for humans; programmatic
+consumers (metrics, alerting, self-telemetry) had to parse those
+strings. The new additive callback delivers every diagnostic as
+an `otlp_event_t`: event code (QUEUE_FULL, BATCH_SENT,
+RETRY_ARMED, ITEMS_DROPPED, PARTIAL_SUCCESS, SYNC_FLUSH_FAILED),
+signal id (traces/metrics/logs), item counts, HTTP status,
+retry attempt/delay, drop reason (max-retries / permanent-HTTP /
+queue-full), and — for PartialSuccess — the server message with
+length. No string parsing, stable enum codes, exact counts.
+
+Model-driven by construction: `otlp_event_t` is the single model
+behind every diagnostic — the legacy string messages are now
+DERIVED from it by one formatter (`format_event`), replacing the
+14 printf call sites scattered through the exporter, so the two
+views cannot diverge (DRY: the facts live once). The variadic
+`otlp_log()` helper is gone; signal names come from the event's
+signal id, unifying the previous span/spans, metric/metrics
+inconsistencies. The sync-flush `path + 5` string hack is gone
+too.
+
+Covered by a new 7-scenario null-transport suite (code, signal,
+count, level, drop reason, attempt/delay per outcome; queue-full
+fires on the emitting thread) and event assertions added to the
+PartialSuccess wire test. Existing string-logger output is
+unchanged apart from the unified wording.
+
 ## [0.5.99] - 2026-08-22
 
 Enforced Release checks; all 31 schema tables pinned upstream.

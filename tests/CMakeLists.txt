@@ -98,6 +98,16 @@ if(UNIX)
         COMMAND otlp_test_exporter_partial_success)
     set_tests_properties(exporter-partial-success PROPERTIES
         LABELS "unit" TIMEOUT 30)
+
+    # Structured diagnostics events (v0.5.100): every diagnostic
+    # site delivers an otlp_event_t; null-transport scenarios pin
+    # code/signal/count/level/drop-reason per outcome.
+    add_executable(otlp_test_exporter_events test_exporter_events.c)
+    target_link_libraries(otlp_test_exporter_events PRIVATE otlp_c)
+    add_test(NAME exporter-events
+        COMMAND otlp_test_exporter_events)
+    set_tests_properties(exporter-events PROPERTIES
+        LABELS "unit" TIMEOUT 30)
 endif()
 
 # Custom allocator hook test.

@@ -341,6 +341,90 @@ extern "C"
 		otlp_log_fn fn,
 		void *ctx);
 
+	/* ── Structured diagnostics events (v0.5.100) ──────────────
+	 *
+	 * The string logger above renders diagnostics for humans;
+	 * this callback delivers the same diagnostics as DATA.
+	 * otlp_event_t is the single model behind every diagnostic
+	 * the exporter emits — the string messages are DERIVED from
+	 * it by one formatter, so the two views cannot diverge.
+	 * Install either, both, or neither.
+	 *
+	 * Programmatic consumers (metrics, alerting, self-telemetry)
+	 * should prefer this surface: no string parsing, stable enum
+	 * codes, exact counts.
+	 *
+	 * Thread-safety: same contract as the string logger — the
+	 * callback may fire from any thread that touches the exporter
+	 * (emit* from producer threads, tick/flush from the tick
+	 * thread) and MUST be thread-safe.
+	 *
+	 * `detail` (PARTIAL_SUCCESS) is NOT NUL-terminated and points
+	 * into the response body — valid only for the duration of the
+	 * call; copy (pairing with detail_len) if needed. All other
+	 * fields are values. */
+	typedef enum
+	{
+		OTLP_SIGNAL_TRACES = 0,
+		OTLP_SIGNAL_METRICS = 1,
+		OTLP_SIGNAL_LOGS = 2,
+	} otlp_signal_id_t;
+
+	/* Why items were lost. */
+	typedef enum
+	{
+		OTLP_DROP_MAX_RETRIES = 1, /* retry budget exhausted */
+		OTLP_DROP_HTTP_STATUS = 2, /* permanent non-2xx (non-429) */
+		OTLP_DROP_QUEUE_FULL = 3, /* MPSC queue at capacity */
+	} otlp_drop_reason_t;
+
+	typedef enum
+	{
+		OTLP_EVT_QUEUE_FULL = 1, /* emit() dropped 1 item */
+		OTLP_EVT_BATCH_SENT = 2, /* a batch reached 2xx */
+		OTLP_EVT_RETRY_ARMED = 3, /* transient failure; backoff
+					   * or Retry-After wait armed */
+		OTLP_EVT_ITEMS_DROPPED = 4, /* items lost permanently */
+		OTLP_EVT_PARTIAL_SUCCESS = 5, /* 200 with server-reported
+					       * rejections */
+		OTLP_EVT_SYNC_FLUSH_FAILED = 6, /* one-shot
+						 * flush_metric/flush_log
+						 * error */
+	} otlp_event_code_t;
+
+	typedef struct
+	{
+		otlp_event_code_t code;
+		otlp_log_level_t level;
+		otlp_signal_id_t signal;
+		uint64_t count; /* items affected (1 on QUEUE_FULL) */
+		uint64_t rejected; /* PARTIAL_SUCCESS: server-reported
+				    * rejected count */
+		int http_status; /* 0 = no response (network-level) */
+		unsigned attempt; /* RETRY_ARMED: 1-based attempt */
+		unsigned max_retries;
+		uint32_t delay_ms; /* RETRY_ARMED: armed delay */
+		uint32_t timeout_ms; /* SYNC_FLUSH_FAILED: timeout case */
+		otlp_status_t status; /* SYNC_FLUSH_FAILED: failure st */
+		otlp_drop_reason_t drop_reason; /* ITEMS_DROPPED */
+		bool server_driven; /* RETRY_ARMED: Retry-After >=
+				     * jittered backoff */
+		const char *detail; /* PARTIAL_SUCCESS message (see
+				     * above) */
+		size_t detail_len;
+	} otlp_event_t;
+
+	typedef void (*otlp_event_fn)(void *ctx, const otlp_event_t *event);
+
+	/* Install the structured-event callback. Pass fn=NULL to
+	 * disable. Default: none. Safe to call at any time during the
+	 * exporter's lifetime; the next event observes the new
+	 * callback. */
+	OTLP_C_EXPORT
+	void otlp_exporter_set_event_logger(otlp_exporter_t *exp,
+		otlp_event_fn fn,
+		void *ctx);
+
 	/* Synchronously encode and POST a single metric to the OTLP
 	 * collector at /v1/metrics. Blocks the calling thread until
 	 * the HTTP request completes (or fails). The metric is NOT
