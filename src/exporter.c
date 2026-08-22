@@ -485,6 +485,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (st != OTLP_OK)
 		goto fail;
 
+	if (o.service_name && !otlp_str_is_utf8(o.service_name))
+		goto fail;
 	e->user_agent = otlp_dup_str(o.user_agent);
 	e->service_name = otlp_dup_str(o.service_name);
 	if (!e->user_agent || !e->service_name)

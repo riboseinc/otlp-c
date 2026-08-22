@@ -64,3 +64,13 @@ target_include_directories(otlp_unit_golden PRIVATE
 add_test(NAME unit-golden
     COMMAND otlp_unit_golden)
 set_tests_properties(unit-golden PROPERTIES LABELS "unit")
+
+# UTF-8 boundary validation (v0.5.103): OTLP string fields must be
+# valid UTF-8 — collectors reject whole batches otherwise.
+add_executable(otlp_unit_utf8 test_unit_utf8.c)
+target_link_libraries(otlp_unit_utf8 PRIVATE otlp_c)
+target_include_directories(otlp_unit_utf8 PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-utf8
+    COMMAND otlp_unit_utf8)
+set_tests_properties(unit-utf8 PROPERTIES LABELS "unit")

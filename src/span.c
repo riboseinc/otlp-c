@@ -77,6 +77,11 @@ otlp_span_create(const char *name)
 		return NULL;
 	memset(span, 0, sizeof(*span));
 
+	if (name && !otlp_str_is_utf8(name))
+	{
+		otlp_free(span);
+		return NULL;
+	}
 	name_copy = otlp_dup_str(name ? name : "");
 	if (!name_copy)
 	{
@@ -224,6 +229,8 @@ otlp_span_set_name(otlp_span_t *span, const char *name)
 
 	if (!span)
 		return OTLP_ERR_NULL;
+	if (name && !otlp_str_is_utf8(name))
+		return OTLP_ERR_UTF8;
 	new_name = otlp_dup_str(name ? name : "");
 	if (!new_name)
 		return OTLP_ERR_NOMEM;
@@ -336,6 +343,8 @@ otlp_span_set_status(otlp_span_t *span,
 
 	if (!span)
 		return OTLP_ERR_NULL;
+	if (description && !otlp_str_is_utf8(description))
+		return OTLP_ERR_UTF8;
 	if (description)
 	{
 		msg_copy = otlp_dup_str(description);
@@ -423,6 +432,8 @@ otlp_span_add_event(otlp_span_t *span,
 		return OTLP_ERR_NULL;
 	if (span->n_events >= OTLP_SPAN_MAX_EVENTS)
 		return OTLP_ERR_OVERFLOW;
+	if (!otlp_str_is_utf8(name))
+		return OTLP_ERR_UTF8;
 	name_copy = otlp_dup_str(name);
 	if (!name_copy)
 		return OTLP_ERR_NOMEM;
@@ -467,6 +478,8 @@ otlp_span_set_trace_state(otlp_span_t *span, const char *trace_state)
 
 	if (!span)
 		return OTLP_ERR_NULL;
+	if (trace_state && !otlp_str_is_utf8(trace_state))
+		return OTLP_ERR_UTF8;
 	if (trace_state)
 	{
 		copy = otlp_dup_str(trace_state);
