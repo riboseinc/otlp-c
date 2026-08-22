@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 bool
 otlp_pb_read_key(struct otlp_pb_reader *r, uint32_t *field, int *wire_type)
@@ -111,4 +112,24 @@ otlp_pb_skip(struct otlp_pb_reader *r, int wire_type)
 			 * never emitted by OTLP; 6/7 are invalid. */
 			return false;
 	}
+}
+
+bool
+otlp_pb_read_fixed32(struct otlp_pb_reader *r, uint32_t *out)
+{
+	if (r->len - r->pos < 4)
+		return false;
+	memcpy(out, r->buf + r->pos, 4);
+	r->pos += 4;
+	return true;
+}
+
+bool
+otlp_pb_read_fixed64(struct otlp_pb_reader *r, uint64_t *out)
+{
+	if (r->len - r->pos < 8)
+		return false;
+	memcpy(out, r->buf + r->pos, 8);
+	r->pos += 8;
+	return true;
 }

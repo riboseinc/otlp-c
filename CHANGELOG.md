@@ -4,6 +4,40 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.101] - 2026-08-22
+
+Golden vectors: payloads validated against the reference
+implementation.
+
+### Added — reference-serialized golden vectors for all 3 signals
+
+`tests/golden/generate.py` builds fixed payloads with the
+REFERENCE opentelemetry-proto Python classes (1.44.0) — not our
+encoder — and embeds them via a generated header. The new
+`unit-golden` test reconstructs the same fixtures through the
+public API + internal encoders and compares both sides as
+canonical protobuf field trees (fields matched by number/wire
+type, repeated order preserved, recursive message compare): valid
+reordering never fails; any drift in field numbers, wire types,
+zigzag/packing, presence rules, or values fails with a path to
+the mismatch. Covers all six AnyValue variants (incl. negative
+int64 → 10-byte varint, binary bytes), events/links/status,
+histogram buckets/bounds/min-max, exp-histogram zigzag scale +
+explicit bucket arrays, and log trace correlation. After fixture
+alignment (our spans carry W3C `flags=1` sampled by default; the
+generator now mirrors that) all three vectors are byte-length
+identical to the reference serialization.
+
+`protobuf_decode` gained `otlp_pb_read_fixed32/64` — the decode
+counterpart of the encoder's fixed-width writers, bounds-checked
+like the rest.
+
+The comparator's first draft was caught by mutation testing
+comparing ours-with-itself via a shared node pool (a flipped
+fixture value sailed through) — pools are now per-side, and both
+a value flip and the pool bug are covered by the recorded
+mutation runs.
+
 ## [0.5.100] - 2026-08-22
 
 Structured diagnostics events.

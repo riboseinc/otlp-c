@@ -58,4 +58,12 @@ otlp_pb_read_len(struct otlp_pb_reader *r, const uint8_t **data, size_t *len);
 bool
 otlp_pb_skip(struct otlp_pb_reader *r, int wire_type);
 
+/* Read the CURRENT field as a 4/8-byte fixed little-endian value
+ * (wire types 5/1). Bounds-checked like every other primitive. */
+bool
+otlp_pb_read_fixed32(struct otlp_pb_reader *r, uint32_t *out);
+
+bool
+otlp_pb_read_fixed64(struct otlp_pb_reader *r, uint64_t *out);
+
 #endif

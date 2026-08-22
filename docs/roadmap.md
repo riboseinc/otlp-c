@@ -154,8 +154,9 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.98 | **Release builds verified almost nothing**: 536 assert-only checks elided under NDEBUG converted to always-evaluated `check_ok`/`check_true` (tests/test_util.h); zero Release warnings restored; exporter-echo's silently-timing-out join (worker outliving main) fixed | #129 |
 | 0.5.99 | **Fix: v0.5.98 checks didn't ENFORCE in Release** (false check didn't fail — helpers now abort in every config, mutation-tested); all 31 schema tables pinned against upstream literals; otlp-spec.md gains the missing metrics/logs field reference | #130 |
 | 0.5.100 | **Structured diagnostics events**: `otlp_exporter_set_event_logger()` delivers every diagnostic as an `otlp_event_t` (code/signal/counts/drop reason); string messages now DERIVED from the event by one formatter (14 printf sites removed) | #131 |
+| 0.5.101 | **Golden vectors**: payloads built by the reference opentelemetry-proto serialization and compared as canonical field trees (zigzag/packing/presence validated, not just field numbers); decoder gains fixed32/64 readers | #132 |
 
-**Key metrics (v0.5.100):** 140 TODOs complete, 45 tests, **46+
+**Key metrics (v0.5.101):** 141 TODOs complete, 45 tests, **47+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:
