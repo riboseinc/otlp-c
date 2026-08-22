@@ -74,6 +74,7 @@ main(void)
 	otlp_tracer_t *tracer;
 	otlp_span_t *span;
 	otlp_exporter_stats_t stats;
+	otlp_status_t st;
 	int calls;
 
 	/* ── Case 1: retry on 500, succeed on second attempt. */
@@ -97,7 +98,8 @@ main(void)
 	span = otlp_tracer_start_span(tracer, "op");
 	assert(span != NULL);
 	otlp_span_mark_end(span);
-	assert(otlp_exporter_emit_move(exp, span) == OTLP_OK);
+	st = otlp_exporter_emit_move(exp, span);
+	assert(st == OTLP_OK);
 
 	drive_until_settled(exp, 100);
 
@@ -142,7 +144,8 @@ main(void)
 	span = otlp_tracer_start_span(tracer, "op");
 	assert(span != NULL);
 	otlp_span_mark_end(span);
-	assert(otlp_exporter_emit_move(exp, span) == OTLP_OK);
+	st = otlp_exporter_emit_move(exp, span);
+	assert(st == OTLP_OK);
 
 	drive_until_settled(exp, 20);
 
@@ -185,7 +188,8 @@ main(void)
 	span = otlp_tracer_start_span(tracer, "op");
 	assert(span != NULL);
 	otlp_span_mark_end(span);
-	assert(otlp_exporter_emit_move(exp, span) == OTLP_OK);
+	st = otlp_exporter_emit_move(exp, span);
+	assert(st == OTLP_OK);
 
 	drive_until_settled(exp, 40);
 
@@ -229,7 +233,8 @@ main(void)
 	span = otlp_tracer_start_span(tracer, "op");
 	assert(span != NULL);
 	otlp_span_mark_end(span);
-	assert(otlp_exporter_emit_move(exp, span) == OTLP_OK);
+	st = otlp_exporter_emit_move(exp, span);
+	assert(st == OTLP_OK);
 
 	/* 100 retries at <= 1ms jittered delay: settle quickly. */
 	drive_until_settled(exp, 400);

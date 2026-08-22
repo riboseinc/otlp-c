@@ -136,6 +136,14 @@ otlp_http_request_events(const otlp_http_request_t *req);
 int
 otlp_http_request_http_status(const otlp_http_request_t *req);
 
+/* Valid in DONE state. The response's Retry-After header converted
+ * to milliseconds (RFC 7231 §7.1.3). Only the delta-seconds form is
+ * understood; an HTTP-date value or a missing header returns 0.
+ * Duplicate headers: the last one wins. Absurdly large values
+ * saturate at 4294967000 ms rather than wrapping. */
+uint32_t
+otlp_http_request_retry_after_ms(const otlp_http_request_t *req);
+
 /* Valid in DONE state. Pointer into the request's internal buffer;
  * freed by _free. */
 const uint8_t *

@@ -11,6 +11,8 @@
  *     another header's value must not match)
  *   - version-aware keep-alive default (HTTP/1.0 -> not reusable)
  *   - case-insensitive header names
+ *   - Retry-After parsing (delta-seconds, saturation, line-aligned
+ *     matching, HTTP-date treated as absent)
  */
 #if !defined(_DEFAULT_SOURCE)
 #define _DEFAULT_SOURCE 1
@@ -341,6 +343,128 @@ test_case_insensitive_headers(void)
 	return 0;
 }
 
+/* ── Retry-After (v0.5.95) ────────────────────────────────────── */
+
+static int
+test_retry_after_seconds(void)
+{
+	otlp_status_t st;
+	int status;
+	const uint8_t *body;
+	size_t body_len;
+	otlp_http_request_t *req = run_raw("HTTP/1.1 429 Too Many Requests\r\n"
+					   "retry-after: 2\r\n"
+					   "Content-Length: 0\r\n"
+					   "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+
+	assert(st == OTLP_OK);
+	assert(status == 429);
+	assert(otlp_http_request_retry_after_ms(req) == 2000);
+	otlp_http_request_free(req);
+	return 0;
+}
+
+static int
+test_retry_after_absent_forms(void)
+{
+	/* No header at all. */
+	otlp_status_t st;
+	int status;
+	const uint8_t *body;
+	size_t body_len;
+	otlp_http_request_t *req = run_raw("HTTP/1.1 503 Unavailable\r\n"
+					   "Content-Length: 0\r\n"
+					   "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+
+	assert(st == OTLP_OK);
+	assert(otlp_http_request_retry_after_ms(req) == 0);
+	otlp_http_request_free(req);
+
+	/* HTTP-date form: only delta-seconds is understood — a date
+	 * value parses as 0 (absent), never as garbage. */
+	req = run_raw("HTTP/1.1 429 Too Many Requests\r\n"
+		      "Retry-After: Wed, 21 Oct 2015 07:28:00 GMT\r\n"
+		      "Content-Length: 0\r\n"
+		      "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+	assert(st == OTLP_OK);
+	assert(otlp_http_request_retry_after_ms(req) == 0);
+	otlp_http_request_free(req);
+
+	/* "Retry-After:" inside another header's VALUE must not match
+	 * (line-aligned scan). */
+	req = run_raw("HTTP/1.1 200 OK\r\n"
+		      "X-Note: ignore Retry-After: 5 elsewhere\r\n"
+		      "Content-Length: 0\r\n"
+		      "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+	assert(st == OTLP_OK);
+	assert(otlp_http_request_retry_after_ms(req) == 0);
+	otlp_http_request_free(req);
+	return 0;
+}
+
+static int
+test_retry_after_duplicate_last_wins(void)
+{
+	otlp_status_t st;
+	int status;
+	const uint8_t *body;
+	size_t body_len;
+	otlp_http_request_t *req = run_raw("HTTP/1.1 503 Unavailable\r\n"
+					   "Retry-After: 9\r\n"
+					   "Retry-After: 2\r\n"
+					   "Content-Length: 0\r\n"
+					   "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+
+	assert(st == OTLP_OK);
+	assert(otlp_http_request_retry_after_ms(req) == 2000);
+	otlp_http_request_free(req);
+	return 0;
+}
+
+static int
+test_retry_after_saturates(void)
+{
+	/* 10 nines: far past any uint32 millisecond range — must
+	 * saturate at 4294967000, never wrap. */
+	otlp_status_t st;
+	int status;
+	const uint8_t *body;
+	size_t body_len;
+	otlp_http_request_t *req = run_raw("HTTP/1.1 429 Too Many Requests\r\n"
+					   "Retry-After: 9999999999\r\n"
+					   "Content-Length: 0\r\n"
+					   "\r\n",
+		&st,
+		&status,
+		&body,
+		&body_len);
+
+	assert(st == OTLP_OK);
+	assert(otlp_http_request_retry_after_ms(req) == 4294967000u);
+	otlp_http_request_free(req);
+	return 0;
+}
+
 /* Send-phase inactivity timeout: a server that accepts the
  * connection but never reads would stall SENDING forever (the
  * kernel send buffer fills and write() blocks). With
@@ -457,7 +581,7 @@ test_send_stall_times_out(void)
 
 		clock_gettime(CLOCK_MONOTONIC, &t0);
 		deadline_ms = (uint64_t) t0.tv_sec * 1000 +
-			(uint64_t) (t0.tv_nsec / 1000000) + 2000;
+			(uint64_t)(t0.tv_nsec / 1000000) + 2000;
 		for (i = 0; i < 5000000; i++)
 		{
 			struct timespec now;
@@ -470,7 +594,7 @@ test_send_stall_times_out(void)
 				break;
 			clock_gettime(CLOCK_MONOTONIC, &now);
 			if ((uint64_t) now.tv_sec * 1000 +
-					(uint64_t) (now.tv_nsec / 1000000) >
+					(uint64_t)(now.tv_nsec / 1000000) >
 				deadline_ms)
 				break;
 			if (st == OTLP_ERR_WOULDBLOCK)
@@ -515,12 +639,16 @@ main(void)
 	failures += test_header_value_not_matched();
 	failures += test_http10_not_reusable();
 	failures += test_case_insensitive_headers();
+	failures += test_retry_after_seconds();
+	failures += test_retry_after_absent_forms();
+	failures += test_retry_after_duplicate_last_wins();
+	failures += test_retry_after_saturates();
 	failures += test_send_stall_times_out();
 
 	if (failures)
 		printf("[http-parser] FAIL (%d test(s))\n", failures);
 	else
-		printf("[http-parser] PASS (10 tests)\n");
+		printf("[http-parser] PASS (14 tests)\n");
 	return failures ? 1 : 0;
 }
 

@@ -4,6 +4,37 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.95] - 2026-08-22
+
+Server-directed retry pacing (RFC 7231 §7.1.3).
+
+### Added — Retry-After honored on throttled responses
+
+The HTTP client now parses the response's `Retry-After` header
+(delta-seconds form; HTTP-date treated as absent; duplicates
+last-wins; saturates rather than wraps) and exposes it via
+`otlp_http_request_retry_after_ms()`. On a retryable status
+(429/503/5xx) the exporter's next attempt waits
+**max(jittered backoff, Retry-After)** — never sooner than the
+server asked — clamped to `backoff_max_ms`, so a hostile server
+cannot stall exports indefinitely. The retry WARN log annotates
+"(server Retry-After)" when the server value drove the delay.
+Verified on the wire: Retry-After: 1 delays the retry by the
+full second; Retry-After: 60 with backoff_max=300 still retries
+at ~300ms.
+
+### Fixed — Release builds silently vacated three test files
+
+Six asserts carried side effects (`otlp_exporter_emit_move`,
+`otlp_metric_record`) — under Release/NDEBUG the calls vanish,
+so the entire `exporter-retry` suite (and one echo case) was
+executing nothing and passing vacuously. All converted to
+statement + pure assert (the v0.5.82 rule's fifth sighting).
+Also repaired `test_helper_echo.h`, whose prototypes had been
+mangled by a v0.5.89 guard edit (three stray duplicate
+`#define ECHO_RAW_RESPONSE` blocks inside declarations — it
+compiled only by preprocessor accident).
+
 ## [0.5.94] - 2026-08-22
 
 Public-header API coherence audit.
