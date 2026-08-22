@@ -22,6 +22,7 @@
 #endif
 
 #include "test_helper_echo.h"
+#include "test_util.h"
 
 #include <otlp-c/exporter.h>
 #include <otlp-c/span.h>
@@ -76,7 +77,7 @@ retry_after_handler(const uint8_t *req_body,
 	{
 		size_t len = strlen(resp);
 
-		assert(len <= resp_cap);
+		check_true(len <= resp_cap);
 		memcpy(resp_buf, resp, len);
 		*resp_len = len;
 	}
@@ -116,7 +117,7 @@ run_scenario(const char *first_resp,
 			"\r\n";
 
 	st = echo_server_start(&srv, retry_after_handler, 2);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	snprintf(endpoint,
 		sizeof(endpoint),
 		"http://127.0.0.1:%u/v1/traces",
@@ -135,16 +136,16 @@ run_scenario(const char *first_resp,
 	opts.backoff_max_ms = backoff_max_ms;
 
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	tracer = otlp_tracer_create("svc", "test", "1.0");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	span = otlp_tracer_start_span(tracer, "op");
-	assert(span != NULL);
+	check_true(span != NULL);
 	otlp_span_mark_end(span);
 	/* Statement + pure assert: the emit must execute even under
 	 * Release/NDEBUG (side effects never live inside assert()). */
 	st = otlp_exporter_emit_move(exp, span);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	/* Drive tick until the batch is sent — bounded by wall clock,
 	 * not iteration count (Release builds spin far faster). */
@@ -164,7 +165,7 @@ run_scenario(const char *first_resp,
 
 	/* Wait for the server thread to finish (2 requests served) so
 	 * the timestamp reads below have a happens-before edge. */
-	(void) echo_server_join(&srv, 5 * 1000 * 1000);
+	check_ok(echo_server_join(&srv, 5 * 1000 * 1000));
 	echo_server_stop(&srv);
 
 	otlp_exporter_get_stats(exp, &stats);

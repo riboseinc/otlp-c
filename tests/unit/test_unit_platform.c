@@ -5,6 +5,7 @@
 // failure, connection refused.
 
 #include "../../src/platform.h"
+#include "../test_util.h"
 #include "../../src/span_internal.h"
 
 #include <otlp-c/span.h>
@@ -33,12 +34,13 @@ test_socket_null_guards(void)
 {
 	size_t n = 0;
 
-	assert(otlp_socket_connect(NULL, "h", 1) == OTLP_ERR_NULL);
-	assert(otlp_socket_finish_connect(NULL) == OTLP_ERR_NULL);
-	assert(otlp_socket_write(NULL, (const uint8_t *) "x", 1, &n) ==
+	check_true(otlp_socket_connect(NULL, "h", 1) == OTLP_ERR_NULL);
+	check_true(otlp_socket_finish_connect(NULL) == OTLP_ERR_NULL);
+	check_true(otlp_socket_write(NULL, (const uint8_t *) "x", 1, &n) ==
 		OTLP_ERR_NULL);
-	assert(otlp_socket_read(NULL, (uint8_t *) &n, 1, &n) == OTLP_ERR_NULL);
-	assert(otlp_socket_eof(NULL) == 0);
+	check_true(
+		otlp_socket_read(NULL, (uint8_t *) &n, 1, &n) == OTLP_ERR_NULL);
+	check_true(otlp_socket_eof(NULL) == 0);
 	otlp_socket_close(NULL); /* must not crash */
 	return 0;
 }
@@ -73,8 +75,8 @@ test_connect_refused(void)
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	addr.sin_port = 0;
-	assert(bind(fd, (struct sockaddr *) &addr, sizeof(addr)) == 0);
-	assert(getsockname(fd, (struct sockaddr *) &addr, &alen) == 0);
+	check_true(bind(fd, (struct sockaddr *) &addr, sizeof(addr)) == 0);
+	check_true(getsockname(fd, (struct sockaddr *) &addr, &alen) == 0);
 	port = ntohs(addr.sin_port);
 	close(fd); /* leave the port closed */
 
@@ -93,7 +95,7 @@ test_connect_refused(void)
 			usleep(100);
 		}
 	}
-	assert(st == OTLP_ERR_CONNECT);
+	check_true(st == OTLP_ERR_CONNECT);
 	otlp_socket_close(s);
 	return 0;
 }
@@ -105,22 +107,22 @@ test_tracer_edges(void)
 	otlp_span_t *parent;
 	otlp_span_t *child;
 
-	assert(t != NULL);
+	check_true(t != NULL);
 	otlp_tracer_free(NULL); /* no crash */
 	otlp_tracer_set_sampler(NULL, NULL); /* no crash */
 	otlp_tracer_set_sampler(t, NULL); /* resets to always_on */
 
-	assert(otlp_tracer_start_child_span(t, "c", NULL) == NULL);
+	check_true(otlp_tracer_start_child_span(t, "c", NULL) == NULL);
 
 	parent = otlp_tracer_start_span(t, "p");
-	assert(parent != NULL);
+	check_true(parent != NULL);
 	child = otlp_tracer_start_child_span(t, "c", parent);
-	assert(child != NULL);
+	check_true(child != NULL);
 	/* Child inherits the parent's trace id. */
-	assert(memcmp(otlp_span_get_trace_id(child),
-		       otlp_span_get_trace_id(parent),
-		       OTLP_TRACE_ID_LEN) == 0);
-	assert(otlp_span_has_parent(child));
+	check_true(memcmp(otlp_span_get_trace_id(child),
+			   otlp_span_get_trace_id(parent),
+			   OTLP_TRACE_ID_LEN) == 0);
+	check_true(otlp_span_has_parent(child));
 	otlp_span_free(child);
 	otlp_span_free(parent);
 	otlp_tracer_free(t);

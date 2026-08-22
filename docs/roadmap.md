@@ -151,8 +151,9 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.95 | **Retry-After honored** (RFC 7231 §7.1.3): delay = max(jitter, server floor) clamped by backoff_max; wire-tested; Release-vacuous test asserts fixed | #126 |
 | 0.5.96 | **PartialSuccess surfaced** (OTLP server-side data-loss reporting): new `protobuf_decode` module, WARN diagnostic + per-signal rejected_* stats; lost v0.5.92 property re-registered | #127 |
 | 0.5.97 | **Fix: histogram min/max at wrong wire fields** (10/11 → upstream 11/12 — collectors dropped min, doubled max); EHDP flags wire type corrected (dormant); upstream-literal wire test breaks the self-referential test circle | #128 |
+| 0.5.98 | **Release builds verified almost nothing**: 536 assert-only checks elided under NDEBUG converted to always-evaluated `check_ok`/`check_true` (tests/test_util.h); zero Release warnings restored; exporter-echo's silently-timing-out join (worker outliving main) fixed | #129 |
 
-**Key metrics (v0.5.92):** 132 TODOs complete, 39 tests, **43+
+**Key metrics (v0.5.98):** 138 TODOs complete, 43 tests, **45+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:

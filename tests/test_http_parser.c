@@ -19,6 +19,7 @@
 #endif
 
 #include "test_helper_echo.h"
+#include "test_util.h"
 
 #include "../src/http_client.h"
 
@@ -59,7 +60,7 @@ raw_handler(const uint8_t *req_body,
 
 	(void) req_body;
 	(void) req_len;
-	assert(len <= resp_cap);
+	check_true(len <= resp_cap);
 	memcpy(resp_buf, g_raw, len);
 	*resp_len = len;
 	return ECHO_RAW_RESPONSE;
@@ -101,20 +102,20 @@ run_raw(const char *raw,
 
 	g_raw = raw;
 	st = echo_server_start(&srv, raw_handler, 1);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	snprintf(url_str,
 		sizeof(url_str),
 		"http://127.0.0.1:%u/v1/traces",
 		srv.port);
-	assert(otlp_http_parse_url(url_str, &url) == OTLP_OK);
+	check_true(otlp_http_parse_url(url_str, &url) == OTLP_OK);
 	st = otlp_http_request_start(
 		&req, &url, "otlp-c/test", (const uint8_t *) "x", 1, 0, 0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	st = drive(req);
 	*st_out = st;
 	*status_out = otlp_http_request_http_status(req);
 	*body_out = otlp_http_request_body(req, body_len_out);
-	(void) echo_server_join(&srv, 2 * 1000 * 1000);
+	check_ok(echo_server_join(&srv, 2 * 1000 * 1000));
 	return req;
 }
 
@@ -135,9 +136,9 @@ test_chunked_single(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 200);
-	assert(body_len == 4 && memcmp(body, "abcd", 4) == 0);
+	check_true(st == OTLP_OK);
+	check_true(status == 200);
+	check_true(body_len == 4 && memcmp(body, "abcd", 4) == 0);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -163,10 +164,10 @@ test_chunked_multi_with_trailers(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 200);
-	assert(body_len == 12);
-	assert(memcmp(body, "hello  world", 12) == 0);
+	check_true(st == OTLP_OK);
+	check_true(status == 200);
+	check_true(body_len == 12);
+	check_true(memcmp(body, "hello  world", 12) == 0);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -196,9 +197,10 @@ test_chunked_incremental(void)
 	strcat(raw, "\r\n0\r\n\r\n");
 
 	req = run_raw(raw, &st, &status, &body, &body_len);
-	assert(st == OTLP_OK);
-	assert(body_len == n);
-	assert(body[0] == 'a' && body[n - 1] == (char) ('a' + ((n - 1) % 26)));
+	check_true(st == OTLP_OK);
+	check_true(body_len == n);
+	check_true(
+		body[0] == 'a' && body[n - 1] == (char) ('a' + ((n - 1) % 26)));
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -220,8 +222,8 @@ test_te_and_cl_rejected(void)
 		&body,
 		&body_len);
 
-	assert(st != OTLP_OK);
-	assert(otlp_http_request_state(req) == OTLP_HTTP_REQ_FAILED);
+	check_true(st != OTLP_OK);
+	check_true(otlp_http_request_state(req) == OTLP_HTTP_REQ_FAILED);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -243,7 +245,7 @@ test_duplicate_cl_rejected(void)
 		&body,
 		&body_len);
 
-	assert(st != OTLP_OK);
+	check_true(st != OTLP_OK);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -264,7 +266,7 @@ test_undecodable_te_rejected(void)
 		&body,
 		&body_len);
 
-	assert(st != OTLP_OK);
+	check_true(st != OTLP_OK);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -290,9 +292,9 @@ test_header_value_not_matched(void)
 			&body,
 			&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 200);
-	assert(body_len == 2 && memcmp(body, "hi", 2) == 0);
+	check_true(st == OTLP_OK);
+	check_true(status == 200);
+	check_true(body_len == 2 && memcmp(body, "hi", 2) == 0);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -313,10 +315,10 @@ test_http10_not_reusable(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 200);
+	check_true(st == OTLP_OK);
+	check_true(status == 200);
 	/* HTTP/1.0 defaults to close: no detachable socket. */
-	assert(otlp_http_request_detach_socket(req) == NULL);
+	check_true(otlp_http_request_detach_socket(req) == NULL);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -336,9 +338,9 @@ test_case_insensitive_headers(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 204);
-	assert(body_len == 0);
+	check_true(st == OTLP_OK);
+	check_true(status == 204);
+	check_true(body_len == 0);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -361,9 +363,9 @@ test_retry_after_seconds(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(status == 429);
-	assert(otlp_http_request_retry_after_ms(req) == 2000);
+	check_true(st == OTLP_OK);
+	check_true(status == 429);
+	check_true(otlp_http_request_retry_after_ms(req) == 2000);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -384,8 +386,8 @@ test_retry_after_absent_forms(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_retry_after_ms(req) == 0);
+	check_true(st == OTLP_OK);
+	check_true(otlp_http_request_retry_after_ms(req) == 0);
 	otlp_http_request_free(req);
 
 	/* HTTP-date form: only delta-seconds is understood — a date
@@ -398,8 +400,8 @@ test_retry_after_absent_forms(void)
 		&status,
 		&body,
 		&body_len);
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_retry_after_ms(req) == 0);
+	check_true(st == OTLP_OK);
+	check_true(otlp_http_request_retry_after_ms(req) == 0);
 	otlp_http_request_free(req);
 
 	/* "Retry-After:" inside another header's VALUE must not match
@@ -412,8 +414,8 @@ test_retry_after_absent_forms(void)
 		&status,
 		&body,
 		&body_len);
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_retry_after_ms(req) == 0);
+	check_true(st == OTLP_OK);
+	check_true(otlp_http_request_retry_after_ms(req) == 0);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -435,8 +437,8 @@ test_retry_after_duplicate_last_wins(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_retry_after_ms(req) == 2000);
+	check_true(st == OTLP_OK);
+	check_true(otlp_http_request_retry_after_ms(req) == 2000);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -459,8 +461,8 @@ test_retry_after_saturates(void)
 		&body,
 		&body_len);
 
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_retry_after_ms(req) == 4294967000u);
+	check_true(st == OTLP_OK);
+	check_true(otlp_http_request_retry_after_ms(req) == 4294967000u);
 	otlp_http_request_free(req);
 	return 0;
 }
@@ -544,7 +546,7 @@ test_send_stall_times_out(void)
 	}
 
 	big = malloc(big_len);
-	assert(big != NULL);
+	check_true(big != NULL);
 	memset(big, 'x', big_len);
 
 	{

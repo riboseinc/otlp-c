@@ -22,6 +22,7 @@
  *                             message pointer stays in bounds
  */
 #include "prng.h"
+#include "../test_util.h"
 #include "property_harness.h"
 
 #include "../src/exporter_otel.h"
@@ -184,7 +185,7 @@ fuzz_raw_handler(const uint8_t *req_body,
 {
 	(void) req_body;
 	(void) req_len;
-	assert(g_resp_len <= resp_cap);
+	check_true(g_resp_len <= resp_cap);
 	memcpy(resp_buf, g_resp, g_resp_len);
 	*resp_len = g_resp_len;
 	return ECHO_RAW_RESPONSE;

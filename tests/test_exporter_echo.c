@@ -4,6 +4,7 @@
  * tick(), and verifies the echo server received them.
  */
 #include "test_helper_echo.h"
+#include "test_util.h"
 
 #include <otlp-c/exporter.h>
 #include <otlp-c/log.h>
@@ -53,7 +54,7 @@ main(void)
 	otlp_status_t st;
 
 	st = echo_server_start(&srv, count_handler, 16);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	snprintf(endpoint,
 		sizeof(endpoint),
@@ -67,33 +68,33 @@ main(void)
 	opts.batch_ms = 50;
 	opts.queue_capacity = 256;
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 
 	tracer = otlp_tracer_create("svc", "test", "1.0");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 
 	/* Emit 10 spans — should produce ~3 batches (4+4+2). */
 	for (int i = 0; i < 10; i++)
 	{
 		otlp_span_t *s = otlp_tracer_start_span(tracer, "op");
-		assert(s != NULL);
+		check_true(s != NULL);
 		st = otlp_exporter_emit(exp, s);
-		assert(st == OTLP_OK);
+		check_true(st == OTLP_OK);
 		otlp_span_free(s);
 	}
 
 	/* Drive tick until flushed. */
 	st = otlp_exporter_flush(exp);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	otlp_exporter_get_stats(exp, &stats);
 	printf("[exporter-echo] emitted=%llu sent=%llu 2xx=%llu\n",
 		(unsigned long long) stats.emitted,
 		(unsigned long long) stats.sent,
 		(unsigned long long) stats.http_2xx);
-	assert(stats.emitted == 10);
-	assert(stats.sent == 10);
-	assert(stats.http_2xx >= 2); /* at least 2 batches */
+	check_true(stats.emitted == 10);
+	check_true(stats.sent == 10);
+	check_true(stats.http_2xx >= 2); /* at least 2 batches */
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_free(exp);
@@ -110,7 +111,7 @@ main(void)
 			srv.port);
 		opts.endpoint = m_endpoint;
 		exp = otlp_exporter_create(&opts);
-		assert(exp != NULL);
+		check_true(exp != NULL);
 
 		{
 			otlp_metric_t *m =
@@ -121,25 +122,25 @@ main(void)
 					NULL,
 					0);
 
-			assert(m != NULL);
+			check_true(m != NULL);
 			{
 				otlp_status_t rc = otlp_metric_record(m, 5.0);
 
-				assert(rc == OTLP_OK);
+				check_true(rc == OTLP_OK);
 			}
 			otlp_metric_mark_time(m);
 			otlp_metric_set_attribute_string(m, "method", "GET");
 			st = otlp_exporter_emit_metric_move(exp, m);
-			assert(st == OTLP_OK);
+			check_true(st == OTLP_OK);
 		}
 		st = otlp_exporter_flush(exp);
-		assert(st == OTLP_OK);
+		check_true(st == OTLP_OK);
 		otlp_exporter_get_stats(exp, &stats);
 		printf("[exporter-echo] metrics: emitted=%llu sent=%llu\n",
 			(unsigned long long) stats.emitted_metrics,
 			(unsigned long long) stats.sent_metrics);
-		assert(stats.emitted_metrics == 1);
-		assert(stats.sent_metrics == 1);
+		check_true(stats.emitted_metrics == 1);
+		check_true(stats.sent_metrics == 1);
 		otlp_exporter_free(exp);
 	}
 
@@ -153,40 +154,45 @@ main(void)
 			srv.port);
 		opts.endpoint = l_endpoint;
 		exp = otlp_exporter_create(&opts);
-		assert(exp != NULL);
+		check_true(exp != NULL);
 		{
 			otlp_log_record_t *lr = otlp_log_record_create(
 				OTLP_SEVERITY_INFO, "coverage test log");
 			otlp_log_record_t *arr[2];
 
-			assert(lr != NULL);
+			check_true(lr != NULL);
 			otlp_log_record_mark_timestamp(lr);
 			otlp_log_record_set_attribute_string(lr, "k", "v");
 			/* second record exercises batching */
 			arr[0] = lr;
 			(void) arr;
 			st = otlp_exporter_emit_log_move(exp, lr);
-			assert(st == OTLP_OK);
+			check_true(st == OTLP_OK);
 			{
 				otlp_log_record_t *lr2 = otlp_log_record_create(
 					OTLP_SEVERITY_WARN, "second");
-				assert(lr2 != NULL);
+				check_true(lr2 != NULL);
 				st = otlp_exporter_emit_log_move(exp, lr2);
-				assert(st == OTLP_OK);
+				check_true(st == OTLP_OK);
 			}
 		}
 		st = otlp_exporter_flush(exp);
-		assert(st == OTLP_OK);
+		check_true(st == OTLP_OK);
 		otlp_exporter_get_stats(exp, &stats);
 		printf("[exporter-echo] logs: emitted=%llu sent=%llu\n",
 			(unsigned long long) stats.emitted_logs,
 			(unsigned long long) stats.sent_logs);
-		assert(stats.emitted_logs == 2);
-		assert(stats.sent_logs == 2);
+		check_true(stats.emitted_logs == 2);
+		check_true(stats.sent_logs == 2);
 		otlp_exporter_free(exp);
 	}
 
-	(void) echo_server_join(&srv, 1 * 1000 * 1000);
+	/* 16 offered, ~5 arrive: stop deterministically (v0.5.96
+	 * lesson — a worker still in accept() outlives this frame).
+	 * _stop closes the listen fd; the worker exits and the join
+	 * below must succeed. */
+	echo_server_stop(&srv);
+	check_ok(echo_server_join(&srv, 1 * 1000 * 1000));
 	printf("[exporter-echo] PASS — spans + metrics + logs over HTTP\n");
 	return 0;
 }
