@@ -143,6 +143,10 @@ extern "C"
 	 * semantic; the type may change). Max 128 distinct keys;
 	 * overflow returns OTLP_ERR_OVERFLOW. Replacing an existing
 	 * key always succeeds, even at cap.
+	 *
+	 * String keys and string values must be valid UTF-8 (the
+	 * proto3 string contract); invalid input returns
+	 * OTLP_ERR_UTF8. bytes values are exempt.
 	 */
 
 	OTLP_C_EXPORT

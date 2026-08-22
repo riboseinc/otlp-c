@@ -32,58 +32,63 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-typedef struct otlp_sampler otlp_sampler_t;
+	typedef struct otlp_sampler otlp_sampler_t;
 
-typedef enum {
-	/* Drop the span entirely. The library frees the in-progress
-	 * span and returns NULL from start_span. */
-	OTLP_SAMPLING_DECISION_NOT_RECORD = 0,
-	/* Record the span but mark it as not sampled. Downstream
-	 * collectors may aggregate or drop these. */
-	OTLP_SAMPLING_DECISION_RECORD = 1,
-	/* Record and mark as sampled (the typical "yes" decision). */
-	OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED = 2,
-} otlp_sampling_decision_t;
+	typedef enum
+	{
+		/* Drop the span entirely. The library frees the in-progress
+		 * span and returns NULL from start_span. */
+		OTLP_SAMPLING_DECISION_NOT_RECORD = 0,
+		/* Record the span but mark it as not sampled. Downstream
+		 * collectors may aggregate or drop these. */
+		OTLP_SAMPLING_DECISION_RECORD = 1,
+		/* Record and mark as sampled (the typical "yes" decision). */
+		OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED = 2,
+	} otlp_sampling_decision_t;
 
-typedef struct {
-	otlp_sampling_decision_t decision;
-} otlp_sampling_result_t;
+	typedef struct
+	{
+		otlp_sampling_decision_t decision;
+	} otlp_sampling_result_t;
 
-/* vtable — custom samplers populate this. */
-typedef otlp_sampling_result_t (*otlp_sampler_should_sample_fn)(
-    const otlp_sampler_t *sampler,
-    const uint8_t		trace_id[16],
-    const char		       *name,
-    otlp_span_kind_t		kind);
+	/* vtable — custom samplers populate this. */
+	typedef otlp_sampling_result_t (*otlp_sampler_should_sample_fn)(
+		const otlp_sampler_t *sampler,
+		const uint8_t trace_id[16],
+		const char *name,
+		otlp_span_kind_t kind);
 
-typedef void (*otlp_sampler_free_fn)(otlp_sampler_t *sampler);
+	typedef void (*otlp_sampler_free_fn)(otlp_sampler_t *sampler);
 
-struct otlp_sampler {
-	otlp_sampler_should_sample_fn should_sample;
-	otlp_sampler_free_fn	       free;
-};
+	struct otlp_sampler
+	{
+		otlp_sampler_should_sample_fn should_sample;
+		otlp_sampler_free_fn free;
+	};
 
-/* Construct a sampler that always returns RECORD_AND_SAMPLED. */
-OTLP_C_EXPORT
-otlp_sampler_t *otlp_sampler_always_on(void);
+	/* Construct a sampler that always returns RECORD_AND_SAMPLED. */
+	OTLP_C_EXPORT
+	otlp_sampler_t *otlp_sampler_always_on(void);
 
-/* Construct a sampler that always returns NOT_RECORD. */
-OTLP_C_EXPORT
-otlp_sampler_t *otlp_sampler_always_off(void);
+	/* Construct a sampler that always returns NOT_RECORD.
+	 * Returns NULL on allocation failure. */
+	OTLP_C_EXPORT
+	otlp_sampler_t *otlp_sampler_always_off(void);
 
-/* Construct a deterministic ratio-based sampler. `ratio` is clamped
- * to [0, 1]. Uses the first 8 bytes of trace_id as a uint64 and
- * thresholds against (ratio * UINT64_MAX). The same trace_id always
- * yields the same decision. */
-OTLP_C_EXPORT
-otlp_sampler_t *otlp_sampler_trace_id_ratio_based(double ratio);
+	/* Construct a deterministic ratio-based sampler. `ratio` is clamped
+	 * to [0, 1]. Uses the first 8 bytes of trace_id as a uint64 and
+	 * thresholds against (ratio * UINT64_MAX). The same trace_id always
+	 * yields the same decision. Returns NULL on allocation failure. */
+	OTLP_C_EXPORT
+	otlp_sampler_t *otlp_sampler_trace_id_ratio_based(double ratio);
 
-/* Free a sampler. Safe to call with NULL (no-op). */
-OTLP_C_EXPORT
-void otlp_sampler_free(otlp_sampler_t *sampler);
+	/* Free a sampler. Safe to call with NULL (no-op). */
+	OTLP_C_EXPORT
+	void otlp_sampler_free(otlp_sampler_t *sampler);
 
 #ifdef __cplusplus
 }

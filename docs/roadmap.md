@@ -157,6 +157,15 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.101 | **Golden vectors**: payloads built by the reference opentelemetry-proto serialization and compared as canonical field trees (zigzag/packing/presence validated, not just field numbers); decoder gains fixed32/64 readers | #132 |
 | 0.5.102 | Hygiene: concurrency-stress echo worker stop + checked joins (last `(void)` joins in the tree); minimal example demos the event callback | #133 |
 | 0.5.103 | **Fix: UTF-8 validated at the API boundary** (proto3 string contract — otelcol rejects whole requests otherwise; OTLP_ERR_UTF8 finally used); composite ARRAY/KVLIST golden vectors; get_stats() documented thread-safe | #134 |
+| 0.5.104 | **Public API audit + 1.0-readiness assessment**: 124 exported symbols reviewed; flush_metric/flush_log return codes, sampler NULL-on-OOM, UTF-8 notes on the attribute conventions; perf A/B (103 vs 102 — noise-level); roadmap gains a Path-to-1.0 section | #135 |
+
+**Key metrics (v0.5.104):** 144 TODOs complete, 46 tests, **49+
+distinct bugs found and fixed**, all sanitizers green, zero
+warnings, verified in Debug AND Release configurations, every
+library file at 82%+ region coverage. `sizeof(otlp_span)`:
+138,880 → **176 bytes**; emit pipeline ~30,000 → **~150 ns/span**
+(~6.6M spans/s, null transport); encode ~990 ns/span at 5 attrs
+(SBO 192).
 
 **Key metrics (v0.5.103):** 143 TODOs complete, 46 tests, **49+
 distinct bugs found and fixed**, all sanitizers green, zero
@@ -166,6 +175,39 @@ library file at 82%+ region coverage. `sizeof(otlp_span)`:
 (~6.6M spans/s, null transport); encode ~990 ns/span at 5 attrs
 (SBO 192).
 
+
+## Path to 1.0
+
+The 0.x line may break the API between minors (documented in
+CHANGELOG). 1.0 freezes it. The library enters the stabilization
+window when all of the following hold — the audit as of v0.5.104:
+
+1. **Public surface audited**: all 124 exported functions across
+   10 headers reviewed for docstring, return codes, ownership,
+   and thread-safety annotations (v0.5.94 metric/log, v0.5.100
+   events, v0.5.103 UTF-8 contract, v0.5.104 remainder:
+   flush_metric/flush_log return codes, sampler NULL-on-OOM,
+   UTF-8 notes on the three attribute conventions).
+2. **Wire conformance proven**: schema tables pinned field-by-
+   field against opentelemetry-proto (31/31, unit-wire-numbers)
+   AND whole payloads reference-validated (unit-golden, including
+   composite attributes). No known conformance gap.
+3. **Boundary validation complete**: header injection (CWE-93),
+   integer overflow (CWE-190), UTF-8 (proto3 string contract),
+   malformed-response decoding — all enforced at the boundary
+   with dedicated tests.
+4. **No open P1/P2 items** in TODO.complete.
+5. **One full minor cycle (0.6) with additive-only API changes.**
+
+Deliberately NOT in 1.0 (design constraints, not gaps): TLS
+(sidecar terminates), gRPC, payload compression — all would
+violate the zero-non-libc-dependency invariant. The path to
+those is a 2.x with an optional-deps model, not 1.x.
+
+Performance gates (re-measured v0.5.103 vs v0.5.102, A/B on the
+same host): emit pipeline 175-433 ns/span (0-5 attrs), encode
+~170 ns/attr — the v0.5.100 event layer and v0.5.103 UTF-8
+validation are within run-to-run noise of the prior release.
 **Unification arc (v0.5.68–v0.5.92):** every attribute surface —
 span, event, link, metric, log record, resource — now shares one
 public value type (`otlp_value_t`), one storage model
