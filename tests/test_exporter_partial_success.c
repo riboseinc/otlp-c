@@ -53,6 +53,30 @@ static size_t g_body_len;
 
 /* Captured diagnostics. */
 static bool g_saw_partial_warn;
+static otlp_event_t g_ps_event; /* copy of the PARTIAL_SUCCESS
+				 * event, if one fires */
+static bool g_saw_ps_event;
+static char g_ps_detail[128];
+
+static void
+capture_event(void *ctx, const otlp_event_t *ev)
+{
+	(void) ctx;
+	if (ev->code == OTLP_EVT_PARTIAL_SUCCESS)
+	{
+		g_ps_event = *ev;
+		g_saw_ps_event = true;
+		if (ev->detail && ev->detail_len > 0)
+		{
+			size_t n = ev->detail_len < 127 ? ev->detail_len : 127;
+
+			memcpy(g_ps_detail, ev->detail, n);
+			g_ps_detail[n] = '\0';
+			g_ps_event.detail = g_ps_detail;
+			g_ps_event.detail_len = n;
+		}
+	}
+}
 static char g_last_msg[256];
 
 static int
@@ -154,6 +178,7 @@ run_span_scenario(const uint8_t *body,
 	g_body = body;
 	g_body_len = body_len;
 	g_saw_partial_warn = false;
+	g_saw_ps_event = false;
 	g_last_msg[0] = '\0';
 
 	/* Exactly ONE POST arrives per scenario (batch_size == the
@@ -175,6 +200,7 @@ run_span_scenario(const uint8_t *body,
 	exp = otlp_exporter_create(&opts);
 	check_true(exp != NULL);
 	otlp_exporter_set_logger(exp, capture_log, NULL);
+	otlp_exporter_set_event_logger(exp, capture_event, NULL);
 
 	tracer = otlp_tracer_create("svc", "test", "1.0");
 	check_true(tracer != NULL);
@@ -213,6 +239,17 @@ run_span_scenario(const uint8_t *body,
 					? expect_rejected_stat
 					: 0) &&
 		g_saw_partial_warn == (expect_rejected_stat > 0);
+	if (expect_rejected_stat > 0)
+		ok = ok && g_saw_ps_event &&
+			g_ps_event.code == OTLP_EVT_PARTIAL_SUCCESS &&
+			g_ps_event.signal == OTLP_SIGNAL_TRACES &&
+			g_ps_event.level == OTLP_LOG_WARN &&
+			g_ps_event.count == n_spans &&
+			g_ps_event.rejected ==
+				(uint64_t) expect_rejected_stat &&
+			strcmp(g_ps_detail, "queue full") == 0;
+	else
+		ok = ok && !g_saw_ps_event;
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_free(exp);
@@ -233,6 +270,7 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	g_body = body;
 	g_body_len = body_len;
 	g_saw_partial_warn = false;
+	g_saw_ps_event = false;
 	g_last_msg[0] = '\0';
 
 	st = echo_server_start(&srv, raw_200_handler, 1);
@@ -250,6 +288,7 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	exp = otlp_exporter_create(&opts);
 	check_true(exp != NULL);
 	otlp_exporter_set_logger(exp, capture_log, NULL);
+	otlp_exporter_set_event_logger(exp, capture_event, NULL);
 
 	for (int i = 0; i < 2; i++)
 	{
@@ -276,7 +315,9 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 		(unsigned long long) stats.rejected_logs);
 
 	ok = stats.emitted_logs == 2 && stats.sent_logs == 2 &&
-		stats.rejected_logs == 1 && g_saw_partial_warn;
+		stats.rejected_logs == 1 && g_saw_partial_warn &&
+		g_saw_ps_event && g_ps_event.signal == OTLP_SIGNAL_LOGS &&
+		g_ps_event.rejected == 1;
 
 	otlp_exporter_free(exp);
 	return ok;
