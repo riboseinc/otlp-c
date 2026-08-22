@@ -152,8 +152,9 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.96 | **PartialSuccess surfaced** (OTLP server-side data-loss reporting): new `protobuf_decode` module, WARN diagnostic + per-signal rejected_* stats; lost v0.5.92 property re-registered | #127 |
 | 0.5.97 | **Fix: histogram min/max at wrong wire fields** (10/11 → upstream 11/12 — collectors dropped min, doubled max); EHDP flags wire type corrected (dormant); upstream-literal wire test breaks the self-referential test circle | #128 |
 | 0.5.98 | **Release builds verified almost nothing**: 536 assert-only checks elided under NDEBUG converted to always-evaluated `check_ok`/`check_true` (tests/test_util.h); zero Release warnings restored; exporter-echo's silently-timing-out join (worker outliving main) fixed | #129 |
+| 0.5.99 | **Fix: v0.5.98 checks didn't ENFORCE in Release** (false check didn't fail — helpers now abort in every config, mutation-tested); all 31 schema tables pinned against upstream literals; otlp-spec.md gains the missing metrics/logs field reference | #130 |
 
-**Key metrics (v0.5.98):** 138 TODOs complete, 43 tests, **45+
+**Key metrics (v0.5.99):** 139 TODOs complete, 43 tests, **46+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:

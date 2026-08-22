@@ -205,10 +205,16 @@ All phases are complete (v0.5.97). The library implements:
   bytes AND schema tables against upstream literals — never the
   schema's own numbers (self-referential checks can't catch
   schema drift)
-- **Always-evaluated test checks** (v0.5.98): `tests/test_util.h`
-  `check_ok()`/`check_true()` take the expression as an argument,
-  so it executes under NDEBUG too — 536 value-asserts that were
-  elided in Release CI now verify in both configurations
+- **Enforced test checks** (v0.5.98/99): `tests/test_util.h`
+  `check_ok()`/`check_true()` take the expression as an argument
+  AND abort on failure in every configuration — 536 value-asserts
+  that were elided in Release CI now verify AND fail in both
+  configurations (v0.5.98's first cut evaluated but didn't
+  enforce under NDEBUG; fixed in v0.5.99)
+- **Schema pinned to upstream** (v0.5.99): every table in
+  `src/otlp_schema.h` is field-number-checked against
+  opentelemetry-proto literals by `unit-wire-numbers` in every
+  build; a new schema table MUST get a pin entry there
 - **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
   growing arena pointers are moved, never libc-realloc'd
 
