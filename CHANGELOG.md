@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.94] - 2026-08-22
+
+Public-header API coherence audit.
+
+### Fixed — duplicate declarations in `metric.h`
+
+`otlp_metric_set_attribute_array` / `_kvlist` were declared
+twice — a copy-paste artifact from the v0.5.71 parity patch,
+shipped for 23 releases. Removed; a duplicate-declaration scan
+across all public headers is clean.
+
+### Added — return-code documentation for metric/log headers
+
+28 status-returning functions across `metric.h` and `log.h`
+documented no return codes at the header level (only the exporter
+did). Both headers now carry the uniform "Return codes" contract
+(OK / NULL / NOMEM / OVERFLOW / INVALID_ARGUMENT plus
+per-surface specifics).
+
+### Verified clean as-is
+
+Naming vocabulary uniform; every create/free pair carries
+lifetime language; the umbrella `otlp.h` includes all 13 headers;
+every header compiles standalone as C99 **and** C++ (mechanical
+sweeps). Pre-0.6.0 API review groundwork.
+
 ## [0.5.93] - 2026-08-21
 
 Documentation catch-up for v0.5.87–v0.5.92 (docs only).
