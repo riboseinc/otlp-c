@@ -190,7 +190,9 @@ All phases are complete (v0.5.86). The library implements:
   tracestate/baggage, big-endian ratio-sampler prefix
 - **Retry with full jitter** (v0.5.83): uniform
   [0, min(initial<<(attempt−1), max)] via a tick-thread PRNG;
-  shift-count-clamped exponent (no UB at large max_retries)
+  shift-count-clamped exponent (no UB at large max_retries);
+  **Retry-After honored** (v0.5.95): delay = max(jitter, server
+  floor) clamped by backoff_max_ms on 429/503/5xx
 - **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
   growing arena pointers are moved, never libc-realloc'd
 

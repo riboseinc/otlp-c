@@ -152,6 +152,10 @@ otlp_http_parse_url(const char *url, struct otlp_http_url *out)
 
 #define OTLP_HTTP_RESP_MAX (64 * 1024) /* collector bodies are small */
 
+/* Retry-After saturation ceiling in SECONDS: 4294967 * 1000 ms
+ * still fits uint32_t without wrapping. */
+#define OTLP_RETRY_AFTER_MAX_S UINT64_C(4294967)
+
 struct otlp_http_request
 {
 	otlp_http_req_state_t state;
@@ -169,6 +173,7 @@ struct otlp_http_request
 
 	/* Parsed response. */
 	int http_status;
+	uint32_t retry_after_ms; /* Retry-After header, ms (0 = absent) */
 	const uint8_t *body_ptr; /* into resp_buf */
 	size_t body_len;
 	bool keepalive_eligible; /* set by response parser */
@@ -583,6 +588,35 @@ try_parse_response(struct otlp_http_request *r, bool at_eof)
 					otlp_strncasecmp(v, "chunked", 7) == 0)
 					te_chunked = true;
 			}
+			else if (otlp_strncasecmp(line, "Retry-After:", 12) ==
+				0)
+			{
+				const char *v = line + 12;
+				uint64_t sec = 0;
+				int digits = 0;
+
+				while (v < eol && *v == ' ')
+					v++;
+				/* Cap at 10 digits: any value that large is
+				 * ≥ 1e9 s (31 years) — saturate below, and
+				 * the bounded digit count keeps `sec` far
+				 * from uint64 overflow (CWE-190). */
+				while (v < eol && isdigit((unsigned char) *v) &&
+					digits < 10)
+				{
+					sec = sec * 10 + (uint64_t)(*v - '0');
+					digits++;
+					v++;
+				}
+				if (sec > OTLP_RETRY_AFTER_MAX_S)
+					sec = OTLP_RETRY_AFTER_MAX_S;
+				/* delta-seconds form only: an HTTP-date
+				 * value (first char not a digit) leaves
+				 * sec at 0 — treated as absent. Duplicates:
+				 * last one wins (not a framing header, so
+				 * no smuggling ambiguity). */
+				r->retry_after_ms = (uint32_t)(sec * 1000);
+			}
 			else if (otlp_strncasecmp(line, "Connection:", 11) == 0)
 			{
 				const char *v = line + 11;
@@ -851,6 +885,12 @@ int
 otlp_http_request_http_status(const otlp_http_request_t *r)
 {
 	return r ? r->http_status : 0;
+}
+
+uint32_t
+otlp_http_request_retry_after_ms(const otlp_http_request_t *r)
+{
+	return r ? r->retry_after_ms : 0;
 }
 
 const uint8_t *

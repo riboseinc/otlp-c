@@ -74,6 +74,18 @@ if(UNIX)
         COMMAND otlp_test_exporter_retry)
     set_tests_properties(exporter-retry PROPERTIES
         LABELS "unit" TIMEOUT 30)
+
+    # Retry-After wire test (v0.5.95): real HTTP responses with a
+    # Retry-After header; verifies the exporter's retry pacing honors
+    # the server floor and the backoff_max clamp. ~2s wall clock.
+    add_executable(otlp_test_exporter_retry_after
+        test_exporter_retry_after.c test_helper_echo.c)
+    target_link_libraries(otlp_test_exporter_retry_after
+        PRIVATE otlp_c Threads::Threads)
+    add_test(NAME exporter-retry-after
+        COMMAND otlp_test_exporter_retry_after)
+    set_tests_properties(exporter-retry-after PROPERTIES
+        LABELS "unit" TIMEOUT 30)
 endif()
 
 # Custom allocator hook test.

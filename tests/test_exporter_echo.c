@@ -122,7 +122,11 @@ main(void)
 					0);
 
 			assert(m != NULL);
-			assert(otlp_metric_record(m, 5.0) == OTLP_OK);
+			{
+				otlp_status_t rc = otlp_metric_record(m, 5.0);
+
+				assert(rc == OTLP_OK);
+			}
 			otlp_metric_mark_time(m);
 			otlp_metric_set_attribute_string(m, "method", "GET");
 			st = otlp_exporter_emit_metric_move(exp, m);

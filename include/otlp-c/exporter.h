@@ -131,7 +131,14 @@ extern "C"
 		/* Initial backoff in milliseconds. Default: 1000 (1s). */
 		uint32_t backoff_initial_ms;
 
-		/* Max backoff in milliseconds. Default: 30000 (30s). */
+		/* Max backoff in milliseconds. Default: 30000 (30s).
+		 *
+		 * Also the ceiling for server-directed retry pacing: on a
+		 * throttled response (429/503/5xx) carrying Retry-After
+		 * (delta-seconds form), the next attempt waits
+		 * max(jittered backoff, Retry-After) — never sooner than
+		 * the server asked — but never longer than this cap, so a
+		 * hostile server cannot stall exports indefinitely. */
 		uint32_t backoff_max_ms;
 
 		/* Connect timeout in milliseconds. Default: 5000 (5s). */

@@ -994,7 +994,9 @@ try_start_log_post(struct otlp_exporter *e)
 }
 
 static void
-record_outcome(struct otlp_exporter *e, int http_status)
+record_outcome(struct otlp_exporter *e,
+	int http_status,
+	uint32_t retry_after_ms)
 {
 	struct signal_record_path p = record_path_for(e);
 	uint64_t count = e->in_flight_count;
@@ -1002,7 +1004,8 @@ record_outcome(struct otlp_exporter *e, int http_status)
 	if (http_status == 0)
 	{
 		/* Network-level failure (no HTTP response received).
-		 * Treat as transient — same retry path as 5xx. */
+		 * Treat as transient — same retry path as 5xx. (No
+		 * Retry-After: there was no response to carry one.) */
 		otlp_atomic_fetch_add_u64(
 			&e->network_err, 1, OTLP_MEMORY_ORDER_RELAXED);
 		e->attempt++;
@@ -1071,17 +1074,28 @@ record_outcome(struct otlp_exporter *e, int http_status)
 		}
 		else
 		{
+			/* Server-requested floor (RFC 7231 §7.1.3): never
+			 * retry SOONER than Retry-After says, but never let
+			 * a hostile/buggy server stall exports beyond our
+			 * own cap — delay = max(jitter, Retry-After),
+			 * clamped to backoff_max_ms. */
 			uint32_t delay = backoff_delay_ms(e, e->attempt);
+			bool server_driven = retry_after_ms > delay;
 
+			if (server_driven)
+				delay = retry_after_ms;
+			if (delay > e->backoff_max_ms)
+				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
 			e->backoff_armed = true;
 			otlp_log(e,
 				OTLP_LOG_WARN,
-				"HTTP %d; retry %u/%u in %ums",
+				"HTTP %d; retry %u/%u in %ums%s",
 				http_status,
 				e->attempt,
 				e->max_retries,
-				delay);
+				delay,
+				server_driven ? " (server Retry-After)" : "");
 		}
 		return;
 	}
@@ -1185,7 +1199,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					if (e->null_transport_status_fn)
 						http_status = e->null_transport_status_fn(
 							e->null_transport_status_ctx);
-					record_outcome(e, http_status);
+					record_outcome(e, http_status, 0);
 					work_done = true;
 					goto tick_continue;
 				}
@@ -1231,11 +1245,18 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					? otlp_http_request_http_status(
 						  e->in_flight)
 					: 0;
+				/* Read before the free — the value lives in
+				 * the request's parsed-response state. */
+				uint32_t retry_after_ms =
+					(s2 == OTLP_HTTP_REQ_DONE)
+					? otlp_http_request_retry_after_ms(
+						  e->in_flight)
+					: 0;
 				if (s2 == OTLP_HTTP_REQ_DONE)
 					e->keepalive_sock =
 						otlp_http_request_detach_socket(
 							e->in_flight);
-				record_outcome(e, status);
+				record_outcome(e, status, retry_after_ms);
 				otlp_http_request_free(e->in_flight);
 				e->in_flight = NULL;
 				e->in_flight_count = 0;
