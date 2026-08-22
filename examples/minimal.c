@@ -15,6 +15,38 @@
 
 #include <stdio.h>
 
+/* ── Structured diagnostics events (v0.5.100) ─────────────────
+ * Two views of one model: this callback receives otlp_event_t
+ * (code, signal, counts, drop reason) — programmatic consumers
+ * tally here instead of parsing strings. The optional string
+ * logger (otlp_exporter_set_logger) receives the message DERIVED
+ * from the same event. */
+struct tally
+{
+	unsigned batches_sent;
+	unsigned items_dropped;
+};
+
+static void
+on_event(void *ctx, const otlp_event_t *ev)
+{
+	struct tally *t = ctx;
+
+	switch (ev->code)
+	{
+		case OTLP_EVT_BATCH_SENT:
+			t->batches_sent++;
+			break;
+		case OTLP_EVT_ITEMS_DROPPED:
+			/* ev->drop_reason says why (retries / HTTP /
+			 * queue-full); ev->signal which signal. */
+			t->items_dropped += (unsigned) ev->count;
+			break;
+		default:
+			break; /* RETRY_ARMED, QUEUE_FULL, ... */
+	}
+}
+
 int
 main(void)
 {
@@ -22,6 +54,7 @@ main(void)
 	otlp_exporter_t *exp;
 	otlp_tracer_t *tracer;
 	otlp_span_t *span;
+	struct tally tally = { 0, 0 };
 
 	/* ── Exporter ────────────────────────────────────────────────
 	 * Zero-initialized opts picks library defaults for endpoint
@@ -36,6 +69,7 @@ main(void)
 	}
 	/* null_transport: skips real HTTP — runs standalone. */
 	otlp_exporter_set_null_transport(exp, true);
+	otlp_exporter_set_event_logger(exp, on_event, &tally);
 
 	/* ── Tracer with sampler ──────────────────────────────────── */
 	tracer = otlp_tracer_create("demo-service", "demo", otlp_version());
@@ -142,5 +176,8 @@ main(void)
 
 	printf("otlp-c %s — demo emitted span + metric + log + context\n",
 		otlp_version());
+	printf("events: batches_sent=%u items_dropped=%u\n",
+		tally.batches_sent,
+		tally.items_dropped);
 	return 0;
 }
