@@ -4,6 +4,48 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.98] - 2026-08-22
+
+Zero-Release-warnings test suite + always-evaluated checks.
+
+### Fixed — Release builds verified almost nothing in the test suite
+
+CI's plain jobs build Release (NDEBUG), which compiles
+`assert(expr)` to nothing. The v0.5.82–95 lesson covered
+side-effecting calls inside asserts; the quieter face — plain
+value-asserts like `assert(st == OTLP_OK)` — meant Release runs
+of the unit tests checked almost nothing: 536 assertion sites
+across 12 test files were elided entirely, and the results they
+consumed triggered ~100 `-Wunused-but-set-variable` /
+`-Wunused-parameter` / `-Wunused-variable` warnings (masked in
+Debug, where asserts still evaluate).
+
+New `tests/test_util.h` provides `check_ok()` / `check_true()`:
+the expression is an ARGUMENT, so it executes in every
+configuration while `assert()` inside the helper keeps Debug
+diagnostics. All 536 sites converted; the full suite now
+verifies identically in Debug and Release, and the zero-warnings
+invariant holds in BOTH configurations. All previously elided
+Release assertions passed — no silent Release-only failure was
+lurking.
+
+### Fixed — hidden echo-worker lifetime bug the conversion exposed
+
+`check_ok(echo_server_join(...))` in exporter-echo replaced a
+`(void)`-ed join that had been timing out silently: the worker
+was started with `requests_to_serve = 16` for a ~4-request test,
+stayed blocked in accept(), and was still running when main
+returned — the exact stack-use-after-return hazard fixed for
+partial-success in v0.5.96, present here since the metrics/logs
+cases were added. Now `echo_server_stop()`d (listen-fd close →
+deterministic worker exit) with the join result checked.
+
+### Docs — CLAUDE.md/roadmap catch-up
+
+CLAUDE.md capability bullets for v0.5.95–97 (Retry-After was
+already noted); new test-writing rule pointing at the helpers;
+roadmap key-metrics line refreshed (138 TODOs, 43 tests).
+
 ## [0.5.97] - 2026-08-22
 
 Metrics wire-schema audit against opentelemetry-proto.

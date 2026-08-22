@@ -7,9 +7,10 @@
  *   - response body is captured intact
  */
 #if !defined(_POSIX_C_SOURCE)
-#  define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "test_util.h"
 #include "test_helper_echo.h"
 
 #include "../src/http_client.h"
@@ -72,7 +73,6 @@ int
 main(void)
 {
 	struct echo_server srv;
-	otlp_status_t st;
 	struct otlp_http_url url;
 	otlp_http_request_t *req = NULL;
 	const char *body = "hello world";
@@ -80,34 +80,31 @@ main(void)
 	size_t resp_len;
 	char url_str[128];
 
-	st = echo_server_start(&srv, echo_handler, 1);
-	assert(st == OTLP_OK);
+	check_ok(echo_server_start(&srv, echo_handler, 1));
 	snprintf(url_str,
 		sizeof(url_str),
 		"http://127.0.0.1:%u/v1/traces",
 		srv.port);
-	st = otlp_http_parse_url(url_str, &url);
-	assert(st == OTLP_OK);
+	check_ok(otlp_http_parse_url(url_str, &url));
 
-	st = otlp_http_request_start(&req,
+	check_ok(otlp_http_request_start(&req,
 		&url,
 		"otlp-c/test",
 		(const uint8_t *) body,
 		strlen(body),
-		0, 0);
-	assert(st == OTLP_OK);
+		0,
+		0));
 
-	st = drive_to_completion(req);
-	assert(st == OTLP_OK);
-	assert(otlp_http_request_state(req) == OTLP_HTTP_REQ_DONE);
-	assert(otlp_http_request_http_status(req) == 200);
+	check_ok(drive_to_completion(req));
+	check_true(otlp_http_request_state(req) == OTLP_HTTP_REQ_DONE);
+	check_true(otlp_http_request_http_status(req) == 200);
 
 	resp = otlp_http_request_body(req, &resp_len);
-	assert(resp_len == strlen(body));
-	assert(memcmp(resp, body, resp_len) == 0);
+	check_true(resp_len == strlen(body));
+	check_true(memcmp(resp, body, resp_len) == 0);
 
 	otlp_http_request_free(req);
-	(void) echo_server_join(&srv, 1 * 1000 * 1000);
+	check_ok(echo_server_join(&srv, 1 * 1000 * 1000));
 	printf("[http-echo] PASS — round-trip OK, body echoed\n");
 	return 0;
 }

@@ -10,6 +10,7 @@
  * batch dropped without retry.
  */
 #include <otlp-c/exporter.h>
+#include "test_util.h"
 #include <otlp-c/span.h>
 #include <otlp-c/status.h>
 #include <otlp-c/tracer.h>
@@ -89,17 +90,17 @@ main(void)
 	opts.backoff_max_ms = 100;
 
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_null_transport(exp, true);
 	otlp_exporter_set_null_transport_status_fn(
 		exp, retry_status_fn, &calls);
 	tracer = otlp_tracer_create("retry-test", "test", "0.1");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	span = otlp_tracer_start_span(tracer, "op");
-	assert(span != NULL);
+	check_true(span != NULL);
 	otlp_span_mark_end(span);
 	st = otlp_exporter_emit_move(exp, span);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	drive_until_settled(exp, 100);
 
@@ -113,12 +114,12 @@ main(void)
 		(unsigned long long) stats.dropped_err,
 		calls);
 
-	assert(stats.emitted == 1);
-	assert(stats.sent == 1);
-	assert(stats.http_5xx >= 1);
-	assert(stats.http_2xx >= 1);
-	assert(stats.dropped_err == 0);
-	assert(calls >= 2);
+	check_true(stats.emitted == 1);
+	check_true(stats.sent == 1);
+	check_true(stats.http_5xx >= 1);
+	check_true(stats.http_2xx >= 1);
+	check_true(stats.dropped_err == 0);
+	check_true(calls >= 2);
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_shutdown(exp);
@@ -135,17 +136,17 @@ main(void)
 	opts.backoff_max_ms = 100;
 
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_null_transport(exp, true);
 	otlp_exporter_set_null_transport_status_fn(
 		exp, not_found_status_fn, NULL);
 	tracer = otlp_tracer_create("perm-fail", "test", "0.1");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	span = otlp_tracer_start_span(tracer, "op");
-	assert(span != NULL);
+	check_true(span != NULL);
 	otlp_span_mark_end(span);
 	st = otlp_exporter_emit_move(exp, span);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	drive_until_settled(exp, 20);
 
@@ -157,10 +158,10 @@ main(void)
 		(unsigned long long) stats.http_4xx,
 		(unsigned long long) stats.dropped_err);
 
-	assert(stats.emitted == 1);
-	assert(stats.sent == 0);
-	assert(stats.http_4xx >= 1);
-	assert(stats.dropped_err == 1);
+	check_true(stats.emitted == 1);
+	check_true(stats.sent == 0);
+	check_true(stats.http_4xx >= 1);
+	check_true(stats.dropped_err == 1);
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_shutdown(exp);
@@ -179,17 +180,17 @@ main(void)
 
 	calls = 0;
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_null_transport(exp, true);
 	otlp_exporter_set_null_transport_status_fn(
 		exp, throttled_status_fn, &calls);
 	tracer = otlp_tracer_create("throttled", "test", "0.1");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	span = otlp_tracer_start_span(tracer, "op");
-	assert(span != NULL);
+	check_true(span != NULL);
 	otlp_span_mark_end(span);
 	st = otlp_exporter_emit_move(exp, span);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	drive_until_settled(exp, 40);
 
@@ -201,11 +202,11 @@ main(void)
 		(unsigned long long) stats.http_4xx,
 		(unsigned long long) stats.http_5xx);
 
-	assert(stats.emitted == 1);
-	assert(stats.sent == 1);
-	assert(stats.http_4xx >= 1);
-	assert(stats.http_5xx == 0);
-	assert(stats.dropped_err == 0);
+	check_true(stats.emitted == 1);
+	check_true(stats.sent == 1);
+	check_true(stats.http_4xx >= 1);
+	check_true(stats.http_5xx == 0);
+	check_true(stats.dropped_err == 0);
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_shutdown(exp);
@@ -224,17 +225,17 @@ main(void)
 	opts.backoff_max_ms = 1;
 
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_null_transport(exp, true);
 	otlp_exporter_set_null_transport_status_fn(
 		exp, always_500_status_fn, NULL);
 	tracer = otlp_tracer_create("shift-guard", "test", "0.1");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	span = otlp_tracer_start_span(tracer, "op");
-	assert(span != NULL);
+	check_true(span != NULL);
 	otlp_span_mark_end(span);
 	st = otlp_exporter_emit_move(exp, span);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	/* 100 retries at <= 1ms jittered delay: settle quickly. */
 	drive_until_settled(exp, 400);
@@ -246,9 +247,9 @@ main(void)
 		(unsigned long long) stats.sent,
 		(unsigned long long) stats.dropped_err);
 
-	assert(stats.emitted == 1);
-	assert(stats.sent == 0);
-	assert(stats.dropped_err == 1);
+	check_true(stats.emitted == 1);
+	check_true(stats.sent == 0);
+	check_true(stats.dropped_err == 1);
 
 	otlp_tracer_free(tracer);
 	otlp_exporter_shutdown(exp);

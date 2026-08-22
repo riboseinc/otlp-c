@@ -5,6 +5,7 @@
 // setter and the lazy attribute-array contract.
 
 #include "../../src/log_internal.h"
+#include "../test_util.h"
 
 #include <otlp-c/log.h>
 
@@ -25,7 +26,7 @@ test_log_struct_size(void)
 	/* 88 bytes at v0.5.75 (vec adds a capacity field). 256B is a
 	 * generous ceiling that still catches a return to the
 	 * inline-array layout. */
-	assert(otlp_log_struct_size() <= 256);
+	check_true(otlp_log_struct_size() <= 256);
 	printf("[unit-log] sizeof(otlp_log_record)=%zu bytes\n",
 		otlp_log_struct_size());
 	return 0;
@@ -37,7 +38,7 @@ test_log_create_free(void)
 	otlp_log_record_t *lr =
 		otlp_log_record_create(OTLP_SEVERITY_INFO, "hello");
 
-	assert(lr != NULL);
+	check_true(lr != NULL);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -50,10 +51,10 @@ test_log_no_attrs_lazy(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 99;
 
-	assert(lr != NULL);
+	check_true(lr != NULL);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs == NULL);
-	assert(n == 0);
+	check_true(attrs == NULL);
+	check_true(n == 0);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -66,13 +67,14 @@ test_log_attribute_string(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_string(lr, "db", "pg") == OTLP_OK);
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_string(lr, "db", "pg") ==
+		OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs != NULL && n == 1);
-	assert(strcmp(attrs[0].key, "db") == 0);
-	assert(attrs[0].type == OTLP_ATTR_STRING);
-	assert(strcmp(attrs[0].v.string_val, "pg") == 0);
+	check_true(attrs != NULL && n == 1);
+	check_true(strcmp(attrs[0].key, "db") == 0);
+	check_true(attrs[0].type == OTLP_ATTR_STRING);
+	check_true(strcmp(attrs[0].v.string_val, "pg") == 0);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -85,12 +87,13 @@ test_log_attribute_int(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_int(lr, "retry", 3) == OTLP_OK);
+	check_true(lr != NULL);
+	check_true(
+		otlp_log_record_set_attribute_int(lr, "retry", 3) == OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_INT64);
-	assert(attrs[0].v.int64_val == 3);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_INT64);
+	check_true(attrs[0].v.int64_val == 3);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -103,13 +106,13 @@ test_log_attribute_double(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_double(lr, "dur_s", 0.125) ==
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_double(lr, "dur_s", 0.125) ==
 		OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_DOUBLE);
-	assert(attrs[0].v.double_val == 0.125);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_DOUBLE);
+	check_true(attrs[0].v.double_val == 0.125);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -122,13 +125,13 @@ test_log_attribute_bool(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_bool(lr, "retrying", true) ==
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_bool(lr, "retrying", true) ==
 		OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_BOOL);
-	assert(attrs[0].v.bool_val == true);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_BOOL);
+	check_true(attrs[0].v.bool_val == true);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -142,14 +145,14 @@ test_log_attribute_bytes(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_bytes(lr, "frame", payload, 4) ==
-		OTLP_OK);
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_bytes(
+			   lr, "frame", payload, 4) == OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_BYTES);
-	assert(attrs[0].v.bytes_val.len == 4);
-	assert(attrs[0].v.bytes_val.data[3] == 0xff);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_BYTES);
+	check_true(attrs[0].v.bytes_val.len == 4);
+	check_true(attrs[0].v.bytes_val.data[3] == 0xff);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -162,14 +165,14 @@ test_log_attribute_upsert(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_int(lr, "k", 1) == OTLP_OK);
-	assert(otlp_log_record_set_attribute_string(lr, "k", "replaced") ==
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_int(lr, "k", 1) == OTLP_OK);
+	check_true(otlp_log_record_set_attribute_string(lr, "k", "replaced") ==
 		OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(n == 1);
-	assert(attrs[0].type == OTLP_ATTR_STRING);
-	assert(strcmp(attrs[0].v.string_val, "replaced") == 0);
+	check_true(n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_STRING);
+	check_true(strcmp(attrs[0].v.string_val, "replaced") == 0);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -191,19 +194,20 @@ test_log_attribute_array_kvlist(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_array(lr, "pcts", items, 2) ==
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_array(lr, "pcts", items, 2) ==
 		OTLP_OK);
-	assert(otlp_log_record_set_attribute_kvlist(lr, "cfg", kvs, 1) ==
+	check_true(otlp_log_record_set_attribute_kvlist(lr, "cfg", kvs, 1) ==
 		OTLP_OK);
 	attrs = otlp_log_get_attrs(lr, &n);
-	assert(n == 2);
-	assert(attrs[0].type == OTLP_ATTR_ARRAY);
-	assert(attrs[0].v.array_val->items[0].v.double_val == 0.25);
-	assert(strcmp(attrs[0].v.array_val->items[1].v.string_val, "p99") == 0);
-	assert(attrs[1].type == OTLP_ATTR_KVLIST);
-	assert(strcmp(attrs[1].v.kvlist_val->entries[0].value.v.string_val,
-		       "fast") == 0);
+	check_true(n == 2);
+	check_true(attrs[0].type == OTLP_ATTR_ARRAY);
+	check_true(attrs[0].v.array_val->items[0].v.double_val == 0.25);
+	check_true(strcmp(attrs[0].v.array_val->items[1].v.string_val, "p99") ==
+		0);
+	check_true(attrs[1].type == OTLP_ATTR_KVLIST);
+	check_true(strcmp(attrs[1].v.kvlist_val->entries[0].value.v.string_val,
+			   "fast") == 0);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -214,9 +218,9 @@ test_log_severity_text(void)
 	otlp_log_record_t *lr =
 		otlp_log_record_create(OTLP_SEVERITY_INFO, "hello");
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_severity_text(lr, "INFO") == OTLP_OK);
-	assert(strcmp(otlp_log_get_severity_text(lr), "INFO") == 0);
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_severity_text(lr, "INFO") == OTLP_OK);
+	check_true(strcmp(otlp_log_get_severity_text(lr), "INFO") == 0);
 	otlp_log_record_free(lr);
 	return 0;
 }
@@ -231,24 +235,25 @@ test_log_clone_attrs(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(lr != NULL);
-	assert(otlp_log_record_set_attribute_string(lr, "svc", "api") ==
+	check_true(lr != NULL);
+	check_true(otlp_log_record_set_attribute_string(lr, "svc", "api") ==
 		OTLP_OK);
-	assert(otlp_log_record_set_attribute_int(lr, "attempt", 2) == OTLP_OK);
-	assert(otlp_log_record_set_attribute_bytes(lr, "frame", frame, 2) ==
+	check_true(
+		otlp_log_record_set_attribute_int(lr, "attempt", 2) == OTLP_OK);
+	check_true(otlp_log_record_set_attribute_bytes(lr, "frame", frame, 2) ==
 		OTLP_OK);
 	c = otlp_log_record_clone(lr);
-	assert(c != NULL);
+	check_true(c != NULL);
 	attrs = otlp_log_get_attrs(c, &n);
-	assert(attrs != NULL && n == 3);
-	assert(strcmp(attrs[0].key, "svc") == 0);
-	assert(strcmp(attrs[0].v.string_val, "api") == 0);
-	assert(attrs[1].v.int64_val == 2);
-	assert(attrs[2].type == OTLP_ATTR_BYTES);
-	assert(attrs[2].v.bytes_val.len == 2);
-	assert(attrs[2].v.bytes_val.data[1] == 0x0b);
-	assert(attrs[2].v.bytes_val.data != frame); /* deep copy */
-	assert(strcmp(otlp_log_get_body(c), "hello") == 0);
+	check_true(attrs != NULL && n == 3);
+	check_true(strcmp(attrs[0].key, "svc") == 0);
+	check_true(strcmp(attrs[0].v.string_val, "api") == 0);
+	check_true(attrs[1].v.int64_val == 2);
+	check_true(attrs[2].type == OTLP_ATTR_BYTES);
+	check_true(attrs[2].v.bytes_val.len == 2);
+	check_true(attrs[2].v.bytes_val.data[1] == 0x0b);
+	check_true(attrs[2].v.bytes_val.data != frame); /* deep copy */
+	check_true(strcmp(otlp_log_get_body(c), "hello") == 0);
 	otlp_log_record_free(c);
 	otlp_log_record_free(lr);
 	return 0;

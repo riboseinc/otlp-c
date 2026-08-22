@@ -5,6 +5,7 @@
 // the lazy attribute-array contract.
 
 #include "../../src/metric_internal.h"
+#include "../test_util.h"
 
 #include <otlp-c/metric.h>
 
@@ -25,7 +26,7 @@ test_metric_struct_size(void)
 	/* 232 bytes at v0.5.75 (vec adds a capacity field). 512B is a
 	 * generous ceiling that still catches a return to the
 	 * inline-array layout. */
-	assert(otlp_metric_struct_size() <= 512);
+	check_true(otlp_metric_struct_size() <= 512);
 	printf("[unit-metric] sizeof(otlp_metric)=%zu bytes\n",
 		otlp_metric_struct_size());
 	return 0;
@@ -37,7 +38,7 @@ test_metric_create_free(void)
 	otlp_metric_t *m = otlp_metric_create(
 		OTLP_METRIC_COUNTER, "requests", "1", "doc", NULL, 0);
 
-	assert(m != NULL);
+	check_true(m != NULL);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -50,10 +51,10 @@ test_metric_no_attrs_lazy(void)
 	size_t n = 99;
 	const struct otlp_attribute *attrs;
 
-	assert(m != NULL);
+	check_true(m != NULL);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(attrs == NULL);
-	assert(n == 0);
+	check_true(attrs == NULL);
+	check_true(n == 0);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -66,13 +67,14 @@ test_metric_attribute_string(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_string(m, "host", "a1") == OTLP_OK);
+	check_true(m != NULL);
+	check_true(
+		otlp_metric_set_attribute_string(m, "host", "a1") == OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(attrs != NULL && n == 1);
-	assert(strcmp(attrs[0].key, "host") == 0);
-	assert(attrs[0].type == OTLP_ATTR_STRING);
-	assert(strcmp(attrs[0].v.string_val, "a1") == 0);
+	check_true(attrs != NULL && n == 1);
+	check_true(strcmp(attrs[0].key, "host") == 0);
+	check_true(attrs[0].type == OTLP_ATTR_STRING);
+	check_true(strcmp(attrs[0].v.string_val, "a1") == 0);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -85,12 +87,12 @@ test_metric_attribute_int(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_int(m, "shard", 7) == OTLP_OK);
+	check_true(m != NULL);
+	check_true(otlp_metric_set_attribute_int(m, "shard", 7) == OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_INT64);
-	assert(attrs[0].v.int64_val == 7);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_INT64);
+	check_true(attrs[0].v.int64_val == 7);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -103,12 +105,13 @@ test_metric_attribute_bool(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_bool(m, "canary", true) == OTLP_OK);
+	check_true(m != NULL);
+	check_true(
+		otlp_metric_set_attribute_bool(m, "canary", true) == OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_BOOL);
-	assert(attrs[0].v.bool_val == true);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_BOOL);
+	check_true(attrs[0].v.bool_val == true);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -122,15 +125,15 @@ test_metric_attribute_bytes(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_bytes(m, "digest", payload, 3) ==
+	check_true(m != NULL);
+	check_true(otlp_metric_set_attribute_bytes(m, "digest", payload, 3) ==
 		OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(attrs != NULL && n == 1);
-	assert(attrs[0].type == OTLP_ATTR_BYTES);
-	assert(attrs[0].v.bytes_val.len == 3);
-	assert(attrs[0].v.bytes_val.data[0] == 0xde);
-	assert(attrs[0].v.bytes_val.data[2] == 0x42);
+	check_true(attrs != NULL && n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_BYTES);
+	check_true(attrs[0].v.bytes_val.len == 3);
+	check_true(attrs[0].v.bytes_val.data[0] == 0xde);
+	check_true(attrs[0].v.bytes_val.data[2] == 0x42);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -143,13 +146,14 @@ test_metric_attribute_upsert(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_int(m, "k", 1) == OTLP_OK);
-	assert(otlp_metric_set_attribute_string(m, "k", "replaced") == OTLP_OK);
+	check_true(m != NULL);
+	check_true(otlp_metric_set_attribute_int(m, "k", 1) == OTLP_OK);
+	check_true(otlp_metric_set_attribute_string(m, "k", "replaced") ==
+		OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(n == 1);
-	assert(attrs[0].type == OTLP_ATTR_STRING);
-	assert(strcmp(attrs[0].v.string_val, "replaced") == 0);
+	check_true(n == 1);
+	check_true(attrs[0].type == OTLP_ATTR_STRING);
+	check_true(strcmp(attrs[0].v.string_val, "replaced") == 0);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -171,17 +175,18 @@ test_metric_attribute_array_kvlist(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_array(m, "shards", items, 2) ==
+	check_true(m != NULL);
+	check_true(otlp_metric_set_attribute_array(m, "shards", items, 2) ==
 		OTLP_OK);
-	assert(otlp_metric_set_attribute_kvlist(m, "meta", kvs, 1) == OTLP_OK);
+	check_true(
+		otlp_metric_set_attribute_kvlist(m, "meta", kvs, 1) == OTLP_OK);
 	attrs = otlp_metric_get_attrs(m, &n);
-	assert(n == 2);
-	assert(attrs[0].type == OTLP_ATTR_ARRAY);
-	assert(attrs[0].v.array_val->n == 2);
-	assert(attrs[0].v.array_val->items[0].v.int64_val == 5);
-	assert(attrs[1].type == OTLP_ATTR_KVLIST);
-	assert(attrs[1].v.kvlist_val->entries[0].value.v.bool_val == false);
+	check_true(n == 2);
+	check_true(attrs[0].type == OTLP_ATTR_ARRAY);
+	check_true(attrs[0].v.array_val->n == 2);
+	check_true(attrs[0].v.array_val->items[0].v.int64_val == 5);
+	check_true(attrs[1].type == OTLP_ATTR_KVLIST);
+	check_true(attrs[1].v.kvlist_val->entries[0].value.v.bool_val == false);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -192,10 +197,10 @@ test_metric_record_counter(void)
 	otlp_metric_t *m = otlp_metric_create(
 		OTLP_METRIC_COUNTER, "hits", NULL, NULL, NULL, 0);
 
-	assert(m != NULL);
-	assert(otlp_metric_record(m, 1.0) == OTLP_OK);
-	assert(otlp_metric_record(m, 2.0) == OTLP_OK);
-	assert(otlp_metric_get_value(m) == 3.0);
+	check_true(m != NULL);
+	check_true(otlp_metric_record(m, 1.0) == OTLP_OK);
+	check_true(otlp_metric_record(m, 2.0) == OTLP_OK);
+	check_true(otlp_metric_get_value(m) == 3.0);
 	otlp_metric_free(m);
 	return 0;
 }
@@ -210,23 +215,24 @@ test_metric_clone_attrs(void)
 	const struct otlp_attribute *attrs;
 	size_t n = 0;
 
-	assert(m != NULL);
-	assert(otlp_metric_set_attribute_string(m, "region", "eu") == OTLP_OK);
-	assert(otlp_metric_set_attribute_int(m, "shard", 3) == OTLP_OK);
-	assert(otlp_metric_set_attribute_bytes(m, "digest", digest, 2) ==
+	check_true(m != NULL);
+	check_true(
+		otlp_metric_set_attribute_string(m, "region", "eu") == OTLP_OK);
+	check_true(otlp_metric_set_attribute_int(m, "shard", 3) == OTLP_OK);
+	check_true(otlp_metric_set_attribute_bytes(m, "digest", digest, 2) ==
 		OTLP_OK);
 	c = otlp_metric_clone(m);
-	assert(c != NULL);
+	check_true(c != NULL);
 	attrs = otlp_metric_get_attrs(c, &n);
-	assert(attrs != NULL && n == 3);
-	assert(strcmp(attrs[0].key, "region") == 0);
-	assert(strcmp(attrs[0].v.string_val, "eu") == 0);
-	assert(attrs[1].v.int64_val == 3);
-	assert(attrs[2].type == OTLP_ATTR_BYTES);
-	assert(attrs[2].v.bytes_val.len == 2);
-	assert(attrs[2].v.bytes_val.data[0] == 0xaa);
-	assert(attrs[2].v.bytes_val.data != digest); /* deep copy */
-	assert(otlp_metric_get_value(c) == otlp_metric_get_value(m));
+	check_true(attrs != NULL && n == 3);
+	check_true(strcmp(attrs[0].key, "region") == 0);
+	check_true(strcmp(attrs[0].v.string_val, "eu") == 0);
+	check_true(attrs[1].v.int64_val == 3);
+	check_true(attrs[2].type == OTLP_ATTR_BYTES);
+	check_true(attrs[2].v.bytes_val.len == 2);
+	check_true(attrs[2].v.bytes_val.data[0] == 0xaa);
+	check_true(attrs[2].v.bytes_val.data != digest); /* deep copy */
+	check_true(otlp_metric_get_value(c) == otlp_metric_get_value(m));
 	otlp_metric_free(c);
 	otlp_metric_free(m);
 	return 0;

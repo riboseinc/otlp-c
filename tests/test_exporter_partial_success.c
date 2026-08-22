@@ -23,6 +23,7 @@
 #endif
 
 #include "test_helper_echo.h"
+#include "test_util.h"
 
 #include <otlp-c/exporter.h>
 #include <otlp-c/log.h>
@@ -73,7 +74,7 @@ raw_200_handler(const uint8_t *req_body,
 		"Connection: close\r\n"
 		"\r\n",
 		g_body_len);
-	assert(n > 0 && (size_t) n + g_body_len <= resp_cap);
+	check_true(n > 0 && (size_t) n + g_body_len <= resp_cap);
 	if (g_body_len > 0) /* NULL + 0 memcpy is UB under UBSAN */
 		memcpy(resp_buf + n, g_body, g_body_len);
 	*resp_len = (size_t) n + g_body_len;
@@ -126,7 +127,7 @@ build_response_body(uint8_t *out, size_t out_cap, int64_t r, const char *msg)
 	uint8_t sub[128];
 	size_t sub_len = build_ps(sub, r, msg);
 
-	assert(sub_len < 128 && sub_len + 2 <= out_cap);
+	check_true(sub_len < 128 && sub_len + 2 <= out_cap);
 	out[0] = 0x2a; /* field 5, LEN */
 	out[1] = (uint8_t) sub_len;
 	memcpy(out + 2, sub, sub_len);
@@ -160,7 +161,7 @@ run_span_scenario(const uint8_t *body,
 	 * exit deterministically — a lingering worker touching `srv`
 	 * after this frame returns is stack-use-after-return. */
 	st = echo_server_start(&srv, raw_200_handler, 1);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	snprintf(endpoint,
 		sizeof(endpoint),
 		"http://127.0.0.1:%u/v1/traces",
@@ -172,30 +173,30 @@ run_span_scenario(const uint8_t *body,
 	opts.batch_size = n_spans;
 	opts.batch_ms = 1000;
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_logger(exp, capture_log, NULL);
 
 	tracer = otlp_tracer_create("svc", "test", "1.0");
-	assert(tracer != NULL);
+	check_true(tracer != NULL);
 	for (size_t i = 0; i < n_spans; i++)
 	{
 		otlp_span_t *s = otlp_tracer_start_span(tracer, "op");
 
-		assert(s != NULL);
+		check_true(s != NULL);
 		otlp_span_mark_end(s);
 		st = otlp_exporter_emit_move(exp, s);
-		assert(st == OTLP_OK);
+		check_true(st == OTLP_OK);
 	}
 
 	/* flush() drives the pipeline to quiesce (bounded by
 	 * flush_timeout_ms). */
 	st = otlp_exporter_flush(exp);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	/* Checked, not assumed: the worker must have exited before
 	 * this frame goes away. */
 	st = echo_server_join(&srv, 2 * 1000 * 1000);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	echo_server_stop(&srv);
 	otlp_exporter_get_stats(exp, &stats);
 
@@ -235,7 +236,7 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	g_last_msg[0] = '\0';
 
 	st = echo_server_start(&srv, raw_200_handler, 1);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	snprintf(endpoint,
 		sizeof(endpoint),
 		"http://127.0.0.1:%u/v1/logs",
@@ -247,7 +248,7 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 	opts.batch_size = 2;
 	opts.batch_ms = 1000;
 	exp = otlp_exporter_create(&opts);
-	assert(exp != NULL);
+	check_true(exp != NULL);
 	otlp_exporter_set_logger(exp, capture_log, NULL);
 
 	for (int i = 0; i < 2; i++)
@@ -255,17 +256,17 @@ run_log_scenario(const uint8_t *body, size_t body_len)
 		otlp_log_record_t *lr = otlp_log_record_create(
 			OTLP_SEVERITY_INFO, "partial success test");
 
-		assert(lr != NULL);
+		check_true(lr != NULL);
 		st = otlp_exporter_emit_log_move(exp, lr);
-		assert(st == OTLP_OK);
+		check_true(st == OTLP_OK);
 	}
 	st = otlp_exporter_flush(exp);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 
 	/* Checked, not assumed: the worker must have exited before
 	 * this frame goes away. */
 	st = echo_server_join(&srv, 2 * 1000 * 1000);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	echo_server_stop(&srv);
 	otlp_exporter_get_stats(exp, &stats);
 

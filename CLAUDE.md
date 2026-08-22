@@ -139,7 +139,7 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.86). The library implements:
+All phases are complete (v0.5.97). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
   (every OTLP message has its own field-spec entry — v0.5.48/49/61
   fixed 10 field-number/wire-type bugs found by cross-checking
@@ -199,6 +199,16 @@ All phases are complete (v0.5.86). The library implements:
   surfaced via WARN diagnostic + per-signal rejected_* stats.
   First library wire-format DECODER (`src/protobuf_decode.c`,
   schema-table-driven; bounds-checked, fails closed)
+- **Wire-schema verified against opentelemetry-proto** (v0.5.97):
+  field numbers audited against upstream (fixed HDP min/max 10/11
+  → 11/12); `tests/unit/test_unit_wire_numbers.c` pins encoded
+  bytes AND schema tables against upstream literals — never the
+  schema's own numbers (self-referential checks can't catch
+  schema drift)
+- **Always-evaluated test checks** (v0.5.98): `tests/test_util.h`
+  `check_ok()`/`check_true()` take the expression as an argument,
+  so it executes under NDEBUG too — 536 value-asserts that were
+  elided in Release CI now verify in both configurations
 - **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
   growing arena pointers are moved, never libc-realloc'd
 
@@ -224,6 +234,13 @@ Test-writing rules (paid-for lessons):
   Release/NDEBUG, which elides the expression entirely
   (v0.5.82–84: pthread_create, bind/listen/getsockname, and
   parse_url all vanished under Release). Explicit rc checks.
+- **Use `tests/test_util.h` `check_ok()`/`check_true()` for every
+  result checked once** (v0.5.98): passing the expression as an
+  argument means it ALWAYS executes — plain `assert(st == OTLP_OK)`
+  is elided under Release, making the check (and, when it was the
+  only use of the variable, a zero-warning build) silently vanish.
+  536 such asserts were converted in v0.5.98; before that, Release
+  CI verified almost nothing in the unit tests.
 - Verify in BOTH Debug and Release locally
   (`cmake -B build-rel -DCMAKE_BUILD_TYPE=Release`); Release also
   spins drive loops ~100× faster — bound timeout-waiting loops by

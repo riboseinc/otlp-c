@@ -20,6 +20,7 @@
 // result feeds a flag; asserts only inspect flags.
 
 #include "otlp_messages.h"
+#include "../test_util.h"
 #include "otlp_schema.h"
 #include "protobuf_decode.h"
 #include "protobuf_encode.h"
@@ -131,24 +132,24 @@ test_histogram_wire_numbers(void)
 
 	m = otlp_metric_create(
 		OTLP_METRIC_HISTOGRAM, "latency", "ms", "doc", bounds, 2);
-	assert(m != NULL);
+	check_true(m != NULL);
 	st = otlp_metric_record(m, 5.0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	st = otlp_metric_record(m, 15.0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	st = otlp_metric_record(m, 15.0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	st = otlp_metric_record(m, 25.0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	metrics[0] = m;
 	st = otlp_encode_export_metrics_service_request(
 		&body, "wire-svc", NULL, 0, NULL, NULL, metrics, 1);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	otlp_metric_free(m);
 
 	found = find_metric_data_point(
 		body.data, body.len, 9 /* histogram */, &dp, &dp_len);
-	assert(found);
+	check_true(found);
 
 	otlp_pb_reader_init(&r, dp, dp_len);
 	for (;;)
@@ -158,7 +159,8 @@ test_histogram_wire_numbers(void)
 
 		if (!otlp_pb_read_key(&r, &field, &wt))
 		{
-			assert(r.pos >= r.len); /* clean EOF, not malformed */
+			check_true(
+				r.pos >= r.len); /* clean EOF, not malformed */
 			break;
 		}
 		switch (field)
@@ -275,18 +277,18 @@ test_histogram_wire_numbers(void)
 			break;
 	}
 
-	assert(ok);
-	assert(have_count);
-	assert(count_v == 4);
-	assert(have_sum);
-	assert(sum_bits == bits_of(60.0));
-	assert(have_buckets);
-	assert(have_bounds);
-	assert(have_min);
-	assert(min_bits == bits_of(5.0));
-	assert(have_max);
-	assert(max_bits == bits_of(25.0));
-	assert(!have_field_10);
+	check_true(ok);
+	check_true(have_count);
+	check_true(count_v == 4);
+	check_true(have_sum);
+	check_true(sum_bits == bits_of(60.0));
+	check_true(have_buckets);
+	check_true(have_bounds);
+	check_true(have_min);
+	check_true(min_bits == bits_of(5.0));
+	check_true(have_max);
+	check_true(max_bits == bits_of(25.0));
+	check_true(!have_field_10);
 
 	otlp_pb_buf_free(&body);
 	printf("[unit-wire] histogram min@11 max@12 count@4 sum@5 "
@@ -315,13 +317,13 @@ test_exp_histogram_wire_numbers(void)
 
 	m = otlp_metric_create(
 		OTLP_METRIC_EXP_HISTOGRAM, "eh", "1", "doc", NULL, 0);
-	assert(m != NULL);
+	check_true(m != NULL);
 	st = otlp_metric_set_exp_histogram(m, -2, 4, pos_counts, 2, 0, NULL, 0);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	metrics[0] = m;
 	st = otlp_encode_export_metrics_service_request(
 		&body, "wire-svc", NULL, 0, NULL, NULL, metrics, 1);
-	assert(st == OTLP_OK);
+	check_true(st == OTLP_OK);
 	otlp_metric_free(m);
 
 	found = find_metric_data_point(body.data,
@@ -329,7 +331,7 @@ test_exp_histogram_wire_numbers(void)
 		10 /* exponential_histogram */,
 		&dp,
 		&dp_len);
-	assert(found);
+	check_true(found);
 
 	otlp_pb_reader_init(&r, dp, dp_len);
 	for (;;)
@@ -339,7 +341,7 @@ test_exp_histogram_wire_numbers(void)
 
 		if (!otlp_pb_read_key(&r, &field, &wt))
 		{
-			assert(r.pos >= r.len);
+			check_true(r.pos >= r.len);
 			break;
 		}
 		switch (field)
@@ -374,7 +376,7 @@ test_exp_histogram_wire_numbers(void)
 
 					if (!otlp_pb_read_key(&br, &f2, &wt2))
 					{
-						assert(br.pos >= br.len);
+						check_true(br.pos >= br.len);
 						break;
 					}
 					if (f2 == 1) /* offset, sint32 zigzag */
@@ -445,10 +447,10 @@ test_exp_histogram_wire_numbers(void)
 			break;
 	}
 
-	assert(ok);
-	assert(have_scale);
-	assert(scale_v == 3); /* zigzag(-2) */
-	assert(have_positive);
+	check_true(ok);
+	check_true(have_scale);
+	check_true(scale_v == 3); /* zigzag(-2) */
+	check_true(have_positive);
 
 	otlp_pb_buf_free(&body);
 	printf("[unit-wire] exp-histogram scale@6 buckets@8 "
@@ -463,49 +465,50 @@ test_exp_histogram_wire_numbers(void)
 static int
 test_schema_pins_upstream(void)
 {
-	assert(OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number == 2);
-	assert(OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number == 3);
-	assert(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].number == 4);
-	assert(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].wire_type ==
+	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number == 2);
+	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number == 3);
+	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].number == 4);
+	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].wire_type ==
 		OTLP_PB_WIRE_FIXED64);
-	assert(OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number == 7);
+	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number == 7);
 
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_COUNT].number == 4);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_SUM].number == 5);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_BUCKET_COUNTS].number == 6);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_EXPLICIT_BOUNDS].number == 7);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_ATTRIBUTES].number == 9);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].number == 11);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].wire_type ==
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_COUNT].number == 4);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_SUM].number == 5);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_BUCKET_COUNTS].number == 6);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_EXPLICIT_BOUNDS].number == 7);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_ATTRIBUTES].number == 9);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].number == 11);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].wire_type ==
 		OTLP_PB_WIRE_FIXED64);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number == 12);
-	assert(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].wire_type ==
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number == 12);
+	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].wire_type ==
 		OTLP_PB_WIRE_FIXED64);
 
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ATTRIBUTES].number == 1);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].number == 6);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].wire_type ==
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ATTRIBUTES].number == 1);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].number == 6);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].wire_type ==
 		OTLP_PB_WIRE_VARINT);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ZERO_COUNT].number == 7);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_POSITIVE].number == 8);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_NEGATIVE].number == 9);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ZERO_COUNT].number == 7);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_POSITIVE].number == 8);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_NEGATIVE].number == 9);
 	/* Upstream: uint32 flags = 10 — varint, NOT fixed32. */
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].number == 10);
-	assert(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].wire_type ==
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].number == 10);
+	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].wire_type ==
 		OTLP_PB_WIRE_VARINT);
 
-	assert(OTLP_EHB_FIELDS[OTLP_EHB_FI_OFFSET].number == 1);
-	assert(OTLP_EHB_FIELDS[OTLP_EHB_FI_BUCKET_COUNTS].number == 2);
+	check_true(OTLP_EHB_FIELDS[OTLP_EHB_FI_OFFSET].number == 1);
+	check_true(OTLP_EHB_FIELDS[OTLP_EHB_FI_BUCKET_COUNTS].number == 2);
 
-	assert(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_GAUGE].number == 5);
-	assert(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_SUM].number == 7);
-	assert(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_HISTOGRAM].number == 9);
-	assert(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_EXP_HISTOGRAM].number == 10);
+	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_GAUGE].number == 5);
+	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_SUM].number == 7);
+	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_HISTOGRAM].number == 9);
+	check_true(
+		OTLP_METRIC_FIELDS[OTLP_METRIC_FI_EXP_HISTOGRAM].number == 10);
 
 	/* LogRecord flags IS fixed32 upstream (fixed32 flags = 8) —
 	 * pinned so nobody "harmonizes" it with EHDP's varint flags. */
-	assert(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].number == 8);
-	assert(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].wire_type ==
+	check_true(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].number == 8);
+	check_true(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].wire_type ==
 		OTLP_PB_WIRE_FIXED32);
 
 	printf("[unit-wire] schema tables match upstream literals\n");
