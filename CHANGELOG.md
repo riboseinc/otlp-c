@@ -37,8 +37,22 @@ was started with `requests_to_serve = 16` for a ~4-request test,
 stayed blocked in accept(), and was still running when main
 returned — the exact stack-use-after-return hazard fixed for
 partial-success in v0.5.96, present here since the metrics/logs
-cases were added. Now `echo_server_stop()`d (listen-fd close →
-deterministic worker exit) with the join result checked.
+cases were added. Now `echo_server_stop()`d with the join result
+checked.
+
+Stopping the worker then exposed a second, latent bug CI's
+TSAN job caught immediately: `echo_server_stop()` and the
+worker's exit path both closed/wrote the plain-int `sock_fd` —
+a data race (and potential double-close) that existed since the
+helper was written; it was never triggered because every prior
+caller stopped only already-exited workers. The helper is
+rewritten: `sock_fd` is atomic with the worker as the single
+closer, `stop()` only sets an atomic `stopping` flag and wakes
+accept() with a self-connect (the portable wake — neither
+shutdown() nor close() on a listening socket reliably unblocks
+accept() on macOS; the old listen-fd-close mechanism never
+actually worked there). Local TSAN now runs the full suite
+clean.
 
 ### Docs — CLAUDE.md/roadmap catch-up
 

@@ -49,13 +49,17 @@ echo_server_start(struct echo_server *s,
 	pthread_t tid;
 	struct echo_thread_arg *a;
 
+	int listen_fd;
+
 	memset(s, 0, sizeof(*s));
-	s->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (s->sock_fd < 0)
+	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+	otlp_atomic_store_int(
+		&s->sock_fd, listen_fd, OTLP_MEMORY_ORDER_RELAXED);
+	if (listen_fd < 0)
 		return OTLP_ERR_NETWORK;
 
 	int yes = 1;
-	(void) setsockopt(s->sock_fd,
+	(void) setsockopt(listen_fd,
 		SOL_SOCKET,
 		SO_REUSEADDR,
 		(const char *) &yes,
@@ -65,11 +69,11 @@ echo_server_start(struct echo_server *s,
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	addr.sin_port = 0; /* kernel-chosen */
-	if (bind(s->sock_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
+	if (bind(listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
 		goto fail;
-	if (listen(s->sock_fd, 8) < 0)
+	if (listen(listen_fd, 8) < 0)
 		goto fail;
-	if (getsockname(s->sock_fd, (struct sockaddr *) &addr, &alen) < 0)
+	if (getsockname(listen_fd, (struct sockaddr *) &addr, &alen) < 0)
 		goto fail;
 	s->port = ntohs(addr.sin_port);
 
@@ -91,13 +95,14 @@ echo_server_start(struct echo_server *s,
 	pthread_detach(tid);
 	/* RELEASE so all the setup above is visible to whichever thread
 	 * observes running == 1 via an ACQUIRE load. */
+	otlp_atomic_store_int(&s->stopping, 0, OTLP_MEMORY_ORDER_RELAXED);
 	otlp_atomic_store_int(&s->running, 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 
 fail:
-	if (s->sock_fd >= 0)
-		close(s->sock_fd);
-	s->sock_fd = -1;
+	if (listen_fd >= 0)
+		close(listen_fd);
+	otlp_atomic_store_int(&s->sock_fd, -1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_ERR_NETWORK;
 }
 
@@ -135,16 +140,28 @@ echo_server_join(struct echo_server *s, uint64_t timeout_us)
 void
 echo_server_stop(struct echo_server *s)
 {
-	if (!s || s->sock_fd < 0)
+	struct sockaddr_in addr;
+	int wake_fd;
+
+	if (!s)
 		return;
-	/* Closing the listen fd makes the worker thread's accept() fail
-	 * with EBADF/EINVAL; it then exits its loop. The thread is
-	 * detached, so no join needed. */
-	shutdown(s->sock_fd, SHUT_RDWR);
-	close(s->sock_fd);
-	s->sock_fd = -1;
-	/* _stop does not flip running; the worker does that on its way out.
-	 * Callers waiting via _join will observe the worker's release store. */
+	otlp_atomic_store_int(&s->stopping, 1, OTLP_MEMORY_ORDER_RELEASE);
+	/* Wake a worker blocked in accept() with a self-connect — the
+	 * only portable wake: neither shutdown() nor close() on a
+	 * listening socket reliably unblocks accept() on macOS. The
+	 * worker sees `stopping` around accept() and exits, closing
+	 * the listen fd itself (single closer). If the worker already
+	 * exited by request count, this connect just fails — ignored.
+	 * _stop never touches sock_fd, so no fd race is possible. */
+	wake_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (wake_fd < 0)
+		return;
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_port = htons((uint16_t) s->port);
+	(void) connect(wake_fd, (struct sockaddr *) &addr, sizeof(addr));
+	close(wake_fd);
 }
 
 /* ── Internal: parse + serve one request ──────────────────────── */
@@ -179,8 +196,7 @@ parse_content_length(const uint8_t *req, size_t hdr_end)
 				cl++;
 			while (*cl >= '0' && *cl <= '9')
 			{
-				body_len =
-					body_len * 10u + (size_t) (*cl - '0');
+				body_len = body_len * 10u + (size_t)(*cl - '0');
 				cl++;
 			}
 			return body_len;
@@ -268,13 +284,23 @@ echo_thread_main(void *arg)
 
 	for (;;)
 	{
-		int conn_fd = accept(s->sock_fd, NULL, NULL);
+		int conn_fd;
 
+		if (otlp_atomic_load_int(
+			    &s->stopping, OTLP_MEMORY_ORDER_ACQUIRE))
+			break;
+		conn_fd = accept(s->sock_fd, NULL, NULL);
 		if (conn_fd < 0)
 		{
 			if (errno == EINTR)
 				continue;
-			break; /* socket closed by _stop, or fatal */
+			break; /* fatal */
+		}
+		if (otlp_atomic_load_int(
+			    &s->stopping, OTLP_MEMORY_ORDER_ACQUIRE))
+		{
+			close(conn_fd);
+			break; /* woken by _stop's self-connect */
 		}
 		serve_one(conn_fd, s->handler);
 		close(conn_fd);
@@ -290,9 +316,14 @@ echo_thread_main(void *arg)
 				s->requests_to_serve)
 			break;
 	}
-	if (s->sock_fd >= 0)
-		close(s->sock_fd);
-	s->sock_fd = -1;
+	{
+		int fd = otlp_atomic_load_int(
+			&s->sock_fd, OTLP_MEMORY_ORDER_ACQUIRE);
+
+		if (fd >= 0)
+			close(fd);
+	}
+	otlp_atomic_store_int(&s->sock_fd, -1, OTLP_MEMORY_ORDER_RELEASE);
 	/* RELEASE store: every request-count increment above is visible to
 	 * any thread that observes running == 0 via ACQUIRE load. */
 	otlp_atomic_store_int(&s->running, 0, OTLP_MEMORY_ORDER_RELEASE);
