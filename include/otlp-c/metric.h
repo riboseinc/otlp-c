@@ -99,7 +99,10 @@ extern "C"
 
 	/* Set an attribute on the current data point (same semantics as
 	 * otlp_span_set_attribute_*: a map — last write wins, type may
-	 * change; max 128 distinct keys). */
+	 * change; max 128 distinct keys).
+	 * String keys and string values must be valid UTF-8 (the
+	 * proto3 string contract); invalid input returns
+	 * OTLP_ERR_UTF8. bytes values are exempt. */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_metric_set_attribute_string(otlp_metric_t *m,
 		const char *key,

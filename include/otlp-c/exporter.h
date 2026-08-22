@@ -442,13 +442,23 @@ extern "C"
 	 *
 	 * For high-volume metric streams, prefer batching. This API
 	 * is for low-frequency metric export (e.g., gauges sampled
-	 * periodically, counters flushed at shutdown). */
+	 * periodically, counters flushed at shutdown).
+	 *
+	 * Thread-safety: same as flush() — call from the exporter's
+	 * owner thread.
+	 *
+	 * Returns:
+	 *   OTLP_OK on a 2xx response.
+	 *   OTLP_ERR_NULL if exp or metric is NULL.
+	 *   OTLP_ERR_TIMEOUT if flush_timeout_ms elapsed first.
+	 *   OTLP_ERR_NETWORK on transport failure after retries. */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_exporter_flush_metric(otlp_exporter_t *exp,
 		const otlp_metric_t *metric);
 
 	/* Synchronously encode and POST a single log record to the OTLP
-	 * collector at /v1/logs. Same semantics as flush_metric. */
+	 * collector at /v1/logs. Same semantics and return codes as
+	 * flush_metric. */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_exporter_flush_log(otlp_exporter_t *exp,
 		const otlp_log_record_t *log);

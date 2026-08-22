@@ -4,6 +4,40 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.104] - 2026-08-23
+
+Public API audit + 1.0-readiness assessment.
+
+### Added — Path-to-1.0 section in the roadmap
+
+The stabilization criteria are now explicit: surface audited,
+wire conformance proven (pins + goldens), boundary validation
+complete (injection/overflow/UTF-8/malformed responses), no open
+P1/P2 items, one additive-only minor cycle. TLS, gRPC, and
+compression are recorded as deliberate 1.x exclusions (the
+zero-non-libc-dependency invariant), with a 2.x optional-deps
+model as their path.
+
+### Fixed — audit remainder on the public surface
+
+All 124 exported functions across 10 headers were audited
+(docstring, return codes, ownership, thread-safety). The surface
+was largely in shape from v0.5.94/100/103; the remainder:
+`flush_metric`/`flush_log` return codes + thread-safety (they
+block the owner thread; TIMEOUT/NETWORK outcomes documented),
+NULL-on-OOM for the sampler constructors, and the UTF-8 contract
+noted on the span/metric/log attribute conventions (it was
+documented only at the exporter level).
+
+### Performance — A/B against v0.5.102
+
+Measured on the same host, back to back: emit pipeline
+175–433 ns/span (0–5 attrs, null transport), encode ~170 ns/attr
+(linear in attributes — an earlier apparent 8-attr outlier was
+timer noise). The v0.5.100 event layer and v0.5.103 UTF-8
+validation are within run-to-run noise of the prior release; no
+optimization warranted.
+
 ## [0.5.103] - 2026-08-22
 
 UTF-8 conformance at the API boundary.

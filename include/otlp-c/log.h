@@ -103,7 +103,10 @@ extern "C"
 		const char *text);
 
 	/* Attributes (same model as span/metric: a map — last write
-	 * wins, type may change; max 128 distinct keys). */
+	 * wins, type may change; max 128 distinct keys).
+	 * String keys and string values must be valid UTF-8 (the
+	 * proto3 string contract); invalid input returns
+	 * OTLP_ERR_UTF8. bytes values are exempt. */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_log_record_set_attribute_string(
 		otlp_log_record_t *lr,
