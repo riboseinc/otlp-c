@@ -4,6 +4,30 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.102] - 2026-08-22
+
+Hygiene catch-up.
+
+### Fixed — concurrency-stress echo worker lifetime (the last unchecked joins)
+
+The stress test's echo worker was started with
+`requests_to_serve = 100` for a ~13-request scenario, so its
+final `echo_server_join` timed out silently with the worker still
+blocked in accept() — the same hazard class fixed in v0.5.96/98,
+present since the test was written. Now stopped deterministically
+(self-connect wake; the exact request count is not knowable a
+priori) with the join checked, joins checked on both error paths,
+and all eight worker-thread `pthread_join`s checked. The
+"never `(void)` a join" rule now holds everywhere in the tree.
+
+### Added — event-callback example
+
+`examples/minimal.c` now installs
+`otlp_exporter_set_event_logger()` with a tallying callback
+(BATCH_SENT / ITEMS_DROPPED, with drop_reason/signal called out)
+and prints the tally at exit — the diagnostics-as-data pattern
+demonstrated end-to-end.
+
 ## [0.5.101] - 2026-08-22
 
 Golden vectors: payloads validated against the reference
