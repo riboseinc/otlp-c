@@ -458,60 +458,303 @@ test_exp_histogram_wire_numbers(void)
 	return 0;
 }
 
-/* Pin the schema tables themselves against upstream literals. The
- * wire tests above cover what today's encoders emit; this catches
- * dormant entries (fields declared but not yet emitted, e.g. EHDP
- * flags) drifting from upstream. */
+/* ── Schema pins: every table vs upstream literals ──────────
+ *
+ * One pin per emitted field of every table in otlp_schema.h.
+ * The numbers/wire types below are copied from the
+ * opentelemetry-proto .proto files — NEVER derived from
+ * otlp_schema.h: a self-referential check can only agree with
+ * the schema, bug included (that circle is how the HDP min/max
+ * drift survived; v0.5.97). */
+struct wire_pin
+{
+	int fi;
+	uint32_t number;
+	int wire;
+};
+
+static void
+pin_table(const char *table,
+	const struct otlp_field_spec *fields,
+	const struct wire_pin *pins,
+	size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++)
+	{
+		if (fields[pins[i].fi].number != pins[i].number ||
+			fields[pins[i].fi].wire_type != pins[i].wire)
+		{
+			fprintf(stderr,
+				"pin FAILED: %s: schema has "
+				"{number=%u, wire=%d}, "
+				"upstream literal is {number=%u, wire=%d}\n",
+				table,
+				fields[pins[i].fi].number,
+				fields[pins[i].fi].wire_type,
+				pins[i].number,
+				pins[i].wire);
+			abort();
+		}
+	}
+}
+
+#define N_PINS(a) (sizeof(a) / sizeof((a)[0]))
+
+static const struct wire_pin PINS_ETSR[] = {
+	{ OTLP_ETSR_FI_RESOURCE_SPANS, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_RS[] = {
+	{ OTLP_RS_FI_RESOURCE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_RS_FI_SCOPE_SPANS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_RS_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_R[] = {
+	{ OTLP_R_FI_ATTRIBUTES, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_R_FI_DROPPED_ATTRS, 2, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_SS[] = {
+	{ OTLP_SS_FI_SCOPE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_SS_FI_SPANS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_SS_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_IS[] = {
+	{ OTLP_IS_FI_NAME, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_IS_FI_VERSION, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_IS_FI_ATTRIBUTES, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_IS_FI_DROPPED_ATTRS, 4, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_SPAN[] = {
+	{ OTLP_SPAN_FI_TRACE_ID, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_SPAN_ID, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_TRACE_STATE, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_PARENT_SPAN_ID, 4, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_NAME, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_KIND, 6, OTLP_PB_WIRE_VARINT },
+	{ OTLP_SPAN_FI_START_TIME, 7, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_SPAN_FI_END_TIME, 8, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_SPAN_FI_ATTRIBUTES, 9, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_DROPPED_ATTRS, 10, OTLP_PB_WIRE_VARINT },
+	{ OTLP_SPAN_FI_EVENTS, 11, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_DROPPED_EVENTS, 12, OTLP_PB_WIRE_VARINT },
+	{ OTLP_SPAN_FI_LINKS, 13, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_DROPPED_LINKS, 14, OTLP_PB_WIRE_VARINT },
+	{ OTLP_SPAN_FI_STATUS, 15, OTLP_PB_WIRE_LEN },
+	{ OTLP_SPAN_FI_FLAGS, 16, OTLP_PB_WIRE_FIXED32 }
+};
+
+static const struct wire_pin PINS_STATUS[] = {
+	{ OTLP_STATUS_FI_MESSAGE, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_STATUS_FI_CODE, 3, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_KV[] = {
+	{ OTLP_KV_FI_KEY, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_KV_FI_VALUE, 2, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_AV[] = {
+	{ OTLP_AV_FI_STRING, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_AV_FI_BOOL, 2, OTLP_PB_WIRE_VARINT },
+	{ OTLP_AV_FI_INT64, 3, OTLP_PB_WIRE_VARINT },
+	{ OTLP_AV_FI_DOUBLE, 4, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_AV_FI_ARRAY_VALUE, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_AV_FI_KVLIST_VALUE, 6, OTLP_PB_WIRE_LEN },
+	{ OTLP_AV_FI_BYTES, 7, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_AV_ARRAY[] = {
+	{ OTLP_AV_ARRAY_FI_VALUES, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_KVLIST[] = {
+	{ OTLP_KVLIST_FI_VALUES, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_EVENT[] = {
+	{ OTLP_EVENT_FI_TIME, 1, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EVENT_FI_NAME, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_EVENT_FI_ATTRIBUTES, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_EVENT_FI_DROPPED_ATTRS, 4, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_LINK[] = {
+	{ OTLP_LINK_FI_TRACE_ID, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_LINK_FI_SPAN_ID, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_LINK_FI_TRACE_STATE, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_LINK_FI_ATTRIBUTES, 4, OTLP_PB_WIRE_LEN },
+	{ OTLP_LINK_FI_DROPPED_ATTRS, 5, OTLP_PB_WIRE_VARINT },
+	{ OTLP_LINK_FI_FLAGS, 6, OTLP_PB_WIRE_FIXED32 }
+};
+
+static const struct wire_pin PINS_EMSR[] = {
+	{ OTLP_EMSR_FI_RESOURCE_METRICS, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_RM[] = {
+	{ OTLP_RM_FI_RESOURCE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_RM_FI_SCOPE_METRICS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_RM_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_SM[] = {
+	{ OTLP_SM_FI_SCOPE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_SM_FI_METRICS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_SM_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_METRIC[] = {
+	{ OTLP_METRIC_FI_NAME, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_DESCRIPTION, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_UNIT, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_GAUGE, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_SUM, 7, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_HISTOGRAM, 9, OTLP_PB_WIRE_LEN },
+	{ OTLP_METRIC_FI_EXP_HISTOGRAM, 10, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_SUM[] = {
+	{ OTLP_SUM_FI_DATA_POINTS, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_SUM_FI_AGG_TEMP, 2, OTLP_PB_WIRE_VARINT },
+	{ OTLP_SUM_FI_IS_MONOTONIC, 3, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_GAUGE[] = {
+	{ OTLP_GAUGE_FI_DATA_POINTS, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_HIST[] = {
+	{ OTLP_HIST_FI_DATA_POINTS, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_HIST_FI_AGG_TEMP, 2, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_EH[] = {
+	{ OTLP_EH_FI_DATA_POINTS, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_EH_FI_AGG_TEMP, 2, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_NDP[] = {
+	{ OTLP_NDP_FI_START_TIME, 2, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_NDP_FI_TIME, 3, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_NDP_FI_AS_DOUBLE, 4, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_NDP_FI_ATTRIBUTES, 7, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_HDP[] = {
+	{ OTLP_HDP_FI_START_TIME, 2, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_HDP_FI_TIME, 3, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_HDP_FI_COUNT, 4, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_HDP_FI_SUM, 5, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_HDP_FI_BUCKET_COUNTS, 6, OTLP_PB_WIRE_LEN },
+	{ OTLP_HDP_FI_EXPLICIT_BOUNDS, 7, OTLP_PB_WIRE_LEN },
+	{ OTLP_HDP_FI_ATTRIBUTES, 9, OTLP_PB_WIRE_LEN },
+	{ OTLP_HDP_FI_MIN, 11, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_HDP_FI_MAX, 12, OTLP_PB_WIRE_FIXED64 }
+};
+
+static const struct wire_pin PINS_EHDP[] = {
+	{ OTLP_EHDP_FI_ATTRIBUTES, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_EHDP_FI_START_TIME, 2, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EHDP_FI_TIME, 3, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EHDP_FI_COUNT, 4, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EHDP_FI_SUM, 5, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EHDP_FI_SCALE, 6, OTLP_PB_WIRE_VARINT },
+	{ OTLP_EHDP_FI_ZERO_COUNT, 7, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EHDP_FI_POSITIVE, 8, OTLP_PB_WIRE_LEN },
+	{ OTLP_EHDP_FI_NEGATIVE, 9, OTLP_PB_WIRE_LEN },
+	{ OTLP_EHDP_FI_FLAGS, 10, OTLP_PB_WIRE_VARINT }
+};
+
+static const struct wire_pin PINS_EHB[] = {
+	{ OTLP_EHB_FI_OFFSET, 1, OTLP_PB_WIRE_VARINT },
+	{ OTLP_EHB_FI_BUCKET_COUNTS, 2, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_ELSR[] = {
+	{ OTLP_ELSR_FI_RESOURCE_LOGS, 1, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_RL[] = {
+	{ OTLP_RL_FI_RESOURCE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_RL_FI_SCOPE_LOGS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_RL_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_SL[] = {
+	{ OTLP_SL_FI_SCOPE, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_SL_FI_LOG_RECORDS, 2, OTLP_PB_WIRE_LEN },
+	{ OTLP_SL_FI_SCHEMA_URL, 3, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_LOG[] = {
+	{ OTLP_LOG_FI_TIME, 1, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_LOG_FI_SEVERITY_NUMBER, 2, OTLP_PB_WIRE_VARINT },
+	{ OTLP_LOG_FI_SEVERITY_TEXT, 3, OTLP_PB_WIRE_LEN },
+	{ OTLP_LOG_FI_BODY, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_LOG_FI_ATTRIBUTES, 6, OTLP_PB_WIRE_LEN },
+	{ OTLP_LOG_FI_DROPPED_ATTRS, 7, OTLP_PB_WIRE_VARINT },
+	{ OTLP_LOG_FI_FLAGS, 8, OTLP_PB_WIRE_FIXED32 },
+	{ OTLP_LOG_FI_TRACE_ID, 9, OTLP_PB_WIRE_LEN },
+	{ OTLP_LOG_FI_SPAN_ID, 10, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_EXPSR[] = {
+	{ OTLP_EXPSR_FI_PARTIAL_SUCCESS, 5, OTLP_PB_WIRE_LEN }
+};
+
+static const struct wire_pin PINS_EPS[] = {
+	{ OTLP_EPS_FI_REJECTED, 1, OTLP_PB_WIRE_VARINT },
+	{ OTLP_EPS_FI_ERROR_MESSAGE, 2, OTLP_PB_WIRE_LEN }
+};
+
 static int
 test_schema_pins_upstream(void)
 {
-	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number == 2);
-	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number == 3);
-	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].number == 4);
-	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].wire_type ==
-		OTLP_PB_WIRE_FIXED64);
-	check_true(OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number == 7);
+	pin_table("ETSR", OTLP_ETSR_FIELDS, PINS_ETSR, N_PINS(PINS_ETSR));
+	pin_table("RS", OTLP_RS_FIELDS, PINS_RS, N_PINS(PINS_RS));
+	pin_table("R", OTLP_R_FIELDS, PINS_R, N_PINS(PINS_R));
+	pin_table("SS", OTLP_SS_FIELDS, PINS_SS, N_PINS(PINS_SS));
+	pin_table("IS", OTLP_IS_FIELDS, PINS_IS, N_PINS(PINS_IS));
+	pin_table("SPAN", OTLP_SPAN_FIELDS, PINS_SPAN, N_PINS(PINS_SPAN));
+	pin_table(
+		"STATUS", OTLP_STATUS_FIELDS, PINS_STATUS, N_PINS(PINS_STATUS));
+	pin_table("KV", OTLP_KV_FIELDS, PINS_KV, N_PINS(PINS_KV));
+	pin_table("AV", OTLP_AV_FIELDS, PINS_AV, N_PINS(PINS_AV));
+	pin_table("AV_ARRAY",
+		OTLP_AV_ARRAY_FIELDS,
+		PINS_AV_ARRAY,
+		N_PINS(PINS_AV_ARRAY));
+	pin_table(
+		"KVLIST", OTLP_KVLIST_FIELDS, PINS_KVLIST, N_PINS(PINS_KVLIST));
+	pin_table("EVENT", OTLP_EVENT_FIELDS, PINS_EVENT, N_PINS(PINS_EVENT));
+	pin_table("LINK", OTLP_LINK_FIELDS, PINS_LINK, N_PINS(PINS_LINK));
+	pin_table("EMSR", OTLP_EMSR_FIELDS, PINS_EMSR, N_PINS(PINS_EMSR));
+	pin_table("RM", OTLP_RM_FIELDS, PINS_RM, N_PINS(PINS_RM));
+	pin_table("SM", OTLP_SM_FIELDS, PINS_SM, N_PINS(PINS_SM));
+	pin_table(
+		"METRIC", OTLP_METRIC_FIELDS, PINS_METRIC, N_PINS(PINS_METRIC));
+	pin_table("SUM", OTLP_SUM_FIELDS, PINS_SUM, N_PINS(PINS_SUM));
+	pin_table("GAUGE", OTLP_GAUGE_FIELDS, PINS_GAUGE, N_PINS(PINS_GAUGE));
+	pin_table("HIST", OTLP_HIST_FIELDS, PINS_HIST, N_PINS(PINS_HIST));
+	pin_table("EH", OTLP_EH_FIELDS, PINS_EH, N_PINS(PINS_EH));
+	pin_table("NDP", OTLP_NDP_FIELDS, PINS_NDP, N_PINS(PINS_NDP));
+	pin_table("HDP", OTLP_HDP_FIELDS, PINS_HDP, N_PINS(PINS_HDP));
+	pin_table("EHDP", OTLP_EHDP_FIELDS, PINS_EHDP, N_PINS(PINS_EHDP));
+	pin_table("EHB", OTLP_EHB_FIELDS, PINS_EHB, N_PINS(PINS_EHB));
+	pin_table("ELSR", OTLP_ELSR_FIELDS, PINS_ELSR, N_PINS(PINS_ELSR));
+	pin_table("RL", OTLP_RL_FIELDS, PINS_RL, N_PINS(PINS_RL));
+	pin_table("SL", OTLP_SL_FIELDS, PINS_SL, N_PINS(PINS_SL));
+	pin_table("LOG", OTLP_LOG_FIELDS, PINS_LOG, N_PINS(PINS_LOG));
+	pin_table("EXPSR", OTLP_EXPSR_FIELDS, PINS_EXPSR, N_PINS(PINS_EXPSR));
+	pin_table("EPS", OTLP_EPS_FIELDS, PINS_EPS, N_PINS(PINS_EPS));
 
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_COUNT].number == 4);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_SUM].number == 5);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_BUCKET_COUNTS].number == 6);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_EXPLICIT_BOUNDS].number == 7);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_ATTRIBUTES].number == 9);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].number == 11);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MIN].wire_type ==
-		OTLP_PB_WIRE_FIXED64);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].number == 12);
-	check_true(OTLP_HDP_FIELDS[OTLP_HDP_FI_MAX].wire_type ==
-		OTLP_PB_WIRE_FIXED64);
-
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ATTRIBUTES].number == 1);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].number == 6);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_SCALE].wire_type ==
-		OTLP_PB_WIRE_VARINT);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_ZERO_COUNT].number == 7);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_POSITIVE].number == 8);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_NEGATIVE].number == 9);
-	/* Upstream: uint32 flags = 10 — varint, NOT fixed32. */
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].number == 10);
-	check_true(OTLP_EHDP_FIELDS[OTLP_EHDP_FI_FLAGS].wire_type ==
-		OTLP_PB_WIRE_VARINT);
-
-	check_true(OTLP_EHB_FIELDS[OTLP_EHB_FI_OFFSET].number == 1);
-	check_true(OTLP_EHB_FIELDS[OTLP_EHB_FI_BUCKET_COUNTS].number == 2);
-
-	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_GAUGE].number == 5);
-	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_SUM].number == 7);
-	check_true(OTLP_METRIC_FIELDS[OTLP_METRIC_FI_HISTOGRAM].number == 9);
-	check_true(
-		OTLP_METRIC_FIELDS[OTLP_METRIC_FI_EXP_HISTOGRAM].number == 10);
-
-	/* LogRecord flags IS fixed32 upstream (fixed32 flags = 8) —
-	 * pinned so nobody "harmonizes" it with EHDP's varint flags. */
-	check_true(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].number == 8);
-	check_true(OTLP_LOG_FIELDS[OTLP_LOG_FI_FLAGS].wire_type ==
-		OTLP_PB_WIRE_FIXED32);
-
-	printf("[unit-wire] schema tables match upstream literals\n");
+	printf("[unit-wire] all 31 schema tables pinned against upstream\n");
 	return 0;
 }
 

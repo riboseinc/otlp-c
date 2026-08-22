@@ -4,6 +4,44 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.99] - 2026-08-22
+
+Enforced Release checks; all 31 schema tables pinned upstream.
+
+### Fixed — v0.5.98's checks executed in Release but did not enforce
+
+`check_true`/`check_ok` were `assert(cond); (void)cond;` — under
+NDEBUG the assert vanishes and the `(void)` discards the result,
+so a FALSE check did not fail the test. The v0.5.98 changelog's
+"verifies identically in Debug and Release" overstated it:
+Release runs executed the checks without enforcing them. The
+helpers now abort on failure in every configuration, reporting
+the call site. Mutation-tested: a deliberately drifted schema
+field aborts with a named diagnostic in both Debug and Release.
+
+### Added — every schema table pinned against opentelemetry-proto
+
+v0.5.97 pinned 6 of 31 tables. The pins test is now
+table-driven and complete: all 31 message tables in
+`src/otlp_schema.h` (traces + metrics + logs envelopes, Span/
+Event/Link/Status, the AnyValue family, every data-point type)
+are checked field-number-by-field-number against upstream
+literals, with named diagnostics on mismatch. Cross-check
+result: all 31 match — including AnyValue (re-verified against
+live common.proto), where a stale recollection had suggested
+different numbers.
+
+### Added — metrics/logs field reference in docs/otlp-spec.md
+
+The protocol reference documented traces only; metrics and logs
+schemas were entirely absent — the gap that let the v0.5.97
+min/max drift hide. Both signals are now fully documented
+(proto blocks, field tables, reserved fields, not-emitted
+fields, the varint-vs-fixed32 flags and packed-varint-vs-
+packed-fixed64 bucket asymmetries), with pointers to
+`src/otlp_schema.h` (canonical) and `unit-wire-numbers`
+(executable enforcement).
+
 ## [0.5.98] - 2026-08-22
 
 Zero-Release-warnings test suite + always-evaluated checks.

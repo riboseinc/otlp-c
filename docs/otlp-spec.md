@@ -328,6 +328,210 @@ message Link {
 }
 ```
 
+## Metrics messages
+
+The top-level request body for `/v1/metrics`. Field numbers in
+this section were absent from this reference until v0.5.99 — the
+gap that let the HistogramDataPoint min/max drift (v0.5.97) hide.
+The canonical in-tree source is `src/otlp_schema.h`;
+`tests/unit/test_unit_wire_numbers.c` pins every table below
+against these numbers in every build configuration.
+
+### ExportMetricsServiceRequest
+
+```proto
+message ExportMetricsServiceRequest {
+  repeated ResourceMetrics resource_metrics = 1;
+}
+```
+
+### ResourceMetrics / ScopeMetrics
+
+Same envelope shape as traces:
+
+```proto
+message ResourceMetrics {
+  Resource resource = 1;
+  repeated ScopeMetrics scope_metrics = 2;
+  string schema_url = 3;
+}
+message ScopeMetrics {
+  InstrumentationScope scope = 1;
+  repeated Metric metrics = 2;
+  string schema_url = 3;
+}
+```
+
+### Metric
+
+Oneof over the data shape. Fields 4, 6, 8 are reserved upstream.
+
+```proto
+message Metric {
+  string name = 1;
+  string description = 2;
+  string unit = 3;
+  Gauge gauge = 5;
+  Sum sum = 7;
+  Histogram histogram = 9;
+  ExponentialHistogram exponential_histogram = 10;
+}
+```
+
+### Sum / Gauge / Histogram / ExponentialHistogram
+
+```proto
+message Sum {
+  repeated NumberDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+  bool is_monotonic = 3;
+}
+message Gauge {
+  repeated NumberDataPoint data_points = 1;
+}
+message Histogram {
+  repeated HistogramDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+}
+message ExponentialHistogram {
+  repeated ExponentialHistogramDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+}
+```
+
+### NumberDataPoint
+
+Field 1 is reserved upstream (the attributes field moved to 7 in
+opentelemetry-proto PR #465 — tables mixing pre- and
+post-relocation numbers are how wire bugs are born).
+
+```proto
+message NumberDataPoint {
+  reserved 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  double as_double = 4;
+  repeated Exemplar exemplars = 5;   // not emitted by otlp-c
+  sfixed64 as_int = 6;              // not emitted by otlp-c
+  repeated KeyValue attributes = 7;
+  uint32 flags = 8;                 // not emitted by otlp-c
+}
+```
+
+Field | Type | Number
+---|---|---
+`start_time_unix_nano` | fixed64 | 2
+`time_unix_nano` | fixed64 | 3
+`as_double` | double (oneof) | 4
+`attributes` | repeated `KeyValue` | 7
+
+### HistogramDataPoint
+
+```proto
+message HistogramDataPoint {
+  reserved 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  fixed64 count = 4;
+  double sum = 5;
+  repeated fixed64 bucket_counts = 6;   // packed fixed64
+  repeated double explicit_bounds = 7;  // packed double
+  repeated Exemplar exemplars = 8;      // not emitted by otlp-c
+  repeated KeyValue attributes = 9;
+  uint32 flags = 10;                    // varint; not emitted
+  optional double min = 11;
+  optional double max = 12;
+}
+```
+
+`min`=11 / `max`=12 is exactly the v0.5.97 fix — otlp-c emitted
+them at 10/11 for its whole life before that (collectors dropped
+`min` and decoded `max` as `min`).
+
+### ExponentialHistogramDataPoint
+
+```proto
+message ExponentialHistogramDataPoint {
+  repeated KeyValue attributes = 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  fixed64 count = 4;
+  double sum = 5;
+  sint32 scale = 6;        // zigzag varint
+  fixed64 zero_count = 7;
+  ExponentialHistogramBuckets positive = 8;
+  ExponentialHistogramBuckets negative = 9;
+  uint32 flags = 10;       // varint; not emitted
+  repeated Exemplar exemplars = 11;  // not emitted
+  double min = 12;         // not emitted
+  double max = 13;         // not emitted
+  double zero_threshold = 14;        // not emitted
+}
+```
+
+Note `flags` here is **varint** — unlike Span/Link/LogRecord
+`flags`, which are fixed32.
+
+### ExponentialHistogramBuckets
+
+```proto
+message ExponentialHistogramBuckets {
+  sint32 offset = 1;                    // zigzag varint
+  repeated uint64 bucket_counts = 2;    // packed VARINT — unlike
+                                        // HistogramDataPoint's
+                                        // packed fixed64
+}
+```
+
+## Logs messages
+
+The top-level request body for `/v1/logs`.
+
+### ExportLogsServiceRequest
+
+```proto
+message ExportLogsServiceRequest {
+  repeated ResourceLogs resource_logs = 1;
+}
+```
+
+### ResourceLogs / ScopeLogs
+
+```proto
+message ResourceLogs {
+  Resource resource = 1;
+  repeated ScopeLogs scope_logs = 2;
+  string schema_url = 3;
+}
+message ScopeLogs {
+  InstrumentationScope scope = 1;
+  repeated LogRecord log_records = 2;
+  string schema_url = 3;
+}
+```
+
+### LogRecord
+
+```proto
+message LogRecord {
+  fixed64 time_unix_nano = 1;
+  enum SeverityNumber severity_number = 2;
+  string severity_text = 3;
+  reserved 4;
+  AnyValue body = 5;
+  repeated KeyValue attributes = 6;
+  uint32 dropped_attributes_count = 7;
+  fixed32 flags = 8;
+  bytes trace_id = 9;
+  bytes span_id = 10;
+  fixed64 observed_time_unix_nano = 11;  // not emitted
+  string event_name = 12;                // not emitted
+}
+```
+
+Field 4 is reserved upstream (it held severity before the enum
+moved to 2); `otlp-c` does not emit fields 11/12.
+
 ## Protobuf wire format
 
 Protobuf encodes messages as a sequence of fields. Each field is
