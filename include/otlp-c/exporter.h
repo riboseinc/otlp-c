@@ -302,7 +302,9 @@ extern "C"
 	 * Severity follows the standard syslog/OpenTelemetry model:
 	 *   DEBUG — routine operation (batch sent successfully).
 	 *   INFO  — notable but expected (retry armed).
-	 *   WARN  — degraded operation (queue full, transient retry).
+	 *   WARN  — degraded operation (queue full, transient retry,
+	 *           collector PartialSuccess: server-side data loss
+	 *           reported on a 200 OK).
 	 *   ERROR — unexpected failure (max retries, permanent 4xx).
 	 *
 	 * Thread-safety: the callback may be invoked from any thread
@@ -422,6 +424,13 @@ extern "C"
 		uint64_t sent_logs; /* logs successfully POSTed */
 		uint64_t dropped_logs_full; /* logs dropped: queue full */
 		uint64_t dropped_logs_err; /* logs dropped: max retries */
+		uint64_t rejected_spans; /* spans the collector reported
+					  * rejected via PartialSuccess on
+					  * a 200 OK (server-side data
+					  * loss; the batch is not
+					  * retried) */
+		uint64_t rejected_metrics; /* same, for metrics */
+		uint64_t rejected_logs; /* same, for logs */
 	} otlp_exporter_stats_t;
 
 	OTLP_C_EXPORT

@@ -86,6 +86,18 @@ if(UNIX)
         COMMAND otlp_test_exporter_retry_after)
     set_tests_properties(exporter-retry-after PROPERTIES
         LABELS "unit" TIMEOUT 30)
+
+    # PartialSuccess wire test (v0.5.96): 200-OK responses carrying
+    # server-reported data loss; exporter surfaces it via diagnostics
+    # + stats without retrying.
+    add_executable(otlp_test_exporter_partial_success
+        test_exporter_partial_success.c test_helper_echo.c)
+    target_link_libraries(otlp_test_exporter_partial_success
+        PRIVATE otlp_c Threads::Threads)
+    add_test(NAME exporter-partial-success
+        COMMAND otlp_test_exporter_partial_success)
+    set_tests_properties(exporter-partial-success PROPERTIES
+        LABELS "unit" TIMEOUT 30)
 endif()
 
 # Custom allocator hook test.

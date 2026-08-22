@@ -81,4 +81,31 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	otlp_socket_t *reuse_socket,
 	otlp_http_request_t **out);
 
+/* ── Response decode (receive side of the adapter) ────────────── */
+
+/* Decode the collector's Export*ServiceResponse body for
+ * PartialSuccess — the OTLP mechanism for reporting server-side
+ * data loss on an otherwise-successful (200 OK) export: the
+ * collector accepted the request but rejected some items (queue
+ * full, size limits, ...).
+ *
+ * Field numbers come from the shared decode-only tables in
+ * otlp_schema.h (the three signals' messages are identical in
+ * shape, so one decode serves all three).
+ *
+ * Returns true when a well-formed partial_success submessage is
+ * present (outputs set; rejected=0 / NULL message when its fields
+ * are absent). False when absent or when the body is malformed —
+ * the caller then treats the response as a plain success. Duplicate
+ * partial_success fields: last one wins (proto3 merge semantics).
+ *
+ * `error_message` points INTO `body` (no copy, not NUL-terminated);
+ * valid only while `body` is. */
+bool
+otlp_exporter_otel_decode_partial_success(const uint8_t *body,
+	size_t len,
+	int64_t *rejected,
+	const char **error_message,
+	size_t *error_message_len);
+
 #endif

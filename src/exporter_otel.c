@@ -18,6 +18,8 @@
 #include "exporter_otel.h"
 #include "http_client.h"
 #include "otlp_messages.h"
+#include "otlp_schema.h"
+#include "protobuf_decode.h"
 #include "protobuf_encode.h"
 
 #include <otlp-c/exporter.h>
@@ -25,6 +27,7 @@
 #include <otlp-c/metric.h>
 #include <otlp-c/span.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -209,4 +212,98 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 		reuse_socket);
 	otlp_pb_buf_free(&body);
 	return st;
+}
+
+/* ── Response decode: PartialSuccess ──────────────────────────── */
+
+/* Walk one PartialSuccess submessage. Returns false on malformed
+ * input; outputs keep their defaults for absent fields. */
+static bool
+decode_partial_success_sub(const uint8_t *sub,
+	size_t sub_len,
+	int64_t *rejected,
+	const char **error_message,
+	size_t *error_message_len)
+{
+	const uint32_t rejected_field =
+		OTLP_EPS_FIELDS[OTLP_EPS_FI_REJECTED].number;
+	const uint32_t message_field =
+		OTLP_EPS_FIELDS[OTLP_EPS_FI_ERROR_MESSAGE].number;
+	struct otlp_pb_reader r;
+
+	otlp_pb_reader_init(&r, sub, sub_len);
+	for (;;)
+	{
+		uint32_t field;
+		int wt;
+
+		if (!otlp_pb_read_key(&r, &field, &wt))
+			return r.pos >= r.len; /* clean EOF vs malformed */
+		if (field == rejected_field && wt == OTLP_PB_WIRE_VARINT)
+		{
+			uint64_t v;
+
+			if (!otlp_pb_read_varint(&r, &v))
+				return false;
+			*rejected = (int64_t) v;
+		}
+		else if (field == message_field && wt == OTLP_PB_WIRE_LEN)
+		{
+			const uint8_t *data;
+			size_t data_len;
+
+			if (!otlp_pb_read_len(&r, &data, &data_len))
+				return false;
+			*error_message = (const char *) data;
+			*error_message_len = data_len;
+		}
+		else if (!otlp_pb_skip(&r, wt))
+			return false;
+	}
+}
+
+bool
+otlp_exporter_otel_decode_partial_success(const uint8_t *body,
+	size_t len,
+	int64_t *rejected,
+	const char **error_message,
+	size_t *error_message_len)
+{
+	const uint32_t ps_field =
+		OTLP_EXPSR_FIELDS[OTLP_EXPSR_FI_PARTIAL_SUCCESS].number;
+	struct otlp_pb_reader r;
+	bool found = false;
+
+	if (!body && len > 0)
+		return false;
+	*rejected = 0;
+	*error_message = NULL;
+	*error_message_len = 0;
+
+	otlp_pb_reader_init(&r, body, len);
+	for (;;)
+	{
+		uint32_t field;
+		int wt;
+
+		if (!otlp_pb_read_key(&r, &field, &wt))
+			return r.pos >= r.len && found;
+		if (field == ps_field && wt == OTLP_PB_WIRE_LEN)
+		{
+			const uint8_t *sub;
+			size_t sub_len;
+
+			if (!otlp_pb_read_len(&r, &sub, &sub_len))
+				return false;
+			if (!decode_partial_success_sub(sub,
+				    sub_len,
+				    rejected,
+				    error_message,
+				    error_message_len))
+				return false;
+			found = true;
+		}
+		else if (!otlp_pb_skip(&r, wt))
+			return false;
+	}
 }

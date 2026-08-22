@@ -17,10 +17,14 @@
  * state machine (incl. chunked decoder): terminal state, no crash
  *   prop_fuzz_context_extract — arbitrary printable carrier values:
  *                             extract never crashes
+ *   prop_fuzz_partial_success — random/mutated response bodies through
+ *                             the PartialSuccess decoder: no crash,
+ *                             message pointer stays in bounds
  */
 #include "prng.h"
 #include "property_harness.h"
 
+#include "../src/exporter_otel.h"
 #include "../src/http_client.h"
 #include "decoder.h"
 
@@ -355,6 +359,74 @@ prop_fuzz_context_extract(uint64_t seed)
 	return ctx.has_context || !ctx.has_context;
 }
 
+
+/* ── PartialSuccess decode fuzz (v0.5.96) ───────────────────────
+ * The library's first response-body decoder. Random bytes, plus
+ * mutated copies of a VALID body (so the parser reaches deeper
+ * states than pure noise manages), through the decoder. Must not
+ * crash; when it reports a message, the pointer must lie inside
+ * the input buffer. */
+
+static int
+prop_fuzz_partial_success(uint64_t seed)
+{
+	struct prng p;
+	uint8_t buf[256];
+	uint8_t valid[64];
+	size_t len;
+	size_t i;
+
+	/* Valid reference body: partial_success{rejected=3, msg}. */
+	valid[0] = 0x2a;
+	valid[1] = 0x0c;
+	valid[2] = 0x08;
+	valid[3] = 0x03;
+	valid[4] = 0x12;
+	valid[5] = 0x08;
+	memcpy(valid + 6, "queueful", 8);
+	/* len 14 = 2 + 12 */
+
+	prng_seed(&p, seed);
+	for (i = 0; i < 100; i++)
+	{
+		int64_t rejected = 0;
+		const char *msg = NULL;
+		size_t msg_len = 0;
+		bool rc;
+
+		if (prng_next(&p) & 1)
+		{
+			/* Pure noise. */
+			len = (size_t) prng_u32(&p, (uint32_t) sizeof(buf));
+			for (size_t j = 0; j < len; j++)
+				buf[j] = (uint8_t) prng_next(&p);
+		}
+		else
+		{
+			/* Mutate the valid body. */
+			len = 14;
+			memcpy(buf, valid, len);
+			if (prng_next(&p) & 1)
+				len = (size_t) prng_u32(&p, (uint32_t) len + 1);
+			for (size_t j = 0; j < 3; j++)
+				buf[prng_u32(&p, (uint32_t) len)] =
+					(uint8_t) prng_next(&p);
+		}
+
+		rc = otlp_exporter_otel_decode_partial_success(
+			buf, len, &rejected, &msg, &msg_len);
+		if (rc && msg_len > 0)
+		{
+			/* Message pointer must lie inside the input. */
+			if (msg < (const char *) buf ||
+				(size_t)(msg - (const char *) buf) + msg_len >
+					len)
+				return 0;
+		}
+	}
+	return 1;
+}
+
 int
 main(void)
 {
@@ -372,6 +444,10 @@ main(void)
 	failures += property_run(
 		prop_fuzz_http_response, "prop_fuzz_http_response", 300, 1);
 #endif
+	failures += property_run(prop_fuzz_partial_success,
+		"prop_fuzz_partial_success",
+		5000,
+		1);
 	failures += property_run(prop_fuzz_context_extract,
 		"prop_fuzz_context_extract",
 		5000,

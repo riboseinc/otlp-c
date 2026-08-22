@@ -111,6 +111,7 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `include/otlp-c/context.h` | W3C Trace Context + Baggage propagation |
 | `include/otlp-c/slab.h` | Slab allocator + global integration |
 | `src/otlp_schema.h` | Schema tables — single source of truth for field numbers |
+| `src/protobuf_decode.{h,c}` | Bounds-checked wire-format reader (PartialSuccess decode) |
 | `src/otlp_messages.c` | Traces encoder + shared helpers (any_value, resource) |
 | `src/otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) |
 | `src/otlp_logs_encoder.c` | Logs encoder |
@@ -193,6 +194,11 @@ All phases are complete (v0.5.86). The library implements:
   shift-count-clamped exponent (no UB at large max_retries);
   **Retry-After honored** (v0.5.95): delay = max(jitter, server
   floor) clamped by backoff_max_ms on 429/503/5xx
+- **PartialSuccess decoding** (v0.5.96): 200-OK bodies carry
+  server-reported data loss (rejected counts + message) —
+  surfaced via WARN diagnostic + per-signal rejected_* stats.
+  First library wire-format DECODER (`src/protobuf_decode.c`,
+  schema-table-driven; bounds-checked, fails closed)
 - **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
   growing arena pointers are moved, never libc-realloc'd
 

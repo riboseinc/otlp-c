@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.96] - 2026-08-22
+
+Server-side data-loss reporting (OTLP PartialSuccess).
+
+### Added — PartialSuccess surfaced from 200-OK responses
+
+A collector can answer 200 OK while rejecting some items,
+declaring it in the protobuf response body (Export*PartialSuccess:
+rejected count + error message). The exporter discarded 200
+bodies entirely — silent server-side data loss was invisible.
+It now decodes PartialSuccess (new bounds-checked wire-format
+reader `src/protobuf_decode.{h,c}`, the decode counterpart of
+the encoder; schema-driven field tables) and surfaces it: a WARN
+diagnostic ("collector partial success: 2 of 3 spans rejected:
+queue full") plus new per-signal stats `rejected_spans` /
+`rejected_metrics` / `rejected_logs`. The batch is not retried —
+a 200 is final. Applies to the async pipeline and the sync
+one-shot flush paths. Unknown fields are skipped (forward
+compat); malformed bodies fail closed (treated as plain success).
+
+### Fixed — a lost property test and warning debt
+
+`prop_resource_full_value_model` (the v0.5.92 BYTES property)
+was defined but never registered — the v0.5.92 file rewrite
+dropped the registration and nothing failed. Registered and
+running again; the unused-variable warning it masked is gone
+too (zero-warnings invariant restored).
+
 ## [0.5.95] - 2026-08-22
 
 Server-directed retry pacing (RFC 7231 §7.1.3).
