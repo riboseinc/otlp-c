@@ -102,6 +102,9 @@ struct otlp_exporter
 	otlp_atomic_u64 sent_logs;
 	otlp_atomic_u64 dropped_logs_full;
 	otlp_atomic_u64 dropped_logs_err;
+	otlp_atomic_u64 rejected_spans;
+	otlp_atomic_u64 rejected_metrics;
+	otlp_atomic_u64 rejected_logs;
 	otlp_atomic_int shutdown_requested;
 
 	/* Optional diagnostic callback (NULL = no-op). */
@@ -728,6 +731,7 @@ struct signal_record_path
 	void (*free_item)(void *);
 	otlp_atomic_u64 *sent_counter;
 	otlp_atomic_u64 *dropped_err_counter;
+	otlp_atomic_u64 *rejected_counter;
 	const char *signal_name;
 };
 
@@ -745,6 +749,7 @@ record_path_for(struct otlp_exporter *e)
 				.free_item = metric_free_void,
 				.sent_counter = &e->sent_metrics,
 				.dropped_err_counter = &e->dropped_metrics_err,
+				.rejected_counter = &e->rejected_metrics,
 				.signal_name = "metrics",
 			};
 		case SIGNAL_LOG:
@@ -755,6 +760,7 @@ record_path_for(struct otlp_exporter *e)
 				.free_item = log_free_void,
 				.sent_counter = &e->sent_logs,
 				.dropped_err_counter = &e->dropped_logs_err,
+				.rejected_counter = &e->rejected_logs,
 				.signal_name = "logs",
 			};
 		case SIGNAL_SPAN:
@@ -766,6 +772,7 @@ record_path_for(struct otlp_exporter *e)
 				.free_item = span_free_void,
 				.sent_counter = &e->sent,
 				.dropped_err_counter = &e->dropped_err,
+				.rejected_counter = &e->rejected_spans,
 				.signal_name = "spans",
 			};
 	}
@@ -993,13 +1000,73 @@ try_start_log_post(struct otlp_exporter *e)
 	return try_start_post_common(e, &p);
 }
 
+/* What the in-flight HTTP exchange produced, handed to
+ * record_outcome as one bundle. body/body_len are the response body
+ * (NULL/0 when there is none — network failure, null transport). */
+struct http_outcome
+{
+	int status; /* HTTP status; 0 = network-level failure */
+	uint32_t retry_after_ms; /* Retry-After header value (v0.5.95) */
+	const uint8_t *body;
+	size_t body_len;
+};
+
+/* Surface a collector PartialSuccess report — the OTLP mechanism
+ * for server-side data loss on an otherwise-successful export (the
+ * collector accepted the request but rejected some items: queue
+ * full, size limits, ...). Counts into the per-signal rejected_*
+ * stat (when a counter is given — the sync one-shot path has none)
+ * and logs WARN. The batch is NOT retried: a 200 is final, and the
+ * rejected items are gone server-side. */
 static void
-record_outcome(struct otlp_exporter *e,
-	int http_status,
-	uint32_t retry_after_ms)
+report_partial_success(struct otlp_exporter *e,
+	const char *signal_name,
+	otlp_atomic_u64 *rejected_counter,
+	uint64_t count,
+	const uint8_t *body,
+	size_t body_len)
+{
+	int64_t rejected = 0;
+	const char *msg = NULL;
+	size_t msg_len = 0;
+
+	if (!otlp_exporter_otel_decode_partial_success(
+		    body, body_len, &rejected, &msg, &msg_len))
+		return;
+	if (rejected <= 0 && msg_len == 0)
+		return;
+	if (rejected > 0 && rejected_counter)
+		otlp_atomic_fetch_add_u64(rejected_counter,
+			(uint64_t) rejected,
+			OTLP_MEMORY_ORDER_RELAXED);
+	if (count > 0)
+		otlp_log(e,
+			OTLP_LOG_WARN,
+			"collector partial success: %lld of %llu %s "
+			"rejected%s%.*s",
+			(long long) (rejected > 0 ? rejected : 0),
+			(unsigned long long) count,
+			signal_name,
+			msg_len > 0 ? ": " : "",
+			(int) msg_len,
+			msg ? msg : "");
+	else
+		otlp_log(e,
+			OTLP_LOG_WARN,
+			"collector partial success: %lld %s rejected%s%.*s",
+			(long long) (rejected > 0 ? rejected : 0),
+			signal_name,
+			msg_len > 0 ? ": " : "",
+			(int) msg_len,
+			msg ? msg : "");
+}
+
+static void
+record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 {
 	struct signal_record_path p = record_path_for(e);
 	uint64_t count = e->in_flight_count;
+	int http_status = o->status;
 
 	if (http_status == 0)
 	{
@@ -1046,6 +1113,15 @@ record_outcome(struct otlp_exporter *e,
 			"batch sent: %llu %s",
 			(unsigned long long) count,
 			p.signal_name);
+		/* A 200 can still report server-side data loss via
+		 * PartialSuccess in the response body (v0.5.96). */
+		if (o->body && o->body_len > 0)
+			report_partial_success(e,
+				p.signal_name,
+				p.rejected_counter,
+				count,
+				o->body,
+				o->body_len);
 		/* Success — free the pending batch (kept across retries). */
 		clear_in_flight_batch(e, &p);
 		return;
@@ -1080,10 +1156,10 @@ record_outcome(struct otlp_exporter *e,
 			 * own cap — delay = max(jitter, Retry-After),
 			 * clamped to backoff_max_ms. */
 			uint32_t delay = backoff_delay_ms(e, e->attempt);
-			bool server_driven = retry_after_ms > delay;
+			bool server_driven = o->retry_after_ms > delay;
 
 			if (server_driven)
-				delay = retry_after_ms;
+				delay = o->retry_after_ms;
 			if (delay > e->backoff_max_ms)
 				delay = e->backoff_max_ms;
 			e->backoff_deadline_mono = now_mono_ms() + delay;
@@ -1191,6 +1267,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 				if (*paths[s].pending_count > 0)
 				{
 					int http_status = 200;
+					struct http_outcome o = { 0 };
 
 					e->in_flight_signal =
 						paths[s].signal_kind;
@@ -1199,7 +1276,8 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					if (e->null_transport_status_fn)
 						http_status = e->null_transport_status_fn(
 							e->null_transport_status_ctx);
-					record_outcome(e, http_status, 0);
+					o.status = http_status;
+					record_outcome(e, &o);
 					work_done = true;
 					goto tick_continue;
 				}
@@ -1241,27 +1319,30 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			if (s2 == OTLP_HTTP_REQ_DONE ||
 				s2 == OTLP_HTTP_REQ_FAILED)
 			{
-				int status = (s2 == OTLP_HTTP_REQ_DONE)
-					? otlp_http_request_http_status(
-						  e->in_flight)
-					: 0;
-				/* Read before the free — the value lives in
-				 * the request's parsed-response state. */
-				uint32_t retry_after_ms =
-					(s2 == OTLP_HTTP_REQ_DONE)
-					? otlp_http_request_retry_after_ms(
-						  e->in_flight)
-					: 0;
+				/* Read everything out BEFORE the free — the
+				 * values live in the request's parsed state. */
+				struct http_outcome o = { 0 };
+
 				if (s2 == OTLP_HTTP_REQ_DONE)
+				{
+					o.status =
+						otlp_http_request_http_status(
+							e->in_flight);
+					o.retry_after_ms =
+						otlp_http_request_retry_after_ms(
+							e->in_flight);
+					o.body = otlp_http_request_body(
+						e->in_flight, &o.body_len);
 					e->keepalive_sock =
 						otlp_http_request_detach_socket(
 							e->in_flight);
-				record_outcome(e, status, retry_after_ms);
+				}
+				record_outcome(e, &o);
 				otlp_http_request_free(e->in_flight);
 				e->in_flight = NULL;
 				e->in_flight_count = 0;
-				if (status != 0 &&
-					(status < 200 || status >= 300) &&
+				if (o.status != 0 &&
+					(o.status < 200 || o.status >= 300) &&
 					e->keepalive_sock)
 				{
 					otlp_socket_close(e->keepalive_sock);
@@ -1422,6 +1503,20 @@ flush_post_once(struct otlp_exporter *e,
 		{
 			int http = otlp_http_request_http_status(req);
 
+			if (http >= 200 && http < 300)
+			{
+				/* Surface server-reported data loss, if any
+				 * (no stats counter on the one-shot path —
+				 * the message is the observability surface).
+				 * path + 5 skips "/v1/" to the signal name. */
+				size_t blen = 0;
+				const uint8_t *b =
+					otlp_http_request_body(req, &blen);
+
+				if (b && blen > 0)
+					report_partial_success(
+						e, path + 5, NULL, 0, b, blen);
+			}
 			otlp_http_request_free(req);
 			*got_response = true;
 			if (http >= 200 && http < 300)
@@ -1685,5 +1780,11 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 		&e->dropped_logs_full, OTLP_MEMORY_ORDER_RELAXED);
 	out->dropped_logs_err = otlp_atomic_load_u64(
 		&e->dropped_logs_err, OTLP_MEMORY_ORDER_RELAXED);
+	out->rejected_spans = otlp_atomic_load_u64(
+		&e->rejected_spans, OTLP_MEMORY_ORDER_RELAXED);
+	out->rejected_metrics = otlp_atomic_load_u64(
+		&e->rejected_metrics, OTLP_MEMORY_ORDER_RELAXED);
+	out->rejected_logs = otlp_atomic_load_u64(
+		&e->rejected_logs, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }

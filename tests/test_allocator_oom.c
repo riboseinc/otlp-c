@@ -109,7 +109,6 @@ static int
 test_exporter_create_oom(void)
 {
 	otlp_resource_attr_t attrs[5];
-	int i;
 	int leaks = 0;
 	int crashes = 0;
 

@@ -611,6 +611,10 @@ main(void)
 		"prop_resource_service_name_wins",
 		5,
 		1);
+	failures += property_run(prop_resource_full_value_model,
+		"prop_resource_full_value_model",
+		5,
+		1);
 
 	if (failures)
 		printf("[property] %d resource-attr property(ies) failed\n",
