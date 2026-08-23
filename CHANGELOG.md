@@ -4,6 +4,49 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.8] - 2026-08-24
+
+Install-docs truth sweep.
+
+### Fixed — consumer instructions pointed at a nonexistent vcpkg port
+
+README and quickstart told consumers to install `otlp-c` from
+vcpkg (`"dependencies": ["otlp-c"]`). No `otlp-c` port exists in
+the public registry (microsoft/vcpkg master has no
+`ports/otlp-c`), and no registry fork is published — the
+instructions failed for every user who followed them verbatim.
+The docs now give the real consumption paths: CMake FetchContent
+against a release tag, `add_subdirectory()` of a clone, or
+`cmake --install` + `find_package(otlp-c CONFIG)`. The vcpkg
+section is reframed as what the repo's manifest actually does:
+build this repo under a vcpkg toolchain, pulling in zero
+dependencies.
+
+### Fixed — docs/release-notes/ abandoned mid-stream
+
+The directory held one file (v0.5.0) while 100+ releases shipped
+after it, and nothing referenced it. A README now marks it frozen
+and points at CHANGELOG.md + GitHub Releases as the canonical
+per-release notes.
+
+### Fixed — property-http-timeout failed deterministically on VPN networks
+
+The property connects to TEST-NET-1 (192.0.2.1) expecting the
+connect to hang or be refused — but VPN/proxy networks locally
+accept every TCP connect, so the request advanced to READING and
+terminated at the READ deadline, which equaled the test's own
+5s wall-clock cap (observed elapsed: 5009 ms). The read deadline
+is now 2000 ms, leaving the 5s cap real margin; the property
+accepts all three bounded outcomes (connect timeout, instant
+refusal, VPN-accepted connect + read deadline). Library behavior
+was correct throughout — bounded completion held.
+
+### Fixed — a literal backslash-ref in roadmap.md tripped Doxygen
+
+The v0.6.5 row's "\ref warnings" phrasing parsed as a Doxygen
+command (unresolved-reference warning); reworded. Docs build is
+back to zero warnings.
+
 ## [0.6.7] - 2026-08-24
 
 CLAUDE.md truth sweep.
