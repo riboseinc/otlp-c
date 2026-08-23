@@ -70,8 +70,11 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
   flush fallback.
 - **Context propagation**: W3C Trace Context (traceparent +
   tracestate) + W3C Baggage via callback-based carrier abstraction.
-- **Diagnostics**: optional callback (`set_logger`) fires at notable
-  events (queue full, HTTP error, retry, drop, success).
+- **Diagnostics, two views of one model**: the structured
+  `set_event_logger` callback delivers every diagnostic as an
+  `otlp_event_t` (event code, signal, counts, drop reason,
+  retry timing) — no string parsing; the optional `set_logger`
+  callback receives the message derived from that same event.
 - **Sampler**: pluggable vtable with always_on, always_off, and
   deterministic trace_id_ratio_based built-ins.
 - **Attributes**: the full OTLP AnyValue set — string, bool,
@@ -80,13 +83,22 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
   metrics, and log records. Map semantics: re-setting a key
   replaces its value. Storage is grow-on-demand: objects pay for
   the attributes they carry, not fixed-cap arrays.
-- **Resource attributes**: typed (string/int64/double/bool) on
-  every batch's Resource.
+- **Resource attributes**: the full `otlp_value_t` model (all
+  AnyValue types, v0.5.92) on every batch's Resource; map
+  semantics (last write wins) resolved at create time.
 - **Hardened HTTP client**: chunked-response decoding (RFC 7230),
   request-smuggling rejection, version-aware keep-alive, and an
   I/O inactivity deadline across connect/send/read.
 - **W3C-spec-exact propagation**: traceparent version rules,
   printable-only tracestate/baggage, big-endian sampler prefix.
+- **Server-response aware**: Retry-After honored on throttled
+  responses (clamped by your backoff cap); collector
+  PartialSuccess — server-side data loss reported on a 200 —
+  surfaced via diagnostics and per-signal `rejected_*` stats.
+- **UTF-8 validated at the boundary**: every wire string is
+  checked at the setter; one invalid value fails itself
+  (`OTLP_ERR_UTF8`) instead of letting a collector reject the
+  whole request.
 - **Slab allocator**: fixed-slot memory pool with malloc fallback.
   Installable as the process-wide allocator (any slot size —
   realloc is arena-aware).
@@ -169,7 +181,11 @@ sidecar terminates TLS to the real backend. This is the standard
 production deployment and the only model compatible with the
 zero-deps invariant. See [docs/deployment.md](docs/deployment.md).
 
-See [examples/minimal.c](examples/minimal.c) for a working example.
+Working examples: [minimal](examples/minimal.c) (full API
+surface, runs standalone), [multithread](examples/multithread.c)
+(N worker threads, one tick thread), and
+[event_loop_integration](examples/event_loop_integration.c)
+(poll()-driven main loop via `otlp_exporter_poll_fds`).
 
 ## Documentation
 
