@@ -14,7 +14,14 @@
  *
  * On systems where the SYN is immediately rejected (no route to host,
  * network unreachable), the request fails instantly — also acceptable
- * behavior. The test verifies BOUNDED completion either way.
+ * behavior. And on VPN/proxy networks that locally accept every TCP
+ * connect, the connection SUCCEEDS, the request advances to READING,
+ * and the read/inactivity deadline terminates it — equally acceptable.
+ * The test verifies BOUNDED completion in every case; the wall-clock
+ * cap sits well above connect+read deadlines so the read-deadline
+ * path passes too (a cap equal to read_timeout made this property
+ * fail deterministically on VPN networks, where connect always
+ * succeeds).
  *
  * POSIX-only (uses clock_gettime for timing).
  */
@@ -65,7 +72,7 @@ prop_connect_timeout_fires(uint64_t seed)
 	st = otlp_http_request_start(&req, &url, "timeout-test",
 				      (const uint8_t *) "x", 1,
 				      200,  /* connect_timeout_ms */
-				      5000  /* read_timeout_ms (generous) */);
+				      2000  /* read_timeout_ms (generous) */);
 	if (st != OTLP_OK)
 		return 0;
 
@@ -81,11 +88,13 @@ prop_connect_timeout_fires(uint64_t seed)
 			/* Bounded completion: the request reached a terminal
 			 * state. If it timed out (Case A), elapsed should be
 			 * near 200ms. If it failed instantly (Case B — no
-			 * route to host), elapsed is near 0. Both are
-			 * acceptable; what matters is it didn't hang forever.
+			 * route to host), elapsed is near 0. If the connect
+			 * was locally accepted by a VPN/proxy (Case C), the
+			 * read deadline fires near 2000ms. All acceptable;
+			 * what matters is it didn't hang forever.
 			 *
-			 * Cap: 5000ms. If it takes longer, the timeout
-			 * didn't fire. */
+			 * Cap: 5000ms — well past connect+read deadlines. If
+			 * it takes longer, a timeout didn't fire. */
 			ok = (elapsed < 5000);
 			break;
 		}
