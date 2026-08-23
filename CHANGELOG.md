@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-08-23
+
+Coverage re-measurement + deep-clone round-trips.
+
+### Fixed — five files had drifted below the 82% coverage bar
+
+Re-running the clang-profile coverage flow across all test
+binaries showed platform.c (71%), span.c (80%), internal_util.c
+(81%), otlp_metrics_encoder.c (81%), and metric.c (81%) below
+the documented every-file bar. Root cause: the clone/copy arms
+for anything richer than scalar attributes had never executed —
+histogram bounds + bucket_counts and exp-histogram buckets in
+`otlp_metric_clone`, status_message/trace_state in
+`otlp_span_clone`, bytes/array/kvlist attribute copies, and the
+event/link attribute setters entirely.
+
+New `unit-clone` (4 tests): deep-clone round-trips for span,
+metric, and log proven by byte-equal encoding of original vs
+clone (every attribute type on span, events, and links;
+histogram and exp-histogram state), plus the has_start/has_time
+emission matrix for NDP/HDP and the free(NULL) guards. Platform
+clock NULL-guard tests added. After: every library file back at
+82%+ (platform 85.7%, span 86.6%, metric 87.3%,
+internal_util 84.5%, metrics encoder 82.1%).
+
+Out of scope, documented: the encoders' OOM-propagation arms
+(~60 lines) — those need fail-injection into the encode paths.
+
 ## [0.6.1] - 2026-08-23
 
 Documentation freshness sweep (first release inside the

@@ -81,3 +81,13 @@ target_link_libraries(otlp_unit_common PRIVATE otlp_c)
 add_test(NAME unit-common
     COMMAND otlp_unit_common)
 set_tests_properties(unit-common PROPERTIES LABELS "unit")
+
+# Deep-clone round-trips (v0.6.2): the clone/copy arms for
+# everything richer than scalar attributes had never executed.
+add_executable(otlp_unit_clone test_unit_clone.c)
+target_link_libraries(otlp_unit_clone PRIVATE otlp_c)
+target_include_directories(otlp_unit_clone PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-clone
+    COMMAND otlp_unit_clone)
+set_tests_properties(unit-clone PROPERTIES LABELS "unit")

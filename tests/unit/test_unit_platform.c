@@ -129,12 +129,28 @@ test_tracer_edges(void)
 	return 0;
 }
 
+static int
+test_clock_null_guards(void)
+{
+	check_true(otlp_platform_now_unix_nano(NULL) == OTLP_ERR_NULL);
+	check_true(otlp_platform_now_mono_nano(NULL) == OTLP_ERR_NULL);
+	{
+		uint64_t t = 0;
+
+		check_ok(otlp_platform_now_unix_nano(&t));
+		check_true(t > 0);
+		check_ok(otlp_platform_now_mono_nano(&t));
+	}
+	return 0;
+}
+
 int
 main(void)
 {
 	int failures = 0;
 
 	failures += test_socket_null_guards();
+	failures += test_clock_null_guards();
 	failures += test_dns_failure();
 	failures += test_connect_refused();
 	failures += test_tracer_edges();
@@ -142,7 +158,7 @@ main(void)
 	if (failures)
 		printf("[unit-platform] FAIL (%d test(s))\n", failures);
 	else
-		printf("[unit-platform] PASS (4 tests)\n");
+		printf("[unit-platform] PASS (5 tests)\n");
 	return failures ? 1 : 0;
 }
 
