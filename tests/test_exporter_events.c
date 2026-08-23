@@ -7,10 +7,6 @@
  * level, drop reason) the new otlp_exporter_set_event_logger
  * callback delivers.
  */
-#if !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif
-
 #include "test_util.h"
 
 #include <otlp-c/exporter.h>
@@ -23,7 +19,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 /* ── Event capture ─────────────────────────────────────────────── */
 
@@ -83,26 +78,26 @@ count_events(otlp_event_code_t code)
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
-static uint64_t
-mono_ms(void)
-{
-	struct timespec ts;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (uint64_t) ts.tv_sec * 1000ULL +
-		(uint64_t) ts.tv_nsec / 1000000ULL;
-}
-
-/* Wall-clock bounded drive loop (Release spins these ~100x
- * faster — never bound by iteration count when waiting on
- * backoff). */
+/* Drive until a stats/event condition holds or the iteration
+ * budget is spent. Portable (no clock): each tick(5) sleeps up
+ * to 5ms internally on the platform's own sleep, so 200
+ * iterations bounds the wait at ~1s — long after any of these
+ * scenarios (backoff caps are 5ms) settles. The condition is
+ * checked via stats, not wall time: waiting-on-timeout loops
+ * bound by iteration count alone are the flaky pattern; this
+ * one exits on the OUTCOME. */
 static void
-drive_ms(otlp_exporter_t *exp, uint64_t ms)
+drive_until(otlp_exporter_t *exp,
+	const otlp_event_code_t want,
+	int want_count,
+	int max_iters)
 {
-	uint64_t deadline = mono_ms() + ms;
-
-	while (mono_ms() < deadline)
+	for (int i = 0; i < max_iters; i++)
+	{
 		otlp_exporter_tick(exp, 5);
+		if ((int) count_events(want) >= want_count)
+			return;
+	}
 }
 
 static otlp_exporter_t *
@@ -185,7 +180,7 @@ test_event_batch_sent(void)
 	otlp_exporter_set_null_transport_status_fn(exp, status_ok, NULL);
 	st = otlp_exporter_emit_move(exp, make_span(tracer));
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_BATCH_SENT, 1, 200);
 
 	ev = find_event(OTLP_EVT_BATCH_SENT);
 	check_true(ev != NULL);
@@ -215,7 +210,7 @@ test_event_batch_sent_signal_ids(void)
 	check_true(lr != NULL);
 	st = otlp_exporter_emit_log_move(exp, lr);
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_BATCH_SENT, 1, 200);
 	ev = find_event(OTLP_EVT_BATCH_SENT);
 	check_true(ev != NULL);
 	check_true(ev->signal == OTLP_SIGNAL_LOGS);
@@ -225,7 +220,7 @@ test_event_batch_sent_signal_ids(void)
 	check_true(m != NULL);
 	st = otlp_exporter_emit_metric_move(exp, m);
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_BATCH_SENT, 1, 200);
 	ev = find_event(OTLP_EVT_BATCH_SENT);
 	check_true(ev != NULL);
 	check_true(ev->signal == OTLP_SIGNAL_METRICS);
@@ -248,7 +243,7 @@ test_event_retry_armed(void)
 		exp, status_500_then_200, &calls);
 	st = otlp_exporter_emit_move(exp, make_span(tracer));
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_BATCH_SENT, 1, 200);
 
 	check_true(count_events(OTLP_EVT_RETRY_ARMED) == 2);
 	ev = find_event(OTLP_EVT_RETRY_ARMED);
@@ -282,7 +277,7 @@ test_event_dropped_max_retries(void)
 		exp, status_always_500, NULL);
 	st = otlp_exporter_emit_move(exp, make_span(tracer));
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_ITEMS_DROPPED, 1, 200);
 
 	ev = find_event(OTLP_EVT_ITEMS_DROPPED);
 	check_true(ev != NULL);
@@ -310,7 +305,7 @@ test_event_dropped_permanent_4xx(void)
 	otlp_exporter_set_null_transport_status_fn(exp, status_404, NULL);
 	st = otlp_exporter_emit_move(exp, make_span(tracer));
 	check_true(st == OTLP_OK);
-	drive_ms(exp, 500);
+	drive_until(exp, OTLP_EVT_ITEMS_DROPPED, 1, 200);
 
 	ev = find_event(OTLP_EVT_ITEMS_DROPPED);
 	check_true(ev != NULL);

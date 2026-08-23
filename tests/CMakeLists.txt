@@ -66,14 +66,6 @@ if(UNIX)
     set_tests_properties(concurrency-stress-multi PROPERTIES
         LABELS "unit;stress" TIMEOUT 60)
 
-    # Exporter retry test: uses null_transport mode — no echo server,
-    # no threads, no timing sensitivity. Runs on all platforms.
-    add_executable(otlp_test_exporter_retry test_exporter_retry.c)
-    target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c)
-    add_test(NAME exporter-retry
-        COMMAND otlp_test_exporter_retry)
-    set_tests_properties(exporter-retry PROPERTIES
-        LABELS "unit" TIMEOUT 30)
 
     # Retry-After wire test (v0.5.95): real HTTP responses with a
     # Retry-After header; verifies the exporter's retry pacing honors
@@ -99,15 +91,6 @@ if(UNIX)
     set_tests_properties(exporter-partial-success PROPERTIES
         LABELS "unit" TIMEOUT 30)
 
-    # Structured diagnostics events (v0.5.100): every diagnostic
-    # site delivers an otlp_event_t; null-transport scenarios pin
-    # code/signal/count/level/drop-reason per outcome.
-    add_executable(otlp_test_exporter_events test_exporter_events.c)
-    target_link_libraries(otlp_test_exporter_events PRIVATE otlp_c)
-    add_test(NAME exporter-events
-        COMMAND otlp_test_exporter_events)
-    set_tests_properties(exporter-events PROPERTIES
-        LABELS "unit" TIMEOUT 30)
 
     # poll_fds integration (v0.5.105): the event-loop surface was
     # exported since v0.1 with zero coverage — drives a real poll()
@@ -138,6 +121,24 @@ target_link_libraries(otlp_test_allocator_oom PRIVATE otlp_c)
 add_test(NAME allocator-oom
     COMMAND otlp_test_allocator_oom)
 set_tests_properties(allocator-oom PROPERTIES LABELS "unit")
+
+# Exporter retry: null_transport mode — no echo server, no
+# threads, no clocks. Runs on all platforms.
+add_executable(otlp_test_exporter_retry test_exporter_retry.c)
+target_link_libraries(otlp_test_exporter_retry PRIVATE otlp_c)
+add_test(NAME exporter-retry
+    COMMAND otlp_test_exporter_retry)
+set_tests_properties(exporter-retry PROPERTIES
+    LABELS "unit" TIMEOUT 30)
+
+# Structured diagnostics events: null-transport scenarios with
+# condition-driven (clock-free) loops. Portable.
+add_executable(otlp_test_exporter_events test_exporter_events.c)
+target_link_libraries(otlp_test_exporter_events PRIVATE otlp_c)
+add_test(NAME exporter-events
+    COMMAND otlp_test_exporter_events)
+set_tests_properties(exporter-events PROPERTIES
+    LABELS "unit" TIMEOUT 30)
 
 add_subdirectory(unit)
 

@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] - 2026-08-23
+
+Windows test parity.
+
+### Fixed — two portable test suites never ran on Windows
+
+`exporter-retry` was fully portable (its own header said "runs
+on all platforms") but sat in the POSIX-only CMake block — the
+Windows CI job never ran it. `exporter-events` was portable
+except for its wall-clock drive loop (`CLOCK_MONOTONIC` doesn't
+exist on MSVC).
+
+The events suite now drives on OUTCOME instead of wall time —
+`drive_until()` ticks (each tick sleeps via the library's own
+portable sleep) until the expected event count arrives; the
+iteration budget is far past these scenarios' 5ms backoff caps,
+and the loop exits on the terminal outcome, not a timeout. Both
+suites moved out of the `if(UNIX)` block: Windows CI now covers
+the full retry state machine (backoff/retry/drop) and the
+structured-events suite.
+
 ## [0.6.3] - 2026-08-23
 
 Encoder OOM-propagation coverage.

@@ -163,6 +163,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.1 | Docs freshness sweep: README feature-list drift fixed (resource-attrs model, structured events, server-response handling, UTF-8, examples list); cookbook points at the runnable event-loop example | #138 |
 | 0.6.2 | **Coverage re-measurement**: 5 files had drifted below the 82% bar — deep-clone round-trips (byte-equal encoding original vs clone) + time-state matrix restore every file to 82%+ | #139 |
 | 0.6.3 | **Encoder OOM coverage**: fail-injection probes every allocation in the encode paths — NOMEM propagation + no-leak proven at every position; SBO insight (tiny fixtures never allocate) documented; metrics encoder 82.1% → 84.5% | #140 |
+| 0.6.4 | **Windows test parity**: exporter-retry (was portable but POSIX-blocked) + exporter-events (drive-on-outcome replaces CLOCK_MONOTONIC) now run on the Windows CI job | #141 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
