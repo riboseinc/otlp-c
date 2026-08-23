@@ -4,6 +4,23 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.7] - 2026-08-24
+
+CLAUDE.md truth sweep.
+
+### Fixed — stale CI claims
+
+CLAUDE.md claimed a checkpatch CI gate
+(`.github/workflows/checkpatch.yml`, `ci/checkpatch.sh`) that was
+deleted in the workflow consolidation — the references survived
+the deletion. It also pointed at `.github/workflows/build.yml`,
+renamed to `ci.yml` in the same change. Now states reality:
+clang-format (in checks.yml) is the enforced style gate; the
+kernel-style conventions are reviewer-enforced. CodeQL's status
+(repo-level default setup) is documented where the false claim
+stood. Verified alongside: FreeBSD CI exists, and every path in
+the Key files table resolves.
+
 ## [0.6.6] - 2026-08-23
 
 Integration suite re-validated against a live otelcol + Jaeger.
