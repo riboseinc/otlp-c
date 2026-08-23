@@ -108,6 +108,18 @@ if(UNIX)
         COMMAND otlp_test_exporter_events)
     set_tests_properties(exporter-events PROPERTIES
         LABELS "unit" TIMEOUT 30)
+
+    # poll_fds integration (v0.5.105): the event-loop surface was
+    # exported since v0.1 with zero coverage — drives a real poll()
+    # loop off the exposed fd + interest bits to completion.
+    add_executable(otlp_test_exporter_poll
+        test_exporter_poll.c test_helper_echo.c)
+    target_link_libraries(otlp_test_exporter_poll
+        PRIVATE otlp_c Threads::Threads)
+    add_test(NAME exporter-poll
+        COMMAND otlp_test_exporter_poll)
+    set_tests_properties(exporter-poll PROPERTIES
+        LABELS "unit" TIMEOUT 30)
 endif()
 
 # Custom allocator hook test.

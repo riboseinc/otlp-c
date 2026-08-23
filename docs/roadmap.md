@@ -158,8 +158,9 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.102 | Hygiene: concurrency-stress echo worker stop + checked joins (last `(void)` joins in the tree); minimal example demos the event callback | #133 |
 | 0.5.103 | **Fix: UTF-8 validated at the API boundary** (proto3 string contract — otelcol rejects whole requests otherwise; OTLP_ERR_UTF8 finally used); composite ARRAY/KVLIST golden vectors; get_stats() documented thread-safe | #134 |
 | 0.5.104 | **Public API audit + 1.0-readiness assessment**: 124 exported symbols reviewed; flush_metric/flush_log return codes, sampler NULL-on-OOM, UTF-8 notes on the attribute conventions; perf A/B (103 vs 102 — noise-level); roadmap gains a Path-to-1.0 section | #135 |
+| 0.5.105 | **Dead-surface sweep**: poll_fds finally covered (real poll()-loop test caught an out=NULL contract wart — args now validated first); the never-built Phase 7 event-loop example; strerror completeness pin | #136 |
 
-**Key metrics (v0.5.104):** 144 TODOs complete, 46 tests, **49+
+**Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:

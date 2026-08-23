@@ -1940,15 +1940,19 @@ otlp_exporter_poll_fds(otlp_exporter_t *e,
 {
 	if (!e || !n_out)
 		return OTLP_ERR_NULL;
+	/* Argument validation BEFORE the state check: out=NULL with
+	 * cap>0 is a caller bug regardless of whether a request is
+	 * in flight (previously returned OK+n=0 in that case — a
+	 * contract wart the first poll_fds test caught). */
+	if (!out && cap > 0)
+	{
+		*n_out = 0;
+		return OTLP_ERR_NULL;
+	}
 	if (!e->in_flight || cap == 0)
 	{
 		*n_out = 0;
 		return OTLP_OK;
-	}
-	if (!out)
-	{
-		*n_out = 0;
-		return OTLP_ERR_NULL;
 	}
 	out[0].fd = otlp_http_request_fd(e->in_flight);
 	out[0].events = otlp_http_request_events(e->in_flight);

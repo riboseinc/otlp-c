@@ -4,6 +4,38 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.105] - 2026-08-23
+
+Dead-surface sweep: coverage for the uncovered API.
+
+### Fixed — poll_fds() contract wart (caught by its first test)
+
+`otlp_exporter_poll_fds()` — exported since v0.1, documented as
+THE event-loop integration surface — had ZERO test or example
+coverage. Writing the test immediately caught a contract wart:
+`out=NULL` with `cap>0` returned `OTLP_OK` when no request was in
+flight (the state check preceded argument validation). Arguments
+are now validated first — `OTLP_ERR_NULL` regardless of exporter
+state.
+
+### Added — poll-loop integration test + the Phase 7 example
+
+`exporter-poll` drives a REAL `poll()` loop off the exposed fd +
+interest bits against the echo server to completion (sent == 1),
+plus the zero-fd and argument-validation contract.
+`examples/event_loop_integration.c` — the original plan's Phase 7
+deliverable, quietly never built — demonstrates the embedding
+pattern end-to-end: poll on the in-flight fd, poll-as-sleep for
+the batch timer, event-logger tally narrating the outcome. With
+no collector it exits cleanly after the retry budget.
+
+### Added — strerror completeness pin
+
+`unit-common` asserts every status code maps to a non-empty,
+pairwise-distinct message (complete at 20/20 today; a new enum
+value without a message entry can no longer land silently — nor
+can a duplicated message hide a mis-mapped case).
+
 ## [0.5.104] - 2026-08-23
 
 Public API audit + 1.0-readiness assessment.
