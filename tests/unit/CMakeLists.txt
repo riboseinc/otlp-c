@@ -74,3 +74,10 @@ target_include_directories(otlp_unit_utf8 PRIVATE
 add_test(NAME unit-utf8
     COMMAND otlp_unit_utf8)
 set_tests_properties(unit-utf8 PROPERTIES LABELS "unit")
+
+# otlp_strerror completeness pin (v0.5.105).
+add_executable(otlp_unit_common test_unit_common.c)
+target_link_libraries(otlp_unit_common PRIVATE otlp_c)
+add_test(NAME unit-common
+    COMMAND otlp_unit_common)
+set_tests_properties(unit-common PROPERTIES LABELS "unit")

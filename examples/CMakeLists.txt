@@ -13,3 +13,11 @@ target_link_libraries(otlp_example_multithread PRIVATE otlp_c)
 if(UNIX AND NOT APPLE)
     target_link_libraries(otlp_example_multithread PRIVATE pthread)
 endif()
+
+# Event-loop integration demo: poll() + otlp_exporter_poll_fds() —
+# the embedding pattern for callers whose main loop owns I/O.
+# POSIX only (<poll.h>).
+if(UNIX)
+    add_executable(otlp_example_event_loop event_loop_integration.c)
+    target_link_libraries(otlp_example_event_loop PRIVATE otlp_c)
+endif()
