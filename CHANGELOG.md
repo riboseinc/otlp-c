@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.6] - 2026-08-23
+
+Integration suite re-validated against a live otelcol + Jaeger.
+
+### Fixed — 10s visibility budget was too tight for a cold pipeline
+
+The end-to-end test polls Jaeger for the exported span for up
+to 10s — but a COLD pipeline can exceed that on its own
+batching: otelcol's jaeger exporter flushes on a 5s batch timer
+before Jaeger even indexes the span. Observed live: the first
+run against fresh containers timed out at 10s; the warm rerun
+passed. Budget raised to 30s and validated by a cold run that
+passed at 24.8s — inside the new budget, past the old one.
+
+### Verified — everything since v0.5.95 sees a real collector
+
+The suite (otelcol-contrib 0.159.0 + Jaeger, all three signals:
+100 spans in 2 batches + one-shot metric + log, event/status
+visibility queried back from Jaeger) had not run since before
+v0.5.95. It now exercises Retry-After-era HTTP handling,
+PartialSuccess-era response decoding, the UTF-8 boundary, and
+the v0.5.100 event model against real collector responses —
+the diagnostic output during the run is the event formatter
+itself ("batch sent: 50 spans"). All green.
+
 ## [0.6.5] - 2026-08-23
 
 Spec hygiene: warning-free Doxygen + architecture catch-up.

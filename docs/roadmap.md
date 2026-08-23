@@ -165,6 +165,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.3 | **Encoder OOM coverage**: fail-injection probes every allocation in the encode paths — NOMEM propagation + no-leak proven at every position; SBO insight (tiny fixtures never allocate) documented; metrics encoder 82.1% → 84.5% | #140 |
 | 0.6.4 | **Windows test parity**: exporter-retry (was portable but POSIX-blocked) + exporter-events (drive-on-outcome replaces CLOCK_MONOTONIC) now run on the Windows CI job | #141 |
 | 0.6.5 | Spec hygiene: Doxygen build warning-free (version from CMake, all docs as pages — was stuck at PROJECT_NUMBER 0.2.0 with a wall of \ref warnings); architecture.md gains protobuf_decode + event-model + UTF-8 + conformance-gates | #142 |
+| 0.6.6 | **Integration re-validated live** (otelcol 0.159.0 + Jaeger, all 3 signals): cold-pipeline flake fixed (10s → 30s visibility budget — cold run passed at 24.8s); first real-collector exercise of everything since v0.5.95 | #143 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero

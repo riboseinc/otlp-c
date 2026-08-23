@@ -347,8 +347,12 @@ main(void)
 	otlp_exporter_free(exp);
 	otlp_tracer_free(tracer);
 
-	/* Poll Jaeger for the service + tag for up to 10s. */
-	for (int attempt = 0; attempt < 100; attempt++)
+	/* Poll Jaeger for the service + tag for up to 30s. A COLD
+	 * pipeline can exceed 10s on its own batching: otelcol's
+	 * jaeger exporter flushes on a 5s batch timer before Jaeger
+	 * even indexes the span (observed: first run against fresh
+	 * containers timed out at 10s; the warm rerun passed). */
+	for (int attempt = 0; attempt < 300; attempt++)
 	{
 		uint8_t *body = NULL;
 		size_t len = 0;
@@ -451,6 +455,6 @@ main(void)
 		struct timespec ts = { 0, 100 * 1000 * 1000 /* 100ms */ };
 		nanosleep(&ts, NULL);
 	}
-	printf("[integration] FAIL — span not visible in Jaeger after 10s\n");
+	printf("[integration] FAIL — span not visible in Jaeger after 30s\n");
 	return 1;
 }
