@@ -118,9 +118,18 @@ test_span_deep_clone(void)
 	}
 
 	/* guards: setters with nothing to attach to */
-	check_true(otlp_span_set_event_attribute_string(otlp_span_create("e"),
-			   "k",
-			   "v") == OTLP_ERR_INVALID_ARGUMENT);
+	{
+		otlp_span_t *bare = otlp_span_create("e");
+
+		check_true(bare != NULL);
+		check_true(
+			otlp_span_set_event_attribute_string(bare, "k", "v") ==
+			OTLP_ERR_INVALID_ARGUMENT);
+		check_true(
+			otlp_span_set_link_attribute_string(bare, "k", "v") ==
+			OTLP_ERR_INVALID_ARGUMENT);
+		otlp_span_free(bare);
+	}
 
 	c = otlp_span_clone(s);
 	check_true(c != NULL);
