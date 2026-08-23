@@ -161,6 +161,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.105 | **Dead-surface sweep**: poll_fds finally covered (real poll()-loop test caught an out=NULL contract wart — args now validated first); the never-built Phase 7 event-loop example; strerror completeness pin | #136 |
 | 0.6.0 | **The stabilization window opens** — the 0.6 line is additive-only; 1.0 criteria snapshot recorded (all met as of 0.5.105); no library code changes | #137 |
 | 0.6.1 | Docs freshness sweep: README feature-list drift fixed (resource-attrs model, structured events, server-response handling, UTF-8, examples list); cookbook points at the runnable event-loop example | #138 |
+| 0.6.2 | **Coverage re-measurement**: 5 files had drifted below the 82% bar — deep-clone round-trips (byte-equal encoding original vs clone) + time-state matrix restore every file to 82%+ | #139 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
