@@ -4,6 +4,28 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-08-23
+
+Encoder OOM-propagation coverage.
+
+### Added — fail-injection into the encode paths
+
+The encoders' failure paths (the goto-out cleanup arms) had
+never executed — the allocator-oom harness only probed
+create/clone paths. Three new cases fail every allocation
+position in the traces/metrics/logs encode paths one at a time
+(100/120/100 probes), asserting the result is always
+OTLP_ERR_NOMEM and that every successful allocation is paired
+with a free on every failure path. The encoders' cleanup is
+proven correct: no leaks, clean propagation.
+
+The unlock was the small-buffer optimization: the pb buffers
+keep a 64-byte inline buffer, so tiny fixtures never allocate
+and mid-emission reserve failures were unreachable. Fixtures
+now carry 160-byte attribute values, pushing every sub-buffer
+to the heap — the metrics encoder's line coverage rises
+82.09% → 84.45%, and every library file remains at 82%+.
+
 ## [0.6.2] - 2026-08-23
 
 Coverage re-measurement + deep-clone round-trips.

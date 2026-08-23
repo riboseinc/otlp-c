@@ -28,6 +28,8 @@
 
 #include "../src/log_internal.h"
 #include "../src/metric_internal.h"
+#include "../src/otlp_messages.h"
+#include "../src/protobuf_encode.h"
 #include "../src/span_internal.h"
 
 #include <stdio.h>
@@ -602,6 +604,203 @@ test_flush_log_oom_accounting(void)
 	return 0;
 }
 
+/* ── Encoder OOM propagation (v0.6.3) ──────────────────────────
+ *
+ * The encoders' failure paths (~60 lines of goto-out cleanup in
+ * otlp_metrics_encoder alone) had never executed: the coverage
+ * re-measurement flagged them, and the injection harness only
+ * probed create/clone paths. Same invariant: an allocation
+ * failure must surface as OTLP_ERR_NOMEM with nothing leaked —
+ * every successful alloc paired with a free on every path. */
+
+static otlp_span_t *
+build_rich_span(void)
+{
+	static const uint8_t raw[2] = { 0x01, 0xfe };
+	static const otlp_value_t items[1] = { { .type = OTLP_VALUE_INT64,
+		.v = { .int64_val = 5 } } };
+	static const otlp_kv_t kvs[1] = {
+		{ .key = "inner",
+			.value = { .type = OTLP_VALUE_STRING,
+				.v = { .string_val = "v" } } },
+	};
+	otlp_span_t *s = otlp_span_create("oom");
+
+	if (!s)
+		return NULL;
+	/* Long values: the pb buffers have a 64-byte inline small-
+	 * buffer optimization — tiny fixtures never allocate, so the
+	 * mid-emission reserve failures (the goto-out arms) would be
+	 * unreachable. These push every sub-buffer to the heap. */
+	for (int i = 0; i < 4; i++)
+	{
+		char key[32], val[160];
+
+		snprintf(key, sizeof(key), "long.key.%d", i);
+		memset(val, 'a' + i, sizeof(val) - 1);
+		val[sizeof(val) - 1] = '\0';
+		otlp_span_set_attribute_string(s, key, val);
+	}
+	otlp_span_set_attribute_int(s, "i", -2);
+	otlp_span_set_attribute_bytes(s, "b", raw, 2);
+	otlp_span_set_attribute_array(s, "a", items, 1);
+	otlp_span_set_attribute_kvlist(s, "m", kvs, 1);
+	otlp_span_set_status(s, OTLP_STATUS_CODE_ERROR, "boom");
+	otlp_span_add_event(s, "e", 7);
+	otlp_span_set_event_attribute_string(s, "ek", "ev");
+	return s;
+}
+
+static int
+test_encode_traces_oom(void)
+{
+	const otlp_span_t *arr[1];
+	otlp_span_t *s;
+	int leaks = 0, bad_rc = 0;
+
+	otlp_set_allocator(NULL);
+	s = build_rich_span();
+	if (!s)
+		return 1;
+	arr[0] = s;
+
+	otlp_set_allocator(&fail_allocator);
+	for (int n = 1; n <= 100; n++)
+	{
+		struct otlp_pb_buf body = { 0 };
+		otlp_status_t st;
+
+		reset_counters(n);
+		st = otlp_encode_export_trace_service_request(
+			&body, "svc", NULL, 0, "sc", "1", arr, 1);
+		otlp_pb_buf_free(&body);
+		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
+			bad_rc++;
+		if (alloc_count != free_count)
+			leaks++;
+	}
+	otlp_set_allocator(NULL);
+	otlp_span_free(s);
+
+	if (leaks || bad_rc)
+		printf("[oom] encode traces FAILED: leaks=%d bad_rc=%d\n",
+			leaks,
+			bad_rc);
+	else
+		printf("[oom] encode traces PASS — 100 iterations\n");
+	return leaks || bad_rc;
+}
+
+static int
+test_encode_metrics_oom(void)
+{
+	static const double bounds[2] = { 1.5, 9.5 };
+	const otlp_metric_t *arr[2];
+	otlp_metric_t *h, *eh;
+	int leaks = 0, bad_rc = 0;
+
+	otlp_set_allocator(NULL);
+	h = otlp_metric_create(OTLP_METRIC_HISTOGRAM, "h", "1", "d", bounds, 2);
+	eh = otlp_metric_create(
+		OTLP_METRIC_EXP_HISTOGRAM, "e", "1", "d", NULL, 0);
+	if (!h || !eh)
+		return 1;
+	otlp_metric_record(h, 1.0);
+	otlp_metric_record(h, 20.0);
+	{
+		char val[160];
+
+		memset(val, 'm', sizeof(val) - 1);
+		val[sizeof(val) - 1] = '\0';
+		otlp_metric_set_attribute_string(h, "k", val);
+		otlp_metric_set_attribute_string(h, "k2", val);
+	}
+	{
+		static const uint64_t pos[1] = { 3 };
+
+		otlp_metric_record(eh, 4.0);
+		otlp_metric_set_exp_histogram(eh, -2, 1, pos, 1, 0, NULL, 0);
+	}
+	arr[0] = h;
+	arr[1] = eh;
+
+	otlp_set_allocator(&fail_allocator);
+	for (int n = 1; n <= 120; n++)
+	{
+		struct otlp_pb_buf body = { 0 };
+		otlp_status_t st;
+
+		reset_counters(n);
+		st = otlp_encode_export_metrics_service_request(
+			&body, "svc", NULL, 0, "sc", "1", arr, 2);
+		otlp_pb_buf_free(&body);
+		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
+			bad_rc++;
+		if (alloc_count != free_count)
+			leaks++;
+	}
+	otlp_set_allocator(NULL);
+	otlp_metric_free(h);
+	otlp_metric_free(eh);
+
+	if (leaks || bad_rc)
+		printf("[oom] encode metrics FAILED: leaks=%d bad_rc=%d\n",
+			leaks,
+			bad_rc);
+	else
+		printf("[oom] encode metrics PASS — 120 iterations\n");
+	return leaks || bad_rc;
+}
+
+static int
+test_encode_logs_oom(void)
+{
+	const otlp_log_record_t *arr[1];
+	otlp_log_record_t *lr;
+	int leaks = 0, bad_rc = 0;
+
+	otlp_set_allocator(NULL);
+	lr = otlp_log_record_create(OTLP_SEVERITY_WARN, "oom body");
+	if (!lr)
+		return 1;
+	otlp_log_record_set_severity_text(lr, "WARN");
+	{
+		char val[160];
+
+		memset(val, 'l', sizeof(val) - 1);
+		val[sizeof(val) - 1] = '\0';
+		otlp_log_record_set_attribute_string(lr, "k", val);
+		otlp_log_record_set_attribute_string(lr, "k2", val);
+	}
+	arr[0] = lr;
+
+	otlp_set_allocator(&fail_allocator);
+	for (int n = 1; n <= 100; n++)
+	{
+		struct otlp_pb_buf body = { 0 };
+		otlp_status_t st;
+
+		reset_counters(n);
+		st = otlp_encode_export_logs_service_request(
+			&body, "svc", NULL, 0, "sc", "1", arr, 1);
+		otlp_pb_buf_free(&body);
+		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
+			bad_rc++;
+		if (alloc_count != free_count)
+			leaks++;
+	}
+	otlp_set_allocator(NULL);
+	otlp_log_record_free(lr);
+
+	if (leaks || bad_rc)
+		printf("[oom] encode logs FAILED: leaks=%d bad_rc=%d\n",
+			leaks,
+			bad_rc);
+	else
+		printf("[oom] encode logs PASS — 100 iterations\n");
+	return leaks || bad_rc;
+}
+
 int
 main(void)
 {
@@ -615,6 +814,9 @@ main(void)
 	failures += test_tracer_create_oom();
 	failures += test_flush_metric_oom_accounting();
 	failures += test_flush_log_oom_accounting();
+	failures += test_encode_traces_oom();
+	failures += test_encode_metrics_oom();
+	failures += test_encode_logs_oom();
 
 	if (failures)
 		printf("[oom] %d test(s) failed\n", failures);
