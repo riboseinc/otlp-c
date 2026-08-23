@@ -61,6 +61,10 @@ if (now - last_tick >= 100) {
 
 ## 3. Event-loop integration (libuv)
 
+A runnable version of this pattern (plain poll()) ships as
+[examples/event_loop_integration.c](../examples/event_loop_integration.c);
+adapt it to epoll/kqueue/IOCP the same way.
+
 Expose the in-flight HTTP fd to your event loop. When it has work,
 call `tick()`.
 

@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-08-23
+
+Documentation freshness sweep (first release inside the
+stabilization window — docs only, no code, no API).
+
+### Fixed — README feature-list drift
+
+- Resource attributes were described as the pre-v0.5.92
+  four-type model; now the full `otlp_value_t` value model with
+  create-time map semantics.
+- Diagnostics described only `set_logger`; now leads with the
+  structured `set_event_logger` surface (v0.5.100).
+- Added missing capabilities: server-response awareness
+  (Retry-After honored; PartialSuccess surfaced via diagnostics
+  and per-signal `rejected_*` stats) and UTF-8 boundary
+  validation.
+- The single example link became the full list (minimal,
+  multithread, event_loop_integration).
+
+### Fixed — cookbook pointer
+
+The event-loop section now references the runnable
+`examples/event_loop_integration.c` (v0.5.105) alongside the
+libuv adaptation prose.
+
 ## [0.6.0] - 2026-08-23
 
 The stabilization window opens.
