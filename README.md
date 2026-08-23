@@ -112,7 +112,7 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
 
 ## Build
 
-CMake + Ninja (recommended). vcpkg manifest mode is supported but currently pulls in no dependencies (the whole point is zero non-libc deps).
+CMake + Ninja (recommended). vcpkg manifest mode is supported for building this repo (see below) and pulls in no dependencies (the whole point is zero non-libc deps).
 
 ```sh
 cmake -B build -G Ninja -DOTLP_C_BUILD_TESTS=ON -DOTLP_C_BUILD_EXAMPLES=ON
@@ -120,18 +120,37 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-### vcpkg
+### Consuming from another project
 
-Use `otlp-c` from vcpkg:
+`otlp-c` is not (yet) in the public vcpkg registry. Use CMake
+FetchContent against a release tag (`v0.6.8` shown):
 
-```sh
-# In your project's vcpkg.json:
-{
-  "dependencies": ["otlp-c"]
-}
+```cmake
+include(FetchContent)
+FetchContent_Declare(otlp-c
+    GIT_REPOSITORY https://github.com/riboseinc/otlp-c
+    GIT_TAG        v0.6.8)
+FetchContent_MakeAvailable(otlp-c)
+target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
 
-Or build it from this repo:
+Or clone / submodule this repo and `add_subdirectory(otlp-c)`, or
+install it first and `find_package` it:
+
+```sh
+cmake -B build && cmake --build build && cmake --install build
+```
+
+```cmake
+find_package(otlp-c CONFIG REQUIRED)
+target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
+```
+
+### vcpkg (toolchain environment)
+
+This repo carries a vcpkg manifest so it can be *built* under a
+vcpkg toolchain. The manifest declares no dependencies (zero
+non-libc deps is the point) and publishes no installable port:
 
 ```sh
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
