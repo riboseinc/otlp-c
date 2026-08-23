@@ -5,10 +5,14 @@
 #   doxygen Doxyfile
 
 PROJECT_NAME           = otlp-c
-PROJECT_NUMBER         = 0.2.0
+PROJECT_NUMBER         = @OTLP_C_VERSION@
 PROJECT_BRIEF          = "Pure-C99 OTLP/HTTP client with zero non-libc dependencies"
 
-INPUT                  = include/otlp-c/ README.md docs/cookbook.md
+INPUT                  = include/otlp-c/ README.md SECURITY.md CLAUDE.md \
+                         CONTRIBUTING.md CODE_OF_CONDUCT.md \
+                         docs/quickstart.md docs/deployment.md docs/otlp-spec.md \
+                         docs/architecture.md docs/cookbook.md docs/roadmap.md \
+                         docs/integration-test.md
 RECURSIVE              = YES
 
 OUTPUT_DIRECTORY       = build/docs
