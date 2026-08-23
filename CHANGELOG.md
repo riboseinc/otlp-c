@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-08-23
+
+The stabilization window opens.
+
+This minor bump starts the 0.6 line in which the public API is
+additive-only: every change from here to 1.0.0 is a new function,
+a new opt-in field, or a bug fix — nothing breaks, nothing is
+removed. When one full minor cycle holds that discipline, the 1.0
+criteria in docs/roadmap.md ("Path to 1.0") are met and the API
+freezes for the 1.x line.
+
+Snapshot of the criteria at the window's opening — all satisfied
+as of 0.5.105:
+
+1. Public surface audited: 124 exported functions across 10
+   headers with complete return-code, ownership, and
+   thread-safety documentation; every function covered by at
+   least one test or example (the v0.5.105 dead-surface sweep).
+2. Wire conformance proven: 31/31 schema tables pinned against
+   opentelemetry-proto literals; whole payloads reference-
+   validated by golden vectors (all three signals, composite
+   attributes included).
+3. Boundary validation complete: header injection (CWE-93),
+   integer overflow (CWE-190), UTF-8 (proto3 string contract),
+   malformed-response decoding — each with dedicated tests.
+4. No open P1/P2 items in TODO.complete.
+
+No library code changes in this release — the diff is the
+version constants and this record.
+
 ## [0.5.105] - 2026-08-23
 
 Dead-surface sweep: coverage for the uncovered API.
