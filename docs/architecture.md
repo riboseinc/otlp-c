@@ -130,6 +130,7 @@ transport-agnostic via callback-based carriers.
 | `sampler.c` | Built-in samplers (always_on/off/ratio) | Tracer integration |
 | `context.c` | Context inject/extract via carriers | HTTP headers |
 | `exporter.c` | 3 MPSC queues (span/metric/log), batch, retry, null-transport, diagnostics | Encoding details |
+| `protobuf_decode.c` | Bounds-checked wire reader (PartialSuccess decode, fixed32/64) | Encoding, response policy |
 | `exporter_otel.c` | Span batch → HTTP request builder | Queue, retry |
 | `otlp_messages.c` | Traces encoder + shared helpers (any_value, resource, scope, attributes) | Metric/log encoding |
 | `otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) | Traces/logs encoding |
@@ -142,7 +143,21 @@ transport-agnostic via callback-based carriers.
 | `atomic_compat.h` | Atomic operations (GCC/Clang pass-through, MSVC intrinsics) | Lock-free algorithms |
 | `slab.c` | Slab allocator + global allocator integration | Memory layout of types |
 | `w3c.c` | Traceparent header format/parse | Context propagation |
-| `internal_util.c` | Malloc wrappers, string/bytes duplication, attribute free | Domain logic |
+| `internal_util.c` | Malloc wrappers, string/bytes duplication, attribute free, UTF-8 validator, the one set-attribute engine | Domain logic |
+
+The diagnostics model (v0.5.100) spans `exporter.c`: every
+diagnostic is an `otlp_event_t` (the model); the string messages
+are DERIVED from it by one formatter, so the structured
+(`set_event_logger`) and string (`set_logger`) views cannot
+diverge. UTF-8 validation (v0.5.103) lives at the API boundary —
+`internal_util`'s validator backs the set-attribute engine (all
+six surfaces) and the scalar wire-string setters, so one invalid
+value fails its setter (`OTLP_ERR_UTF8`) instead of letting a
+Go-based collector reject the whole request. Wire conformance is
+enforced by two independent tests: `unit-wire-numbers` pins all
+31 schema tables against opentelemetry-proto literals, and
+`unit-golden` compares whole payloads against the reference
+serialization (see `tests/golden/`).
 
 ## Design patterns
 

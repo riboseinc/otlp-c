@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] - 2026-08-23
+
+Spec hygiene: warning-free Doxygen + architecture catch-up.
+
+### Fixed — the API reference build
+
+- The Doxyfile's PROJECT_NUMBER said 0.2.0 — stale for over a
+  hundred releases. It is now a CMake-configured template
+  (Doxyfile.in) taking PROJECT_VERSION, so the number cannot
+  drift again.
+- INPUT covered only headers + README + cookbook; every README
+  link to another doc became an unresolvable Doxygen \ref (a
+  wall of warnings). All spec pages — quickstart, deployment,
+  otlp-spec, architecture, cookbook, roadmap, integration-test,
+  SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CLAUDE — are now
+  Doxygen inputs: the reference builds with ZERO warnings at 84
+  HTML pages, with the specs cross-linked into the API docs.
+- One real doc bug surfaced via the warnings: a `#repr(C)` in
+  roadmap.md that Doxygen parsed as a link request.
+
+### Added — architecture.md catch-up
+
+The module table predated `protobuf_decode.c` and the
+v0.5.100/103 designs; it now documents the decode module, the
+diagnostics event model (one model, derived string view), the
+UTF-8 boundary contract, and the two independent
+wire-conformance gates (schema pins + golden vectors).
+
 ## [0.6.4] - 2026-08-23
 
 Windows test parity.

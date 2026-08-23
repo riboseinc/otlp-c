@@ -164,6 +164,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.2 | **Coverage re-measurement**: 5 files had drifted below the 82% bar — deep-clone round-trips (byte-equal encoding original vs clone) + time-state matrix restore every file to 82%+ | #139 |
 | 0.6.3 | **Encoder OOM coverage**: fail-injection probes every allocation in the encode paths — NOMEM propagation + no-leak proven at every position; SBO insight (tiny fixtures never allocate) documented; metrics encoder 82.1% → 84.5% | #140 |
 | 0.6.4 | **Windows test parity**: exporter-retry (was portable but POSIX-blocked) + exporter-events (drive-on-outcome replaces CLOCK_MONOTONIC) now run on the Windows CI job | #141 |
+| 0.6.5 | Spec hygiene: Doxygen build warning-free (version from CMake, all docs as pages — was stuck at PROJECT_NUMBER 0.2.0 with a wall of \ref warnings); architecture.md gains protobuf_decode + event-model + UTF-8 + conformance-gates | #142 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
@@ -449,7 +450,7 @@ Goal: cut the first release.
   Windows, OpenSSL optionally on Linux).
 - **Sampling** at the SDK level (head-based and tail-based).
 - **Custom allocators** (caller supplies malloc/free).
-- **Language bindings**: Python (cffi), Rust (#repr(C)), Go (cgo).
+- **Language bindings**: Python (cffi), Rust (repr-C FFI), Go (cgo).
 - **CNCF donation** once the API stabilizes and adoption warrants it.
 
 ## How to pick what to work on

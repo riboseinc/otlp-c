@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(otlp-c
-    VERSION 0.6.4
+    VERSION 0.6.5
     DESCRIPTION "Pure-C OTLP/HTTP client for OpenTelemetry"
     HOMEPAGE_URL "https://github.com/riboseinc/otlp-c"
     LANGUAGES C
@@ -209,8 +209,12 @@ install(FILES
 # `cmake --build build --target docs` produces HTML in build/docs/html/.
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
+    # Version comes from PROJECT_VERSION — the Doxyfile is a
+    # configured template so PROJECT_NUMBER can never go stale
+    # (it said 0.2.0 for a hundred releases).
+    configure_file(Doxyfile.in Doxyfile @ONLY)
     add_custom_target(docs
-        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Generating Doxygen API reference"
         VERBATIM)
