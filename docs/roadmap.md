@@ -166,6 +166,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.4 | **Windows test parity**: exporter-retry (was portable but POSIX-blocked) + exporter-events (drive-on-outcome replaces CLOCK_MONOTONIC) now run on the Windows CI job | #141 |
 | 0.6.5 | Spec hygiene: Doxygen build warning-free (version from CMake, all docs as pages — was stuck at PROJECT_NUMBER 0.2.0 with a wall of \ref warnings); architecture.md gains protobuf_decode + event-model + UTF-8 + conformance-gates | #142 |
 | 0.6.6 | **Integration re-validated live** (otelcol 0.159.0 + Jaeger, all 3 signals): cold-pipeline flake fixed (10s → 30s visibility budget — cold run passed at 24.8s); first real-collector exercise of everything since v0.5.95 | #143 |
+| 0.6.7 | CLAUDE.md truth sweep: checkpatch claims (deleted in the workflow consolidation) and build.yml rename corrected — clang-format documented as the enforced gate, CodeQL status noted | #144 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero

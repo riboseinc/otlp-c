@@ -55,7 +55,10 @@ Property tests take an env var override for the iteration count: `OTLP_C_PROPERT
 ## Code style
 
 - **`.clang-format`** is Mozilla-based. Run `clang-format -i` on changed files before committing.
-- **checkpatch** (Linux kernel style with project-specific ignores) runs in CI. See `ci/checkpatch.sh`.
+- **clang-format** is the enforced style gate (CI job in
+  `.github/workflows/checks.yml`). The kernel-style conventions
+  below (comment shapes, declaration spacing) are
+  reviewer-enforced — no separate lint runs them.
 - **Common gotchas**:
   - Block comments: `*/` on its own line for multi-line comments.
   - Blank line after declarations before statements.
@@ -319,13 +322,15 @@ Test-writing rules (paid-for lessons):
 
 ## CI
 
-`.github/workflows/build.yml` runs:
+`.github/workflows/ci.yml` runs:
 
 - Linux x86_64, macOS arm64, macOS x86_64, Windows x64 (matrix).
 - Build + unit tests + property tests.
 - vcpkg manifest mode.
 
-`.github/workflows/checkpatch.yml` runs checkpatch on every PR.
+`.github/workflows/checks.yml` runs clang-format and whitespace
+checks on every PR; CodeQL analysis runs via the repo-level
+default setup.
 
 PRs require green CI before merge. Rebase-merge is the canonical merge style.
 
