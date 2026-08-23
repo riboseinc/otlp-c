@@ -159,6 +159,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.5.103 | **Fix: UTF-8 validated at the API boundary** (proto3 string contract — otelcol rejects whole requests otherwise; OTLP_ERR_UTF8 finally used); composite ARRAY/KVLIST golden vectors; get_stats() documented thread-safe | #134 |
 | 0.5.104 | **Public API audit + 1.0-readiness assessment**: 124 exported symbols reviewed; flush_metric/flush_log return codes, sampler NULL-on-OOM, UTF-8 notes on the attribute conventions; perf A/B (103 vs 102 — noise-level); roadmap gains a Path-to-1.0 section | #135 |
 | 0.5.105 | **Dead-surface sweep**: poll_fds finally covered (real poll()-loop test caught an out=NULL contract wart — args now validated first); the never-built Phase 7 event-loop example; strerror completeness pin | #136 |
+| 0.6.0 | **The stabilization window opens** — the 0.6 line is additive-only; 1.0 criteria snapshot recorded (all met as of 0.5.105); no library code changes | #137 |
 
 **Key metrics (v0.5.105):** 145 TODOs complete, 48 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
@@ -199,6 +200,7 @@ window when all of the following hold — the audit as of v0.5.104:
    with dedicated tests.
 4. **No open P1/P2 items** in TODO.complete.
 5. **One full minor cycle (0.6) with additive-only API changes.**
+   (Window OPENED at 0.6.0 — 2026-08-23.)
 
 Deliberately NOT in 1.0 (design constraints, not gaps): TLS
 (sidecar terminates), gRPC, payload compression — all would
