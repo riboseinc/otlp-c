@@ -226,7 +226,7 @@ def logs_payload():
 def c_array(name, data):
     body = ", ".join(f"0x{b:02x}" for b in data)
     wrapped = "\n".join(
-        "    " + part for part in
+        ("    " + part).rstrip() for part in
         [body[i:i + 96] for i in range(0, len(body), 96)])
     define = "#define " + name + "_LEN ((size_t) sizeof(" + name + "))\n"
     return ("static const unsigned char " + name + "[] = {\n"
