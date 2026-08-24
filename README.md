@@ -114,6 +114,15 @@ For projects where a C++ runtime dependency is unacceptable, this is the only pa
 
 CMake + Ninja (recommended). vcpkg manifest mode is supported for building this repo (see below) and pulls in no dependencies (the whole point is zero non-libc deps).
 
+One command, any configuration — CMake presets (needs CMake 3.21+):
+
+```sh
+cmake --preset default && cmake --build --preset default && ctest --preset default
+# also: release, asan, ubsan, tsan
+```
+
+Or the explicit form:
+
 ```sh
 cmake -B build -G Ninja -DOTLP_C_BUILD_TESTS=ON -DOTLP_C_BUILD_EXAMPLES=ON
 cmake --build build
@@ -163,6 +172,31 @@ cmake --build build && ctest --test-dir build
 The repo's own manifest (`vcpkg.json`) is for building otlp-c
 under a vcpkg toolchain; it declares no dependencies (zero
 non-libc deps is the point).
+
+## OTel environment variables
+
+Standard `OTEL_*` environment variables are supported (v0.7.0) via
+one additive call — unset variables pass through, so it composes
+with hand-filled opts:
+
+```c
+otlp_exporter_opts_t opts = { .service_name = "demo" };
+char endpoint_buf[256];
+otlp_exporter_opts_apply_env(&opts, endpoint_buf, sizeof(endpoint_buf));
+otlp_exporter_t *exp = otlp_exporter_create(&opts);
+```
+
+| Variable | Effect |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | base endpoint; `/v1/traces` appended when no path |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | full traces endpoint; wins over the base form |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | request timeout (ms), applied to connect + read |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | must be `http/protobuf` if set, else error |
+| `OTEL_SERVICE_NAME` | service name |
+
+Not supported: `OTEL_EXPORTER_OTLP_HEADERS` and per-signal
+metric/log endpoint variables (those paths derive from the one
+traces endpoint).
 
 ## Quick start
 

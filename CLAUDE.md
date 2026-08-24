@@ -244,6 +244,12 @@ All phases are complete (v0.5.97). The library implements:
 - **Arena-aware slab realloc** (v0.5.85): any slot size is safe —
   growing arena pointers are moved, never libc-realloc'd
 
+- **OTel env vars (v0.7.0)**: `otlp_exporter_opts_apply_env()`
+  applies OTEL_EXPORTER_OTLP_ENDPOINT/_TRACES_ENDPOINT/_TIMEOUT/
+  _PROTOCOL and OTEL_SERVICE_NAME. Pure parsers in src/env_config
+  (string in, opts field out) + one getenv driver; composed
+  endpoints land in a caller buffer.
+
 When extending the library:
 - **All six attribute surfaces** (span/event/link/metric/log/
   resource) take all seven AnyValue types: string/bool/int64/

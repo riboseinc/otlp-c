@@ -174,6 +174,31 @@ extern "C"
 		size_t queue_capacity;
 	} otlp_exporter_opts_t;
 
+	/* Apply the OpenTelemetry standard environment variables to
+	 * opts (v0.7.0): OTEL_EXPORTER_OTLP_ENDPOINT (base form gets
+	 * "/v1/traces" appended), OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+	 * (full URL; wins over the base form),
+	 * OTEL_EXPORTER_OTLP_TIMEOUT (ms; applied to both the connect
+	 * and read phases), OTEL_EXPORTER_OTLP_PROTOCOL (must be
+	 * "http/protobuf" if set), and OTEL_SERVICE_NAME.
+	 *
+	 * Only variables that are SET (non-empty) overwrite the
+	 * corresponding opt; the rest pass through untouched, so this
+	 * composes with hand-filled opts. `buf` receives any composed
+	 * or copied endpoint and must outlive the following
+	 * otlp_exporter_create() call — opts->endpoint points into it
+	 * when an endpoint variable was applied.
+	 *
+	 * Returns the first malformed value found
+	 * (OTLP_ERR_INVALID_ARGUMENT), or OTLP_OK. Not supported:
+	 * OTEL_EXPORTER_OTLP_HEADERS and per-signal metric/log
+	 * variables (those paths derive from the traces endpoint).
+	 */
+	OTLP_C_EXPORT
+	otlp_status_t otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,
+		char *buf,
+		size_t buf_cap);
+
 	/* Construct an exporter. The opts are copied; the caller may free
 	 * them after this returns. Returns NULL on allocation failure.
 	 *
