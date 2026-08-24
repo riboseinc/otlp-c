@@ -688,6 +688,16 @@ otlp_exemplar_mark_time(otlp_exemplar_t *ex)
 }
 
 otlp_status_t
+otlp_exemplar_set_timestamp(otlp_exemplar_t *ex, uint64_t time_unix_nano)
+{
+	if (!ex)
+		return OTLP_ERR_NULL;
+	ex->time_unix_nano = time_unix_nano;
+	ex->has_time = true;
+	return OTLP_OK;
+}
+
+otlp_status_t
 otlp_metric_add_exemplar(otlp_metric_t *m, const otlp_exemplar_t *ex)
 {
 	if (!m || !ex)

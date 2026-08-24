@@ -463,3 +463,47 @@ opts.flush_timeout_ms = 5000;  /* 5s cap; default 30000 */
 
 Both `flush()` and the synchronous metric/log flush paths respect
 the configured value.
+
+## 18. Configuration: env vars, headers, per-signal endpoints (v0.7+)
+
+Zero-config deployments — the OTel standard variables, one call.
+Unset variables pass through, so this composes with hand-filled
+opts:
+
+```c
+otlp_exporter_opts_t opts = { .service_name = "svc" };
+otlp_env_storage_t env;  /* ~26 KiB — prefer static/heap */
+otlp_exporter_opts_apply_env(&opts, &env);
+otlp_exporter_t *exp = otlp_exporter_create(&opts);
+```
+
+ENDPOINT is a base (each signal's path appended); the per-signal
+TRACES/METRICS/LOGS_ENDPOINT forms override; TIMEOUT covers
+connect+read; PROTOCOL must be http/protobuf; SERVICE_NAME,
+RESOURCE_ATTRIBUTES, and HEADERS (extra HTTP headers — collector
+auth) complete the matrix. `metrics_endpoint`/`logs_endpoint`
+opts fields do the same per-signal routing in code.
+
+Auth toward the collector without env vars:
+
+```c
+otlp_http_header_t hdrs[] = { { "authorization", "Bearer t" } };
+otlp_exporter_opts_t opts = { .http_headers = hdrs,
+    .n_http_headers = 1 };
+```
+
+## 19. Exemplars and schema URL (v0.8.0+)
+
+Tie a value to the trace that produced it:
+
+```c
+otlp_exemplar_t *ex = otlp_exemplar_create();
+otlp_exemplar_set_double_value(ex, 42.5);
+otlp_exemplar_set_trace_context(ex, trace_id, span_id);
+otlp_exemplar_set_timestamp(ex, now_unix_nano);
+otlp_metric_add_exemplar(m, ex);
+otlp_exemplar_free(ex);
+```
+
+And `schema_url` (opts field) states your telemetry schema on
+every signal's resource-level message.

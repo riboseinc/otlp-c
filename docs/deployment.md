@@ -77,8 +77,9 @@ Run otelcol as a DaemonSet on every node. The application pod talks
 to the node-local otelcol via the pod network.
 
 ```yaml
-# Per-pod: point otlp-c at the node-agent otelcol.
-OTLP_C_ENDPOINT=http://$(NODE_IP):4318/v1/traces
+# Per-pod: point otlp-c at the node-agent otelcol (the base
+# endpoint — each signal's path is appended automatically).
+OTEL_EXPORTER_OTLP_ENDPOINT=http://$(NODE_IP):4318
 ```
 
 The agent otelcol forwards to a central collector (or directly to
@@ -94,8 +95,8 @@ spec:
   containers:
     - name: app
       env:
-        - name: OTLP_C_ENDPOINT
-          value: http://127.0.0.1:4318/v1/traces
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://127.0.0.1:4318
     - name: otelcol
       image: otel/opentelemetry-collector-contrib:latest
       # ... config binds 127.0.0.1:4318, exports to cloud

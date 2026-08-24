@@ -711,37 +711,40 @@ enum
 };
 
 static const struct otlp_field_spec OTLP_EX_FIELDS[] = {
-	[OTLP_EX_FI_FILTERED_ATTRIBUTES] = { "filtered_attributes",
-		1,
-		OTLP_PB_WIRE_LEN,
-		OTLP_PRESENCE_DEFAULT_OMITTED,
-		true },
-	[OTLP_EX_FI_DOUBLE_VALUE] = { "double_value",
+	/* Numbers from the opentelemetry-proto descriptor (verified
+	 * against the reference serialization, v1.0.1 — the v0.8.0
+	 * table was hand-copied wrong and shipped a wire bug). */
+	[OTLP_EX_FI_TIME] = { "time_unix_nano",
 		2,
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	/* sfixed64 → fixed64 wire type. */
-	[OTLP_EX_FI_INT_VALUE] = { "int_value",
+	[OTLP_EX_FI_DOUBLE_VALUE] = { "as_double",
 		3,
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	[OTLP_EX_FI_TRACE_ID] = { "trace_id",
+	[OTLP_EX_FI_SPAN_ID] = { "span_id",
 		4,
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	[OTLP_EX_FI_SPAN_ID] = { "span_id",
+	[OTLP_EX_FI_TRACE_ID] = { "trace_id",
 		5,
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	[OTLP_EX_FI_TIME] = { "time_unix_nano",
+	/* sfixed64 → fixed64 wire type. */
+	[OTLP_EX_FI_INT_VALUE] = { "as_int",
 		6,
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
+	[OTLP_EX_FI_FILTERED_ATTRIBUTES] = { "filtered_attributes",
+		7,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		true },
 };
 
 /* ── NumberDataPoint (oneof value: as_double=4, as_int=6) ─────── */

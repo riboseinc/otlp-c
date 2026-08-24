@@ -4,6 +4,41 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-08-24
+
+Golden corpus extended; a real exemplar wire bug found and fixed.
+
+### Fixed — exemplar field numbers were wrong (v0.8.0 wire bug)
+
+Extending the golden vectors to cover schema_url and exemplars
+(reference opentelemetry-proto serialization, byte-compared)
+exposed that v0.8.0's Exemplar schema table was hand-copied from
+memory instead of from the descriptor: the real message is
+`time_unix_nano=2, as_double=3, span_id=4, trace_id=5, as_int=6,
+filtered_attributes=7` — v0.8.0 emitted five of six at wrong
+numbers, which a real collector would misparse. The table, the
+emitter, and the wire-numbers pin literals are corrected (pins
+now carry a comment: copy literals from the installed descriptor,
+never memory). The golden vectors — which compare against the
+REFERENCE implementation, not our own tables — are the gate that
+caught it and now pin exemplars and schema_url permanently.
+
+### Added — golden corpus covers the full 1.0 wire surface
+
+schema_url on all three signals; a double+trace+span+time
+exemplar on the counter; an int exemplar on the gauge. New
+additive API: `otlp_exemplar_set_timestamp()` (parity with the
+span/log setters — deterministic fixtures and backfilling; the
+golden fixture uses it instead of poking internals). Debug hook:
+`GOLDEN_DUMP=1` writes our payloads for external decoding.
+
+### Fixed — deployment.md documented an invented env var
+
+`OTLP_C_ENDPOINT` (fictional, pre-dating the real env support)
+replaced with `OTEL_EXPORTER_OTLP_ENDPOINT` base form; the
+cookbook gains sections for env vars/headers/per-signal endpoints
+and exemplars/schema_url.
+
 ## [1.0.0] - 2026-08-24
 
 **The API freeze.** All five Path-to-1.0 criteria re-audited and

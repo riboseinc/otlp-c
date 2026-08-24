@@ -219,6 +219,12 @@ otlp_status_t otlp_exemplar_set_trace_context(otlp_exemplar_t *ex,
 OTLP_C_EXPORT
 otlp_status_t otlp_exemplar_mark_time(otlp_exemplar_t *ex);
 
+/* Stamp an explicit time (field 6) — for backfilling or
+ * deterministic tests. */
+OTLP_C_EXPORT
+otlp_status_t otlp_exemplar_set_timestamp(otlp_exemplar_t *ex,
+	uint64_t time_unix_nano);
+
 /* Clone `ex` into the metric's exemplar list (emitted on the
  * metric's data point: NumberDataPoint field 5, HistogramDataPoint
  * field 8). Metrics without a value set at encode time return

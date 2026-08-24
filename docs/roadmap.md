@@ -170,6 +170,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.8 | Install-docs truth: consumer instructions pointed at a nonexistent vcpkg port (verified against the registry) — FetchContent/add_subdirectory/install now documented; release-notes/ marked frozen at v0.5.0 with pointers to the canonical CHANGELOG + GitHub Releases; property-http-timeout made VPN-safe (cap no longer equals the read deadline); roadmap backslash-ref literal fixed | #145 |
 | 0.6.9 | **Embedded-build hygiene**: the just-documented FetchContent path clobbered the consumer's CMAKE_INSTALL_LIBDIR (CACHE FORCE) and leaked CPack config into its build tree — both gated on top-level-only; new CI job builds a real FetchContent consumer (ubuntu+windows) with clobber/leak assertions | #146 |
 | 0.6.10 | CI hygiene: consumer fixtures move from workflow-YAML heredocs (unlintable, first-executed-by-CI) to standalone projects in tests/consumers/ — runnable locally with the exact CI commands; hygiene assertions now configure-time FATAL_ERRORs, both mutation-tested | #147 |
+| 1.0.1 | **Fix: v0.8.0 exemplar wire numbers wrong** (table hand-copied from memory — real message is time=2/as_double=3/span=4/trace=5/as_int=6/filtered=7; caught by extending the golden corpus to reference-validate exemplars + schema_url); otlp_exemplar_set_timestamp added (additive); deployment.md's invented OTLP_C_ENDPOINT replaced with the real variable; cookbook gains v0.7/0.8 sections | #160 |
 | 1.0.0 | **THE API FREEZE** — deep re-audit (TODO.complete/168) confirmed all five Path-to-1.0 criteria at v0.8.0; source API frozen for 1.x (ABI explicitly not guaranteed); version-policy declarations updated in version.h/CLAUDE.md; two freeze-hazard doc fixes (storage stack cost, apply_env thread contract) | #159 |
 | 0.8.0 | **Exemplars** (the last substantive OTLP metrics feature): otlp_exemplar_t (value + trace/span correlation + time) added to metrics, emitted on NDP(5)/HDP(8); new pinned Exemplar schema table + wire emission test | #158 |
 | 0.7.4 | **schema_url conformance gap closed**: opts.schema_url emitted as field 3 on all three resource-level messages (tables were pinned; encoders never emitted); wire-pinned per signal + absence | #157 |
@@ -183,7 +184,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.12 | **One signal table**: exporter's five descriptor families (drain/emit/tick/record/start-post, three instances each assembled at five call sites) collapse into one static spec table + per-signal sig[3] state; exporter.c −268 lines; add-a-signal = one table row (mutation-tested: wrong row id aborts the events suite) | #149 |
 | 0.6.11 | **Response parser as a deep module**: ~300 lines of wire-format logic (smuggling rejection, chunked decode) extracted from the socket machine into src/http_response_parser; byte-fixture suite (no sockets/threads, runs on MSVC — closes the Windows smuggling-coverage gap); fuzz property pure + portable, 300 → 20000 iterations | #148 |
 
-**Key metrics (v1.0.0):** 168 TODOs complete, 52 tests, **50+
+**Key metrics (v1.0.1):** 169 TODOs complete, 52 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:
