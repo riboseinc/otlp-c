@@ -251,6 +251,29 @@ jobs:
           cmake --build consumer-build --config Release
           ctest --test-dir consumer-build --build-config Release --output-on-failure
 
+  # Conformance gates (v1.0.2): every schema table diffed against
+  # the INSTALLED opentelemetry-proto descriptors, and the
+  # checked-in golden vectors regenerated and byte-compared - so
+  # schema drift, stale fixtures, and upstream proto changes all
+  # fail here. Manual tools become CI-enforced.
+  conformance-gates:
+    name: Conformance gates (descriptor audit + goldens)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install reference protobufs
+        run: pip install opentelemetry-proto==1.44.0
+      - name: Audit schema tables against descriptors
+        run: python tests/golden/audit_tables.py
+      - name: Golden vectors match the reference serialization
+        run: |
+          python tests/golden/generate.py
+          git diff --exit-code --stat -- tests/golden/
+
   # The in-repo vcpkg overlay port (ports/otlp-c). Until v0.6.15
   # this recipe had never been built once - pinned at v0.5.17 with
   # a placeholder SHA, and missing the vcpkg-cmake-config host

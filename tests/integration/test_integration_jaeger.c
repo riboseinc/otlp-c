@@ -324,6 +324,83 @@ main(void)
 		otlp_log_record_free(lr);
 	}
 
+	/* ── The full 1.x surface against the real collector ──────
+	 * A second exporter exercising schema_url (v0.7.4), an extra
+	 * HTTP header (v0.7.2), env-var opts (v0.7.x), and a metric
+	 * carrying an exemplar (v0.8.0). A 2xx from otelcol proves
+	 * the collector's real protobuf parser accepted all of it —
+	 * exemplar field numbers included (the v1.0.1 bug class). */
+	{
+		otlp_exporter_opts_t opts2;
+		otlp_env_storage_t env_st;
+		otlp_exporter_t *exp2;
+		otlp_http_header_t hdrs[1] = {
+			{ "x-otlp-c-integration", "yes" },
+		};
+		otlp_metric_t *m;
+		otlp_exemplar_t *ex;
+		uint8_t tid[16], sid[8];
+
+		memset(&opts2, 0, sizeof(opts2));
+		opts2.service_name = "otlp-c-integration-test";
+		opts2.endpoint = "http://localhost:4318/v1/traces";
+		opts2.schema_url = "https://otlp-c.dev/integration/v1";
+		opts2.http_headers = hdrs;
+		opts2.n_http_headers = 1;
+		opts2.metrics_endpoint = "http://localhost:4318/v1/metrics";
+		memset(&env_st, 0, sizeof(env_st));
+		setenv("OTEL_EXPORTER_OTLP_TIMEOUT", "8000", 1);
+		st = otlp_exporter_opts_apply_env(&opts2, &env_st);
+		unsetenv("OTEL_EXPORTER_OTLP_TIMEOUT");
+		if (st != OTLP_OK || opts2.read_timeout_ms != 8000)
+		{
+			printf("[integration] FAIL — apply_env: st=%d "
+			       "read_timeout=%u\n",
+			       (int) st,
+			       opts2.read_timeout_ms);
+			return 1;
+		}
+		exp2 = otlp_exporter_create(&opts2);
+		assert(exp2 != NULL);
+
+		m = otlp_metric_create(OTLP_METRIC_COUNTER,
+			"integration_exemplar_total",
+			"1",
+			"exemplar acceptance probe",
+			NULL,
+			0);
+		assert(m != NULL);
+		otlp_metric_record(m, 1.0);
+		otlp_metric_mark_time(m);
+		otlp_metric_set_attribute_string(m, "test_run_id", run_id);
+		ex = otlp_exemplar_create();
+		assert(ex != NULL);
+		otlp_exemplar_set_double_value(ex, 1.0);
+		for (i = 0; i < 16; i++)
+			tid[i] = (uint8_t) (0x10 + i);
+		for (i = 0; i < 8; i++)
+			sid[i] = (uint8_t) (0x30 + i);
+		otlp_exemplar_set_trace_context(ex, tid, sid);
+		otlp_exemplar_set_timestamp(ex, 1700000000000000000ULL);
+		if (otlp_metric_add_exemplar(m, ex) != OTLP_OK)
+			return 1;
+		otlp_exemplar_free(ex);
+
+		st = otlp_exporter_flush_metric(exp2, m);
+		otlp_metric_free(m);
+		otlp_exporter_free(exp2);
+		if (st != OTLP_OK)
+		{
+			printf("[integration] FAIL — exemplar/schema_url/"
+			       "headers flush_metric returned %d "
+			       "(collector rejected the 1.x surface)\n",
+			       (int) st);
+			return 1;
+		}
+		printf("[integration] 1.x surface (exemplar + schema_url + "
+		       "headers + env opts) accepted by collector\n");
+	}
+
 	st = otlp_exporter_flush(exp);
 	assert(st == OTLP_OK);
 	{
