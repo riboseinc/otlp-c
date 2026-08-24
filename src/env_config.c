@@ -12,30 +12,29 @@
 
 /* The OTel base-endpoint form carries no signal path; the traces
  * path is appended per the spec. */
-#define OTLP_ENV_TRACES_PATH "/v1/traces"
+#define N_SIGNALS_ENV 3
 
 otlp_status_t
 otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
 	otlp_env_storage_t *st)
 {
-	size_t len;
-	size_t scheme_host_len;
-	const char *path_start;
+	static const char *paths[N_SIGNALS_ENV] = {
+		"/v1/traces", "/v1/metrics", "/v1/logs"
+	};
 	struct otlp_http_url parsed;
-	char *buf;
-	size_t buf_cap;
-	int n;
+	size_t len;
+	const char *path_start;
+	size_t base_len;
+	size_t scheme_host_len;
+	int s;
 
 	if (!opts || !st)
 		return OTLP_ERR_NULL;
-	buf = st->endpoint;
-	buf_cap = sizeof(st->endpoint);
 	if (!value || value[0] == '\0')
 		return OTLP_OK;
 
 	len = strlen(value);
-	/* Find where the path would start: after "://". */
 	path_start = strstr(value, "://");
 	if (!path_start)
 		return OTLP_ERR_INVALID_ARGUMENT;
@@ -43,32 +42,28 @@ otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 	path_start = value + scheme_host_len;
 	while (*path_start != '\0' && *path_start != '/')
 		path_start++;
+	/* Base length excludes any path the value carries. */
+	base_len = (size_t)(path_start - value);
 
-	if (*path_start == '\0')
+	for (s = 0; s < N_SIGNALS_ENV; s++)
 	{
-		/* Base form: append the traces path. */
-		if (len + sizeof(OTLP_ENV_TRACES_PATH) > buf_cap)
-			return OTLP_ERR_OVERFLOW;
-		memcpy(buf, value, len);
-		memcpy(buf + len,
-			OTLP_ENV_TRACES_PATH,
-			sizeof(OTLP_ENV_TRACES_PATH));
-	}
-	else
-	{
-		/* Full path already present: copy verbatim. */
-		if (len + 1 > buf_cap)
-			return OTLP_ERR_OVERFLOW;
-		memcpy(buf, value, len + 1);
-	}
+		char *dst = s == 0
+			? st->endpoint
+			: (s == 1 ? st->metrics_endpoint : st->logs_endpoint);
 
-	/* Validate before committing: create() would parse again,
-	 * but rejecting garbage here gives the caller an immediate,
-	 * attributable error. */
-	n = otlp_http_parse_url(buf, &parsed);
-	if (n != OTLP_OK)
-		return n;
-	opts->endpoint = buf;
+		if (base_len + strlen(paths[s]) + 1 > 256)
+			return OTLP_ERR_OVERFLOW;
+		memcpy(dst, value, base_len);
+		memcpy(dst + base_len, paths[s], strlen(paths[s]) + 1);
+		if (otlp_http_parse_url(dst, &parsed) != OTLP_OK)
+			return OTLP_ERR_INVALID_ARGUMENT;
+		if (s == 0)
+			opts->endpoint = st->endpoint;
+		else if (s == 1)
+			opts->metrics_endpoint = st->metrics_endpoint;
+		else
+			opts->logs_endpoint = st->logs_endpoint;
+	}
 	return OTLP_OK;
 }
 
@@ -77,21 +72,28 @@ otlp_env_apply_traces_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
 	otlp_env_storage_t *st)
 {
-	struct otlp_http_url parsed;
-	int n;
+	return otlp_env_apply_signal_endpoint(
+		opts, value, st->endpoint, &opts->endpoint);
+}
 
-	if (!opts || !st)
+otlp_status_t
+otlp_env_apply_signal_endpoint(otlp_exporter_opts_t *opts,
+	const char *value,
+	char *dst_buf,
+	const char **opt_field)
+{
+	struct otlp_http_url parsed;
+
+	if (!opts || !dst_buf || !opt_field)
 		return OTLP_ERR_NULL;
 	if (!value || value[0] == '\0')
 		return OTLP_OK;
-
-	n = otlp_http_parse_url(value, &parsed);
-	if (n != OTLP_OK)
-		return n;
-	if (strlen(value) + 1 > sizeof(st->endpoint))
+	if (otlp_http_parse_url(value, &parsed) != OTLP_OK)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	if (strlen(value) + 1 > 256)
 		return OTLP_ERR_OVERFLOW;
-	memcpy(st->endpoint, value, strlen(value) + 1);
-	opts->endpoint = st->endpoint;
+	memcpy(dst_buf, value, strlen(value) + 1);
+	*opt_field = dst_buf;
 	return OTLP_OK;
 }
 
@@ -323,6 +325,18 @@ otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,
 		return st;
 	st = otlp_env_apply_traces_endpoint(
 		opts, getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"), storage);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_env_apply_signal_endpoint(opts,
+		getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"),
+		storage->metrics_endpoint,
+		&opts->metrics_endpoint);
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_env_apply_signal_endpoint(opts,
+		getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"),
+		storage->logs_endpoint,
+		&opts->logs_endpoint);
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_env_apply_timeout(opts, getenv("OTEL_EXPORTER_OTLP_TIMEOUT"));

@@ -42,6 +42,11 @@ otlp_env_apply_traces_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
 	otlp_env_storage_t *st);
 otlp_status_t
+otlp_env_apply_signal_endpoint(otlp_exporter_opts_t *opts,
+	const char *value,
+	char *dst_buf,
+	const char **opt_field);
+otlp_status_t
 otlp_env_apply_timeout(otlp_exporter_opts_t *opts, const char *value);
 otlp_status_t
 otlp_env_apply_protocol(otlp_exporter_opts_t *opts, const char *value);

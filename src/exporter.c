@@ -68,6 +68,10 @@
  * build adapters) lives in SIGNAL_SPECS below. */
 struct signal_state
 {
+	/* Per-signal endpoint (v0.7.3): derived at create from the
+	 * endpoint base + the spec's default_path, or set from the
+	 * signal-specific override. Immutable after create. */
+	struct otlp_http_url url;
 	struct mpsc_queue queue;
 	void **pending;
 	size_t pending_cap;
@@ -83,8 +87,8 @@ struct signal_state
 
 struct otlp_exporter
 {
-	/* Immutable after create. */
-	struct otlp_http_url url;
+	/* Immutable after create. (Per-signal endpoints live in
+	 * sig[s].url.) */
 	char *user_agent;
 	char *service_name;
 	struct otlp_attr_vec resource_attrs;
@@ -317,6 +321,7 @@ struct signal_spec
 {
 	otlp_signal_id_t id;
 	const char *name;
+	const char *default_path;
 	void (*free_item)(void *);
 	void *(*clone_item)(const void *);
 	otlp_build_request_fn build_request;
@@ -325,16 +330,19 @@ struct signal_spec
 static const struct signal_spec SIGNAL_SPECS[N_SIGNALS] = {
 	[SIGNAL_SPAN] = { OTLP_SIGNAL_TRACES,
 		"spans",
+		"/v1/traces",
 		span_free_void,
 		span_clone_void,
 		build_span_request_void },
 	[SIGNAL_METRIC] = { OTLP_SIGNAL_METRICS,
 		"metrics",
+		"/v1/metrics",
 		metric_free_void,
 		metric_clone_void,
 		build_metric_request_void },
 	[SIGNAL_LOG] = { OTLP_SIGNAL_LOGS,
 		"logs",
+		"/v1/logs",
 		log_free_void,
 		log_clone_void,
 		build_log_request_void },
@@ -581,9 +589,44 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	if (!e)
 		return NULL;
 
-	st = otlp_http_parse_url(o.endpoint, &e->url);
+	/* Per-signal endpoints (v0.7.3): each signal gets a full
+	 * URL — the signal-specific opt when set, else the endpoint
+	 * base (scheme+host+port, path stripped) + the spec's
+	 * default path. o.endpoint must parse; overrides must parse
+	 * and carry their own path. */
+	st = otlp_http_parse_url(o.endpoint, &e->sig[SIGNAL_SPAN].url);
 	if (st != OTLP_OK)
 		goto fail;
+	{
+		struct otlp_http_url *base = &e->sig[SIGNAL_SPAN].url;
+		int s;
+
+		for (s = 0; s < N_SIGNALS; s++)
+		{
+			const char *override = NULL;
+
+			if (s == SIGNAL_SPAN)
+				continue;
+			override = (s == SIGNAL_METRIC)
+				? o.metrics_endpoint
+				: o.logs_endpoint;
+			if (override && override[0])
+			{
+				st = otlp_http_parse_url(
+					override, &e->sig[s].url);
+				if (st != OTLP_OK)
+					goto fail;
+			}
+			else
+			{
+				e->sig[s].url = *base;
+				snprintf(e->sig[s].url.path,
+					sizeof(e->sig[s].url.path),
+					"%s",
+					SIGNAL_SPECS[s].default_path);
+			}
+		}
+	}
 
 	if (o.service_name && !otlp_str_is_utf8(o.service_name))
 		goto fail;
@@ -920,7 +963,7 @@ try_start_post(struct otlp_exporter *e, int s)
 
 	if (e->in_flight || sg->pending_count == 0)
 		return OTLP_OK;
-	st = SIGNAL_SPECS[s].build_request(&e->url,
+	st = SIGNAL_SPECS[s].build_request(&e->sig[s].url,
 		e->user_agent,
 		e->http_headers,
 		e->n_http_headers,
@@ -1433,7 +1476,6 @@ static otlp_status_t
 flush_post_once(struct otlp_exporter *e,
 	otlp_signal_id_t signal,
 	const struct otlp_http_url *url,
-	const char *path,
 	const uint8_t *body,
 	size_t body_len,
 	bool *got_response)
@@ -1442,12 +1484,8 @@ flush_post_once(struct otlp_exporter *e,
 	otlp_status_t st;
 	uint64_t deadline;
 	uint64_t now;
-	struct otlp_http_url u;
-
-	u = *url;
-	snprintf(u.path, sizeof(u.path), "%s", path);
 	st = otlp_http_request_start(&req,
-		&u,
+		url,
 		e->user_agent,
 		e->http_headers,
 		e->n_http_headers,
@@ -1562,16 +1600,17 @@ flush_post_once(struct otlp_exporter *e,
 static otlp_status_t
 flush_sync(struct otlp_exporter *e,
 	otlp_signal_id_t signal,
-	const char *path,
 	const uint8_t *body,
 	size_t body_len)
 {
 	otlp_status_t st = OTLP_ERR_NETWORK;
 	bool got_response = false;
 	uint32_t attempt;
+	struct otlp_http_url *url;
 
-	if (!e || !path || (!body && body_len > 0))
+	if (!e || (!body && body_len > 0))
 		return OTLP_ERR_NULL;
+	url = &e->sig[signal].url;
 	if (e->null_transport)
 		return OTLP_OK;
 	/* Retry transient (pre-response) network failures with the
@@ -1585,8 +1624,7 @@ flush_sync(struct otlp_exporter *e,
 	{
 		st = flush_post_once(e,
 			signal,
-			&e->url,
-			path,
+			url,
 			body,
 			body_len,
 			&got_response);
@@ -1656,7 +1694,6 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 	if (st == OTLP_OK)
 		st = flush_sync(e,
 			OTLP_SIGNAL_METRICS,
-			"/v1/metrics",
 			body.data,
 			body.len);
 	otlp_pb_buf_free(&body);
@@ -1703,8 +1740,7 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 		arr,
 		1);
 	if (st == OTLP_OK)
-		st = flush_sync(
-			e, OTLP_SIGNAL_LOGS, "/v1/logs", body.data, body.len);
+		st = flush_sync(e, OTLP_SIGNAL_LOGS, body.data, body.len);
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
 		otlp_atomic_fetch_add_u64(

@@ -138,7 +138,6 @@ otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 	otlp_http_request_t **out)
 {
 	struct otlp_pb_buf body = { 0 };
-	struct otlp_http_url u;
 	otlp_status_t st;
 
 	if (!url || !out)
@@ -161,10 +160,8 @@ otlp_exporter_otel_build_metric_request(const struct otlp_http_url *url,
 		return st;
 	}
 
-	u = *url;
-	(void) snprintf(u.path, sizeof(u.path), "/v1/metrics");
 	st = start_post_common(out,
-		&u,
+		url,
 		user_agent,
 		headers,
 		n_headers,
@@ -193,7 +190,6 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 	otlp_http_request_t **out)
 {
 	struct otlp_pb_buf body = { 0 };
-	struct otlp_http_url u;
 	otlp_status_t st;
 
 	if (!url || !out)
@@ -216,10 +212,8 @@ otlp_exporter_otel_build_log_request(const struct otlp_http_url *url,
 		return st;
 	}
 
-	u = *url;
-	(void) snprintf(u.path, sizeof(u.path), "/v1/logs");
 	st = start_post_common(out,
-		&u,
+		url,
 		user_agent,
 		headers,
 		n_headers,

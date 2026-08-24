@@ -38,16 +38,21 @@ test_endpoint(void)
 	check_true(o.endpoint == NULL);
 	check_true(st.endpoint[0] == 'x'); /* untouched */
 
-	/* Base form: "/v1/traces" appended. */
+	/* Base form: each signal's default path appended (v0.7.3 —
+	 * a value carrying its own path is still a BASE; exact
+	 * control comes from the signal-specific full forms). */
 	check_ok(otlp_env_apply_endpoint(&o, "http://collector:4318", &st));
 	check_true(strcmp(o.endpoint, "http://collector:4318/v1/traces") == 0);
+	check_true(strcmp(o.metrics_endpoint,
+		"http://collector:4318/v1/metrics") == 0);
+	check_true(strcmp(o.logs_endpoint, "http://collector:4318/v1/logs") ==
+		0);
 	check_true(o.endpoint == st.endpoint);
 
-	/* Full path form: kept verbatim. */
+	/* Base carrying a path: stripped; paths derive per signal. */
 	check_ok(otlp_env_apply_endpoint(
-		&o, "http://collector:4318/custom/path", &st));
-	check_true(
-		strcmp(o.endpoint, "http://collector:4318/custom/path") == 0);
+		&o, "http://collector:4318/custom", &st));
+	check_true(strcmp(o.endpoint, "http://collector:4318/v1/traces") == 0);
 
 	/* Garbage: rejected, opts untouched. */
 	o.endpoint = "keep";

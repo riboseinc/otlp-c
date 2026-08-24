@@ -193,6 +193,45 @@ main(void)
 	 * the listen fd; the join below must succeed. */
 	echo_server_stop(&srv);
 	check_ok(echo_server_join(&srv, 1 * 1000 * 1000));
+
+	/* v0.7.3: per-signal endpoint override — flush_metric must
+	 * POST to the METRICS signal's own URL, not the traces one. */
+	{
+		struct echo_server srv2;
+		otlp_metric_t *m = otlp_metric_create(
+			OTLP_METRIC_COUNTER, "override_probe", "1", NULL,
+			NULL, 0);
+		char override[192];
+		const uint8_t *wire;
+		size_t wire_len;
+
+		check_true(m != NULL);
+		check_ok(echo_server_start(&srv2, NULL, 1));
+		snprintf(override,
+			sizeof(override),
+			"http://127.0.0.1:%u/custom-metrics",
+			srv2.port);
+		memset(&opts, 0, sizeof(opts));
+		opts.endpoint = endpoint;
+		opts.metrics_endpoint = override;
+		opts.service_name = "test";
+		exp = otlp_exporter_create(&opts);
+		check_true(exp != NULL);
+		otlp_metric_record(m, 1.0);
+		check_ok(otlp_exporter_flush_metric(exp, m));
+		otlp_metric_free(m);
+		otlp_exporter_free(exp);
+		echo_server_stop(&srv2);
+		check_ok(echo_server_join(&srv2, 1 * 1000 * 1000));
+		wire = echo_server_last_request(&wire_len);
+		check_true(wire != NULL && wire_len > 0);
+		check_true(memmem(wire,
+				  wire_len,
+				  "POST /custom-metrics HTTP/1.1",
+				  strlen("POST /custom-metrics HTTP/1.1")) !=
+			NULL);
+	}
+
 	printf("[exporter-echo] PASS — spans + metrics + logs over HTTP\n");
 	return 0;
 }
