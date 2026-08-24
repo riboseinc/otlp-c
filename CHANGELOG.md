@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.11] - 2026-08-24
+
+Architecture: the HTTP response parser is a deep module.
+
+### Changed — response wire-format parsing extracted from the socket machine
+
+`try_parse_response` + the chunked decoder were static captives of
+`http_client.c`'s socket state machine — every parse scenario
+needed a pthread echo server over loopback, and the response fuzz
+was excluded on Windows, leaving the RFC 7230 request-smuggling
+rejections untested on the MSVC CI job. The parser is now
+`src/http_response_parser.{h,c}`: pure `feed(bytes) -> verdict`
+with parsed fields written only on success; the socket machine is
+a thin adapter (~307 lines removed from http_client.c).
+
+### Added — byte-fixture parser suite (test #50)
+
+`unit-http-response-parser` covers the full matrix — split
+delivery invariance, version-aware keep-alive, EOF framing,
+smuggling rejections, line-aligned header matching, chunked
+framing (extensions, trailers, corruption), Retry-After forms —
+with no sockets or threads, on every platform including Windows.
+The response fuzz property now feeds the parser directly:
+portable, and 20000 iterations where the socket version managed
+300.
+
 ## [0.6.10] - 2026-08-24
 
 CI hygiene: consumer tests moved out of workflow YAML.
