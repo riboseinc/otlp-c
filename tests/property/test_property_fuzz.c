@@ -27,6 +27,7 @@
 
 #include "../src/exporter_otel.h"
 #include "../src/http_client.h"
+#include "../src/http_response_parser.h"
 #include "decoder.h"
 
 #include <otlp-c/otlp.h>
@@ -38,13 +39,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if !defined(_WIN32)
-#if !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif
-#include <time.h>
-#include "test_helper_echo.h"
-#endif
 
 /* ── URL parser fuzz ────────────────────────────────────────────
  * Feed random byte sequences (including NULs, non-ASCII, very long)
@@ -170,36 +164,17 @@ prop_fuzz_traceparent(uint64_t seed)
 
 /* ── main ─────────────────────────────────────────────────────── */
 
-#if !defined(_WIN32)
-/* The response served by the current fuzz iteration (the raw
- * handler hands it back verbatim). */
-static uint8_t g_resp[2048];
-static size_t g_resp_len;
-
-static int
-fuzz_raw_handler(const uint8_t *req_body,
-	size_t req_len,
-	uint8_t *resp_buf,
-	size_t resp_cap,
-	size_t *resp_len)
-{
-	(void) req_body;
-	(void) req_len;
-	check_true(g_resp_len <= resp_cap);
-	memcpy(resp_buf, g_resp, g_resp_len);
-	*resp_len = g_resp_len;
-	return ECHO_RAW_RESPONSE;
-}
-
 /* ── HTTP response parser fuzz ──────────────────────────────────
- * Feed random or mutated raw HTTP responses through the REAL
- * request state machine (connect -> send -> read -> parse,
- * including the v0.5.80 chunked decoder) and assert it always
- * reaches a terminal state — DONE or FAILED — without crashing.
- * ASAN (the whole-suite run) does the memory checking. */
+ * Feed random or mutated raw HTTP responses DIRECTLY to the
+ * response parser (v0.6.11: pure bytes -> verdict; previously
+ * this drove a real socket through an echo-server thread, which
+ * excluded Windows and cost ~50ms per iteration). Assert the
+ * verdict is always one of the three legal values and, when
+ * complete, that the parsed fields are self-consistent. ASAN
+ * (the whole-suite run) does the memory checking. */
 
 static void
-fuzz_make_response(struct prng *p)
+fuzz_make_response(struct prng *p, uint8_t *out, size_t *out_len)
 {
 	static const char valid[] = "HTTP/1.1 200 OK\r\n"
 				    "Content-Type: application/x-protobuf\r\n"
@@ -216,27 +191,27 @@ fuzz_make_response(struct prng *p)
 	if (mode == 0)
 	{
 		/* Pure random bytes (NULs, non-ASCII, everything). */
-		len = (size_t) prng_u32(p, (uint32_t) sizeof(g_resp));
+		len = (size_t) prng_u32(p, (uint32_t) 2048);
 		for (i = 0; i < len; i++)
-			g_resp[i] = (uint8_t) prng_next(p);
-		g_resp_len = len;
+			out[i] = (uint8_t) prng_next(p);
+		*out_len = len;
 		return;
 	}
 	/* Valid response + a few mutations: byte flips, truncation,
 	 * or size-line corruption. */
-	memcpy(g_resp, valid, valid_len);
-	g_resp_len = valid_len;
+	memcpy(out, valid, valid_len);
+	*out_len = valid_len;
 	for (i = 0; i < 1 + prng_u32(p, 4); i++)
 	{
 		size_t op = prng_u32(p, 3);
 
-		if (op == 0 && g_resp_len > 0)
-			g_resp[prng_u32(p, (uint32_t) g_resp_len)] =
+		if (op == 0 && *out_len > 0)
+			out[prng_u32(p, (uint32_t) *out_len)] =
 				(uint8_t) prng_next(p);
-		else if (op == 1 && g_resp_len > 8)
-			g_resp_len = prng_u32(p, (uint32_t) g_resp_len);
-		else if (g_resp_len < sizeof(g_resp) - 1)
-			g_resp[g_resp_len++] = (uint8_t) prng_next(p);
+		else if (op == 1 && *out_len > 8)
+			*out_len = prng_u32(p, (uint32_t) *out_len);
+		else if (*out_len < 2048 - 1)
+			out[(*out_len)++] = (uint8_t) prng_next(p);
 	}
 }
 
@@ -244,74 +219,27 @@ static int
 prop_fuzz_http_response(uint64_t seed)
 {
 	struct prng p;
-	struct echo_server srv;
-	struct otlp_http_url url;
-	otlp_http_request_t *req = NULL;
-	char url_str[128];
-	otlp_status_t st = OTLP_OK;
-	struct timespec t0;
-	uint64_t deadline_ms;
-	size_t i;
+	uint8_t buf[2048];
+	size_t len;
+	struct otlp_http_resp out;
+	int rc;
 
 	prng_seed(&p, seed);
-	if (echo_server_start(&srv, fuzz_raw_handler, 1) != OTLP_OK)
-		return 0;
-	snprintf(url_str,
-		sizeof(url_str),
-		"http://127.0.0.1:%u/v1/traces",
-		srv.port);
-	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
+	fuzz_make_response(&p, buf, &len);
+
+	rc = otlp_http_resp_parse(
+		buf, len, (seed & 1) != 0, &out);
+	check_true(rc == -1 || rc == 0 || rc == 1);
+	if (rc == 1)
 	{
-		(void) echo_server_join(&srv, 1000);
-		return 0;
+		check_true(out.http_status >= 100 &&
+			out.http_status <= 999);
+		check_true(out.body >= buf);
+		check_true(out.body + out.body_len <= buf + len);
 	}
-
-	fuzz_make_response(&p);
-
-	st = otlp_http_request_start(
-		&req, &url, "otlp-c/fuzz", (const uint8_t *) "x", 1, 200, 200);
-	if (st != OTLP_OK)
-	{
-		(void) echo_server_join(&srv, 1000);
-		return 0;
-	}
-
-	/* Wall-clock bounded drive (Release spins fast). */
-	clock_gettime(CLOCK_MONOTONIC, &t0);
-	deadline_ms = (uint64_t) t0.tv_sec * 1000 +
-		(uint64_t)(t0.tv_nsec / 1000000) + 1000;
-	for (i = 0; i < 100000; i++)
-	{
-		struct timespec now;
-
-		st = otlp_http_request_step(req);
-		if (otlp_http_request_state(req) == OTLP_HTTP_REQ_DONE ||
-			otlp_http_request_state(req) == OTLP_HTTP_REQ_FAILED)
-			break;
-		clock_gettime(CLOCK_MONOTONIC, &now);
-		if ((uint64_t) now.tv_sec * 1000 +
-				(uint64_t)(now.tv_nsec / 1000000) >
-			deadline_ms)
-			break;
-		if (st == OTLP_ERR_WOULDBLOCK)
-		{
-			struct timespec ts = { 0, 1000 };
-
-			nanosleep(&ts, NULL);
-		}
-	}
-
-	{
-		int ok = otlp_http_request_state(req) == OTLP_HTTP_REQ_DONE ||
-			otlp_http_request_state(req) == OTLP_HTTP_REQ_FAILED;
-
-		otlp_http_request_free(req);
-		(void) echo_server_join(&srv, 2 * 1000 * 1000);
-		return ok;
-	}
+	return 1;
 }
 
-#endif /* !_WIN32 */
 
 /* ── Context extract fuzz ───────────────────────────────────────
  * A carrier returning arbitrary bytes for traceparent/tracestate/
@@ -441,10 +369,8 @@ main(void)
 		prop_fuzz_span_create, "prop_fuzz_span_create", 5000, 1);
 	failures += property_run(
 		prop_fuzz_traceparent, "prop_fuzz_traceparent", 5000, 1);
-#if !defined(_WIN32)
 	failures += property_run(
-		prop_fuzz_http_response, "prop_fuzz_http_response", 300, 1);
-#endif
+		prop_fuzz_http_response, "prop_fuzz_http_response", 20000, 1);
 	failures += property_run(prop_fuzz_partial_success,
 		"prop_fuzz_partial_success",
 		5000,
