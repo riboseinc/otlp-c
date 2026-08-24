@@ -101,3 +101,13 @@ target_include_directories(otlp_unit_http_response_parser PRIVATE
 add_test(NAME unit-http-response-parser
     COMMAND otlp_unit_http_response_parser)
 set_tests_properties(unit-http-response-parser PROPERTIES LABELS "unit")
+
+# OTel standard env-var configuration (v0.7.0): pure parsers +
+# one getenv-driven pass; portable (MSVC _putenv_s fallback).
+add_executable(otlp_unit_env_config test_unit_env_config.c)
+target_link_libraries(otlp_unit_env_config PRIVATE otlp_c)
+target_include_directories(otlp_unit_env_config PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-env-config
+    COMMAND otlp_unit_env_config)
+set_tests_properties(unit-env-config PROPERTIES LABELS "unit")

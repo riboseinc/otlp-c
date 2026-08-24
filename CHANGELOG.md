@@ -4,6 +4,49 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-08-24
+
+OTel environment variables, one-command builds, legacy removed.
+
+### Added — OTEL_EXPORTER_OTLP_* environment-variable support
+
+`otlp_exporter_opts_apply_env()` applies the OpenTelemetry
+standard variables to opts — additive API, composes with
+hand-filled opts (unset variables pass through):
+`OTEL_EXPORTER_OTLP_ENDPOINT` (base form gets `/v1/traces`
+appended), `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (wins over the
+base form), `OTEL_EXPORTER_OTLP_TIMEOUT` (ms, connect+read),
+`OTEL_EXPORTER_OTLP_PROTOCOL` (must be `http/protobuf`),
+`OTEL_SERVICE_NAME`. Parsers are pure functions in
+`src/env_config` (string in, opts field out — unit-tested without
+touching the process environment; test #52); one getenv driver.
+Composed endpoints land in a caller-provided buffer (documented
+lifetime).
+
+### Added — working CMake presets
+
+`cmake --preset default|release|asan|ubsan|tsan` (plus
+build/test presets) — one command per configuration. The
+existing CMakePresets.json was invalid schema (top-level
+`generator`/`configureOnPress`/`cacheVariables` fields; `cmake
+--preset` failed outright) — another never-executed artifact,
+now correct and validated end-to-end locally. The ASAN test
+preset deliberately does not force `detect_leaks=1`: that option
+aborts on macOS (leak detection stays the Linux CI job's job).
+
+### Removed — legacy dead code
+
+`src/arena.{c,h}` deleted: a bump-allocator that was never in
+any build target and included by nothing (slab.c carries its own
+inline arena). Recoverable from git history if ever needed.
+
+### Performance
+
+Baseline re-verified post-refactor (Debug): emit ~163 ns/span,
+encode ~300 ns/span + ~145 ns/attribute — linear in attributes,
+matching the historical numbers; the v0.6.11-13 deepening arc
+cost nothing. No blind optimization.
+
 ## [0.6.15] - 2026-08-24
 
 The vcpkg overlay port becomes real, tested infrastructure.

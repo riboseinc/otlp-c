@@ -144,6 +144,7 @@ transport-agnostic via callback-based carriers.
 | `protobuf_encode.c` | Protobuf wire encoding + SBO buffer (192 B inline — sized so span envelopes and typical attribute KeyValues never touch the heap, v0.5.86) | OTLP schema, transport |
 | `http_client.c` | HTTP/1.1 state machine + keep-alive + timeouts | OTLP semantics, response parsing |
 | `http_response_parser.c` | HTTP/1.1 response wire format: status line, line-aligned header scan, chunked decode (in place), smuggling rejection, Retry-After | Sockets, clocks, allocation |
+| `env_config.c` | OTel standard env vars: pure parsers + one getenv driver | The exporter lifecycle |
 | `retry_policy.c` | Retry timing as pure functions: full-jitter draws, exponent clamp, Retry-After floor + cap | Clocks, exporter state |
 | `platform.c` / `_unix.c` / `_win.c` | Clocks (nano + ms), non-blocking sockets | Public API |
 | `mpsc_queue.c` | Lock-free MPSC ring buffer | Exporter logic |
