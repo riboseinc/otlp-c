@@ -247,15 +247,19 @@ test_resource_attrs(void)
 	check_ok(otlp_env_apply_resource_attrs(&o, "=v,k=1", &st));
 	check_true(o.n_resource_attributes == 1);
 
-	/* Over the pair cap: overflow. */
+	/* Over the pair cap: overflow. (Built with plain memcpy —
+	 * snprintf-return chaining trips CodeQL's overflow analysis
+	 * and is a genuine footgun.) */
 	{
-		char big[32 * 8];
+		char big[256];
 		size_t off = 0;
-		int i;
 
-		for (i = 0; i < 40; i++)
-			off += (size_t) snprintf(
-				big + off, sizeof(big) - off, "k%d=1,", i);
+		while (off + 4 < sizeof(big))
+		{
+			memcpy(big + off, "k=1,", 4);
+			off += 4;
+		}
+		big[off] = '\0';
 		check_true(otlp_env_apply_resource_attrs(&o, big, &st) ==
 			OTLP_ERR_OVERFLOW);
 	}
