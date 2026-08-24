@@ -1119,8 +1119,11 @@ enum
 };
 
 static const struct otlp_field_spec OTLP_EXPSR_FIELDS[] = {
+	/* Field 1 per the descriptor (v1.0.2 fix: v0.5.96 pinned 5,
+	 * so PartialSuccess from REAL collectors was silently
+	 * ignored — found by the descriptor audit). */
 	[OTLP_EXPSR_FI_PARTIAL_SUCCESS] = { "partial_success",
-		5,
+		1,
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
@@ -1134,7 +1137,7 @@ enum
 };
 
 static const struct otlp_field_spec OTLP_EPS_FIELDS[] = {
-	[OTLP_EPS_FI_REJECTED] = { "rejected",
+	[OTLP_EPS_FI_REJECTED] = { "rejected_spans",
 		1,
 		OTLP_PB_WIRE_VARINT,
 		OTLP_PRESENCE_DEFAULT_OMITTED,

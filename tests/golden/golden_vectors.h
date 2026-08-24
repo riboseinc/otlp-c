@@ -91,4 +91,9 @@ static const unsigned char GOLDEN_LOGS[] = {
 #define GOLDEN_LOGS_LEN ((size_t) sizeof(GOLDEN_LOGS))
 
 
+static const unsigned char GOLDEN_TRACES_RESPONSE[] = {
+    0x0a, 0x0e, 0x08, 0x03, 0x12, 0x0a, 0x71, 0x75, 0x65, 0x75, 0x65, 0x20, 0x66, 0x75, 0x6c, 0x6c};
+#define GOLDEN_TRACES_RESPONSE_LEN ((size_t) sizeof(GOLDEN_TRACES_RESPONSE))
+
+
 #endif

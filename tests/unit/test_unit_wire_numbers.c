@@ -749,7 +749,7 @@ static const struct wire_pin PINS_LOG[] = {
 };
 
 static const struct wire_pin PINS_EXPSR[] = {
-	{ OTLP_EXPSR_FI_PARTIAL_SUCCESS, 5, OTLP_PB_WIRE_LEN }
+	{ OTLP_EXPSR_FI_PARTIAL_SUCCESS, 1, OTLP_PB_WIRE_LEN }
 };
 
 static const struct wire_pin PINS_EPS[] = {
