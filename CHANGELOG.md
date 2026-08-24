@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-08-24
+
+Exemplars: the last substantive OTLP metrics feature.
+
+### Added — trace-correlated exemplar data points
+
+New public `otlp_exemplar_t` (opaque): one value (double field 2
+or int64 field 3, last setter wins), optional trace/span
+correlation (fields 4/5 — IDs copied, all-zero rejected per the
+v0.5.54 rule), optional timestamp (`mark_time`, field 6).
+`otlp_metric_add_exemplar()` clones into the metric (grow-on-
+demand; deep-copied by metric clone; value required at add time).
+Emitted on the metric's data point — NumberDataPoint field 5,
+HistogramDataPoint field 8 — via a new Exemplar schema table
+pinned against upstream literals in unit-wire-numbers, along
+with an end-to-end emission test (descend to the data point,
+verify every exemplar field's number, wire type, and value).
+Additive API only; minor bump per the version policy.
+
 ## [0.7.4] - 2026-08-24
 
 schema_url: a conformance gap closed.

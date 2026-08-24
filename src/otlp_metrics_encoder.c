@@ -47,6 +47,13 @@
 #define HIST_F_AGG_TEMP OTLP_HIST_FIELDS[OTLP_HIST_FI_AGG_TEMP].number
 #define EH_F_AGG_TEMP OTLP_EH_FIELDS[OTLP_EH_FI_AGG_TEMP].number
 #define NDP_F_ATTRIBUTES OTLP_NDP_FIELDS[OTLP_NDP_FI_ATTRIBUTES].number
+#define NDP_F_EXEMPLARS OTLP_NDP_FIELDS[OTLP_NDP_FI_EXEMPLARS].number
+#define HDP_F_EXEMPLARS OTLP_HDP_FIELDS[OTLP_HDP_FI_EXEMPLARS].number
+#define EX_F_DOUBLE_VALUE OTLP_EX_FIELDS[OTLP_EX_FI_DOUBLE_VALUE].number
+#define EX_F_INT_VALUE OTLP_EX_FIELDS[OTLP_EX_FI_INT_VALUE].number
+#define EX_F_TRACE_ID OTLP_EX_FIELDS[OTLP_EX_FI_TRACE_ID].number
+#define EX_F_SPAN_ID OTLP_EX_FIELDS[OTLP_EX_FI_SPAN_ID].number
+#define EX_F_TIME OTLP_EX_FIELDS[OTLP_EX_FI_TIME].number
 #define NDP_F_START_TIME OTLP_NDP_FIELDS[OTLP_NDP_FI_START_TIME].number
 #define NDP_F_TIME OTLP_NDP_FIELDS[OTLP_NDP_FI_TIME].number
 #define NDP_F_AS_DOUBLE OTLP_NDP_FIELDS[OTLP_NDP_FI_AS_DOUBLE].number
@@ -90,6 +97,67 @@ emit_packed_field(struct otlp_pb_buf *parent,
 	return otlp_pb_field_bytes(parent, field_num, payload, payload_len);
 }
 
+/* One OTLP Exemplar (v0.8.0): value (double field 2 / int field
+ * 3), optional trace/span correlation (4/5), optional time (6).
+ * Callers guarantee a value is set (add_exemplar enforces it). */
+static otlp_status_t
+emit_exemplar(struct otlp_pb_buf *parent,
+	uint32_t field_num,
+	const struct otlp_exemplar *ex)
+{
+	struct otlp_pb_buf sub = { 0 };
+	otlp_status_t st;
+
+	st = otlp_pb_buf_init(&sub, 0);
+	if (st != OTLP_OK)
+		return st;
+	if (ex->has_double)
+	{
+		uint64_t bits;
+
+		memcpy(&bits, &ex->double_val, sizeof(bits));
+		st = otlp_pb_tag(&sub, EX_F_DOUBLE_VALUE, OTLP_PB_WIRE_FIXED64);
+		if (st == OTLP_OK)
+			st = otlp_pb_fixed64(&sub, bits);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	else
+	{
+		uint64_t bits = (uint64_t) ex->int_val;
+
+		st = otlp_pb_tag(&sub, EX_F_INT_VALUE, OTLP_PB_WIRE_FIXED64);
+		if (st == OTLP_OK)
+			st = otlp_pb_fixed64(&sub, bits);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (ex->has_trace)
+	{
+		st = otlp_pb_field_bytes(
+			&sub, EX_F_TRACE_ID, ex->trace_id, 16);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (ex->has_span)
+	{
+		st = otlp_pb_field_bytes(&sub, EX_F_SPAN_ID, ex->span_id, 8);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	if (ex->has_time)
+	{
+		st = otlp_pb_field_fixed64(&sub, EX_F_TIME, ex->time_unix_nano);
+		if (st != OTLP_OK)
+			goto out;
+	}
+	st = otlp_pb_field_message(parent, field_num, sub.data, sub.len);
+
+out:
+	otlp_pb_buf_free(&sub);
+	return st;
+}
+
 static otlp_status_t
 emit_number_data_point(struct otlp_pb_buf *parent,
 	uint32_t field_num,
@@ -107,6 +175,19 @@ emit_number_data_point(struct otlp_pb_buf *parent,
 	st = otlp_emit_attributes(&sub, NDP_F_ATTRIBUTES, attrs, n);
 	if (st != OTLP_OK)
 		goto out;
+
+	{
+		size_t i;
+
+		for (i = 0; i < otlp_metric_get_n_exemplars(m); i++)
+		{
+			st = emit_exemplar(&sub,
+				NDP_F_EXEMPLARS,
+				otlp_metric_get_exemplar(m, i));
+			if (st != OTLP_OK)
+				goto out;
+		}
+	}
 
 	if (otlp_metric_has_start(m))
 	{
@@ -160,6 +241,19 @@ emit_histogram_data_point(struct otlp_pb_buf *parent,
 	st = otlp_emit_attributes(&sub, HDP_F_ATTRIBUTES, attrs, n);
 	if (st != OTLP_OK)
 		goto out;
+
+	{
+		size_t i;
+
+		for (i = 0; i < otlp_metric_get_n_exemplars(m); i++)
+		{
+			st = emit_exemplar(&sub,
+				HDP_F_EXEMPLARS,
+				otlp_metric_get_exemplar(m, i));
+			if (st != OTLP_OK)
+				goto out;
+		}
+	}
 
 	if (otlp_metric_has_start(m))
 	{
