@@ -28,7 +28,7 @@
 #include <intrin.h>
 
 typedef volatile uint64_t otlp_atomic_u64;
-typedef volatile int otlp_atomic_int;
+typedef volatile int      otlp_atomic_int;
 
 #define OTLP_MEMORY_ORDER_RELAXED 0
 #define OTLP_MEMORY_ORDER_ACQUIRE 1
@@ -53,17 +53,17 @@ otlp_atomic_store_u64(otlp_atomic_u64 *a, uint64_t v, int mo)
 
 static inline int
 otlp_atomic_cas_u64(otlp_atomic_u64 *a,
-	uint64_t *expected,
-	uint64_t desired,
-	int succ,
-	int fail)
+		    uint64_t	       *expected,
+		    uint64_t		desired,
+		    int			succ,
+		    int			fail)
 {
 	uint64_t old;
 
 	(void) succ;
 	(void) fail;
 	old = (uint64_t) _InterlockedCompareExchange64(
-		(long long *) a, (long long) desired, (long long) *expected);
+	    (long long *) a, (long long) desired, (long long) *expected);
 	if (old == *expected)
 		return 1;
 	*expected = old;
@@ -75,7 +75,7 @@ otlp_atomic_fetch_add_u64(otlp_atomic_u64 *a, uint64_t delta, int mo)
 {
 	(void) mo;
 	return (uint64_t) _InterlockedExchangeAdd64(
-		(long long *) a, (long long) delta);
+	    (long long *) a, (long long) delta);
 }
 
 /* ── int ── */
@@ -106,7 +106,7 @@ otlp_atomic_fetch_add_int(otlp_atomic_int *a, int delta, int mo)
 #include <stdatomic.h>
 
 typedef _Atomic uint64_t otlp_atomic_u64;
-typedef _Atomic int otlp_atomic_int;
+typedef _Atomic int      otlp_atomic_int;
 
 #define OTLP_MEMORY_ORDER_RELAXED memory_order_relaxed
 #define OTLP_MEMORY_ORDER_ACQUIRE memory_order_acquire
@@ -126,13 +126,13 @@ otlp_atomic_store_u64(otlp_atomic_u64 *a, uint64_t v, int mo)
 
 static inline int
 otlp_atomic_cas_u64(otlp_atomic_u64 *a,
-	uint64_t *expected,
-	uint64_t desired,
-	int succ,
-	int fail)
+		    uint64_t	       *expected,
+		    uint64_t		desired,
+		    int			succ,
+		    int			fail)
 {
 	return atomic_compare_exchange_weak_explicit(
-		a, expected, desired, succ, fail);
+	    a, expected, desired, succ, fail);
 }
 
 static inline uint64_t
