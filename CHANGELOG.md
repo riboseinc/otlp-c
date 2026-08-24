@@ -4,6 +4,21 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.4] - 2026-08-24
+
+schema_url: a conformance gap closed.
+
+### Added — opts.schema_url
+
+The OTLP proto carries `schema_url` (field 3) on every
+resource-level message; the schema tables had it pinned all
+along, but the encoders never emitted it. New additive opt
+`schema_url` (UTF-8-validated at create, deep-copied) is emitted
+as field 3 on ResourceSpans, ResourceMetrics, and ResourceLogs
+across the async and sync paths. Wire-proven in unit-wire-numbers
+against the upstream literal for all three signals, plus
+absence-when-NULL.
+
 ## [0.7.3] - 2026-08-24
 
 Per-signal endpoints, end to end.

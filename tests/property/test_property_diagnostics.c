@@ -27,10 +27,12 @@
 
 #define MAX_LOG_ENTRIES 64
 
-struct log_sink {
-	struct {
+struct log_sink
+{
+	struct
+	{
 		otlp_log_level_t level;
-		char		message[128];
+		char message[128];
 	} entries[MAX_LOG_ENTRIES];
 	size_t n;
 };
@@ -40,10 +42,13 @@ counting_logger(void *ctx, otlp_log_level_t level, const char *message)
 {
 	struct log_sink *s = ctx;
 
-	if (s->n < MAX_LOG_ENTRIES) {
+	if (s->n < MAX_LOG_ENTRIES)
+	{
 		s->entries[s->n].level = level;
 		snprintf(s->entries[s->n].message,
-			 sizeof(s->entries[s->n].message), "%s", message);
+			sizeof(s->entries[s->n].message),
+			"%s",
+			message);
 		s->n++;
 	}
 }
@@ -51,7 +56,7 @@ counting_logger(void *ctx, otlp_log_level_t level, const char *message)
 static int
 count_level(const struct log_sink *s, otlp_log_level_t want)
 {
-	int    count = 0;
+	int count = 0;
 	size_t i;
 
 	for (i = 0; i < s->n; i++)
@@ -61,14 +66,15 @@ count_level(const struct log_sink *s, otlp_log_level_t want)
 }
 
 static int
-contains_text(const struct log_sink *s, otlp_log_level_t level,
-	      const char *needle)
+contains_text(const struct log_sink *s,
+	otlp_log_level_t level,
+	const char *needle)
 {
 	size_t i;
 
 	for (i = 0; i < s->n; i++)
 		if (s->entries[i].level == level &&
-		    strstr(s->entries[i].message, needle))
+			strstr(s->entries[i].message, needle))
 			return 1;
 	return 0;
 }
@@ -84,16 +90,16 @@ static int
 prop_diag_fires_on_queue_full(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_tracer_t       *tracer = NULL;
-	struct log_sink      sink = { 0 };
-	int                  ok = 0;
-	otlp_span_t         *span;
-	int                  i;
+	otlp_exporter_t *exp = NULL;
+	otlp_tracer_t *tracer = NULL;
+	struct log_sink sink = { 0 };
+	int ok = 0;
+	otlp_span_t *span;
+	int i;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
-	opts.service_name   = "diag-test";
+	opts.service_name = "diag-test";
 	opts.queue_capacity = 4;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
@@ -108,7 +114,8 @@ prop_diag_fires_on_queue_full(uint64_t seed)
 	/* Emit 20 spans into a 4-deep queue with no ticking. The queue
 	 * fills immediately; subsequent emits return BUFFER_FULL and
 	 * fire WARN log entries. */
-	for (i = 0; i < 20; i++) {
+	for (i = 0; i < 20; i++)
+	{
 		span = otlp_tracer_start_span(tracer, "op");
 		if (!span)
 			goto out;
@@ -117,7 +124,7 @@ prop_diag_fires_on_queue_full(uint64_t seed)
 	}
 
 	ok = (count_level(&sink, OTLP_LOG_WARN) > 0 &&
-	      contains_text(&sink, OTLP_LOG_WARN, "queue full"));
+		contains_text(&sink, OTLP_LOG_WARN, "queue full"));
 
 out:
 	if (tracer)
@@ -130,17 +137,17 @@ static int
 prop_diag_fires_on_4xx_permanent(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_tracer_t       *tracer = NULL;
-	struct log_sink      sink = { 0 };
-	otlp_span_t         *span;
-	int                  ok = 0;
+	otlp_exporter_t *exp = NULL;
+	otlp_tracer_t *tracer = NULL;
+	struct log_sink sink = { 0 };
+	otlp_span_t *span;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "diag-test";
-	opts.max_retries  = 0;
-	opts.batch_size   = 1;
+	opts.max_retries = 0;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -159,7 +166,7 @@ prop_diag_fires_on_4xx_permanent(uint64_t seed)
 	otlp_exporter_tick(exp, 100);
 
 	ok = (count_level(&sink, OTLP_LOG_ERROR) > 0 &&
-	      contains_text(&sink, OTLP_LOG_ERROR, "permanent"));
+		contains_text(&sink, OTLP_LOG_ERROR, "permanent"));
 
 out:
 	if (tracer)
@@ -172,16 +179,16 @@ static int
 prop_diag_fires_on_success(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_tracer_t       *tracer = NULL;
-	struct log_sink      sink = { 0 };
-	otlp_span_t         *span;
-	int                  ok = 0;
+	otlp_exporter_t *exp = NULL;
+	otlp_tracer_t *tracer = NULL;
+	struct log_sink sink = { 0 };
+	otlp_span_t *span;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "diag-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -199,7 +206,7 @@ prop_diag_fires_on_success(uint64_t seed)
 	otlp_exporter_tick(exp, 100);
 
 	ok = (count_level(&sink, OTLP_LOG_DEBUG) > 0 &&
-	      contains_text(&sink, OTLP_LOG_DEBUG, "batch sent"));
+		contains_text(&sink, OTLP_LOG_DEBUG, "batch sent"));
 
 out:
 	if (tracer)
@@ -212,15 +219,15 @@ static int
 prop_diag_disabled_by_default(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_tracer_t       *tracer = NULL;
-	otlp_span_t         *span;
-	int                  ok = 0;
+	otlp_exporter_t *exp = NULL;
+	otlp_tracer_t *tracer = NULL;
+	otlp_span_t *span;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "diag-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -254,17 +261,23 @@ main(void)
 	int failures = 0;
 
 	failures += property_run(prop_diag_fires_on_queue_full,
-				 "prop_diag_fires_on_queue_full", 5, 1);
+		"prop_diag_fires_on_queue_full",
+		5,
+		1);
 	failures += property_run(prop_diag_fires_on_4xx_permanent,
-				 "prop_diag_fires_on_4xx_permanent", 5, 1);
-	failures += property_run(prop_diag_fires_on_success,
-				 "prop_diag_fires_on_success", 5, 1);
+		"prop_diag_fires_on_4xx_permanent",
+		5,
+		1);
+	failures += property_run(
+		prop_diag_fires_on_success, "prop_diag_fires_on_success", 5, 1);
 	failures += property_run(prop_diag_disabled_by_default,
-				 "prop_diag_disabled_by_default", 5, 1);
+		"prop_diag_disabled_by_default",
+		5,
+		1);
 
 	if (failures)
 		printf("[property] %d diagnostic property(ies) failed\n",
-		       failures);
+			failures);
 	else
 		printf("[property] all diagnostic properties passed\n");
 	return failures ? 1 : 0;

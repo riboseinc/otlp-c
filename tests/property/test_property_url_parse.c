@@ -142,14 +142,21 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 {
 	struct otlp_http_url u;
 	otlp_http_request_t *req = NULL;
-	otlp_status_t	     st;
+	otlp_status_t st;
 
 	(void) seed;
 	if (otlp_http_parse_url("http://example.com/v1/traces", &u) != OTLP_OK)
 		return 0;
 	/* CRLF injection attempt. */
-	st = otlp_http_request_start(&req, &u, "evil\r\nX-Inject: yes", NULL, 0,
-				     (const uint8_t *) "x", 1, 0, 0);
+	st = otlp_http_request_start(&req,
+		&u,
+		"evil\r\nX-Inject: yes",
+		NULL,
+		0,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0);
 	if (st != OTLP_ERR_INVALID_ARGUMENT)
 	{
 		if (req)
@@ -157,8 +164,15 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 		return 0;
 	}
 	/* LF only. */
-	st = otlp_http_request_start(&req, &u, "evil\nX-Inject: yes", NULL, 0,
-				     (const uint8_t *) "x", 1, 0, 0);
+	st = otlp_http_request_start(&req,
+		&u,
+		"evil\nX-Inject: yes",
+		NULL,
+		0,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0);
 	if (st != OTLP_ERR_INVALID_ARGUMENT)
 	{
 		if (req)
@@ -166,8 +180,15 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 		return 0;
 	}
 	/* Valid user_agent still works. */
-	st = otlp_http_request_start(&req, &u, "otlp-c/0.5.52", NULL, 0,
-				     (const uint8_t *) "x", 1, 0, 0);
+	st = otlp_http_request_start(&req,
+		&u,
+		"otlp-c/0.5.52",
+		NULL,
+		0,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0);
 	if (st != OTLP_OK)
 		return 0;
 	if (req)
@@ -224,8 +245,10 @@ main(void)
 		prop_url_default_path, "prop_url_default_path", 1, 1);
 	failures += property_run(
 		prop_url_rejects_crlf, "prop_url_rejects_crlf", 1, 1);
-	failures += property_run(
-		prop_user_agent_rejects_crlf, "prop_user_agent_rejects_crlf", 1, 1);
+	failures += property_run(prop_user_agent_rejects_crlf,
+		"prop_user_agent_rejects_crlf",
+		1,
+		1);
 
 	if (failures)
 		printf("[property] %d url property(ies) failed\n", failures);

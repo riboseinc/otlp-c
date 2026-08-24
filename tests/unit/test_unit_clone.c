@@ -189,10 +189,10 @@ test_metric_deep_clone(void)
 
 	arr[0] = h;
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b1, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b1, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	arr[0] = ch;
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b2, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b2, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	check_true(b1.len == b2.len && memcmp(b1.data, b2.data, b1.len) == 0);
 	otlp_pb_buf_free(&b1);
 	otlp_pb_buf_free(&b2);
@@ -201,10 +201,10 @@ test_metric_deep_clone(void)
 	check_ok(otlp_pb_buf_init(&b2, 128));
 	arr[0] = eh;
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b1, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b1, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	arr[0] = ceh;
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b2, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b2, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	check_true(b1.len == b2.len && memcmp(b1.data, b2.data, b1.len) == 0);
 	otlp_pb_buf_free(&b1);
 	otlp_pb_buf_free(&b2);
@@ -252,10 +252,10 @@ test_log_deep_clone(void)
 
 	arr[0] = lr;
 	check_ok(otlp_encode_export_logs_service_request(
-		&b1, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b1, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	arr[0] = cl;
 	check_ok(otlp_encode_export_logs_service_request(
-		&b2, "svc", NULL, 0, NULL, NULL, arr, 1));
+		&b2, "svc", NULL, NULL, 0, NULL, NULL, arr, 1));
 	check_true(b1.len == b2.len && memcmp(b1.data, b2.data, b1.len) == 0);
 
 	otlp_pb_buf_free(&b1);
@@ -281,27 +281,27 @@ test_metric_time_states(void)
 	/* neither */
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	check_true(b.len > 0);
 	otlp_pb_buf_free(&b);
 	/* start only */
 	check_ok(otlp_metric_set_start_time(m, 111));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	/* time only */
 	m->has_start = false;
 	check_ok(otlp_metric_set_time(m, 222));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	/* both */
 	check_ok(otlp_metric_set_start_time(m, 333));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	otlp_metric_free(m);
 
@@ -312,23 +312,23 @@ test_metric_time_states(void)
 	arr[0] = m;
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	check_ok(otlp_metric_set_start_time(m, 111));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	m->has_start = false;
 	check_ok(otlp_metric_set_time(m, 222));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	check_ok(otlp_metric_set_start_time(m, 333));
 	check_ok(otlp_pb_buf_init(&b, 64));
 	check_ok(otlp_encode_export_metrics_service_request(
-		&b, "s", NULL, 0, NULL, NULL, arr, 1));
+		&b, "s", NULL, NULL, 0, NULL, NULL, arr, 1));
 	otlp_pb_buf_free(&b);
 	otlp_metric_free(m);
 

@@ -25,25 +25,25 @@
 static int
 prop_exporter_batch_flush(uint64_t seed)
 {
-	struct prng		 p;
-	otlp_exporter_opts_t	 opts;
-	otlp_exporter_t		*exp;
-	otlp_tracer_t		*tracer;
-	otlp_exporter_stats_t	 stats;
-	int			 n_spans;
-	int			 batch_size;
-	int			 i;
-	int			 ok = 0;
+	struct prng p;
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	otlp_exporter_stats_t stats;
+	int n_spans;
+	int batch_size;
+	int i;
+	int ok = 0;
 
 	prng_seed(&p, seed);
-	batch_size = (int)prng_u32(&p, 100) + 1;
-	n_spans    = (int)prng_u32(&p, 200) + 1;
+	batch_size = (int) prng_u32(&p, 100) + 1;
+	n_spans = (int) prng_u32(&p, 200) + 1;
 
 	memset(&opts, 0, sizeof(opts));
-	opts.endpoint	   = "http://127.0.0.1:0/v1/traces";
-	opts.service_name   = "prop-test";
-	opts.batch_size	   = (size_t)batch_size;
-	opts.batch_ms	   = 5000;
+	opts.endpoint = "http://127.0.0.1:0/v1/traces";
+	opts.service_name = "prop-test";
+	opts.batch_size = (size_t) batch_size;
+	opts.batch_ms = 5000;
 	opts.queue_capacity = 1024;
 
 	exp = otlp_exporter_create(&opts);
@@ -54,12 +54,14 @@ prop_exporter_batch_flush(uint64_t seed)
 	if (!tracer)
 		goto out_exp;
 
-	for (i = 0; i < n_spans; i++) {
+	for (i = 0; i < n_spans; i++)
+	{
 		otlp_span_t *s = otlp_tracer_start_span(tracer, "op");
 		if (!s)
 			break;
 		otlp_span_mark_end(s);
-		if (otlp_exporter_emit_move(exp, s) != OTLP_OK) {
+		if (otlp_exporter_emit_move(exp, s) != OTLP_OK)
+		{
 			otlp_span_free(s);
 			break;
 		}
@@ -83,16 +85,16 @@ out_exp:
 static int
 prop_exporter_empty(uint64_t seed)
 {
-	otlp_exporter_opts_t	 opts;
-	otlp_exporter_t		*exp;
-	otlp_exporter_stats_t	 stats;
-	int			 ok = 0;
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	otlp_exporter_stats_t stats;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
-	opts.endpoint	   = "http://127.0.0.1:0/v1/traces";
-	opts.service_name   = "empty";
-	opts.batch_size	   = 10;
+	opts.endpoint = "http://127.0.0.1:0/v1/traces";
+	opts.service_name = "empty";
+	opts.batch_size = 10;
 
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
@@ -111,12 +113,15 @@ main(void)
 	int failures = 0;
 
 	failures += property_run(prop_exporter_batch_flush,
-				 "prop_exporter_batch_flush", 1000, 1);
-	failures += property_run(prop_exporter_empty,
-				 "prop_exporter_empty", 1000, 1);
+		"prop_exporter_batch_flush",
+		1000,
+		1);
+	failures += property_run(
+		prop_exporter_empty, "prop_exporter_empty", 1000, 1);
 
 	if (failures)
-		printf("[property] %d exporter property(ies) failed\n", failures);
+		printf("[property] %d exporter property(ies) failed\n",
+			failures);
 	else
 		printf("[property] all exporter properties passed\n");
 	return failures ? 1 : 0;

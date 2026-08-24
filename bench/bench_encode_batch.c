@@ -61,7 +61,7 @@ bench_batch(int n_spans, int n_attrs)
 	st = otlp_pb_buf_init(&buf, 0);
 	if (st == OTLP_OK)
 		st = otlp_encode_export_trace_service_request(
-			&buf, "bench", NULL, 0, NULL, NULL,
+			&buf, "bench", NULL, NULL, 0, NULL, NULL,
 			(const otlp_span_t *const *) spans,
 			(size_t) n_spans);
 	t1 = now_ns();

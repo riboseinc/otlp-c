@@ -100,6 +100,7 @@ otlp_emit_attributes(struct otlp_pb_buf *parent,
 otlp_status_t
 otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -116,6 +117,7 @@ otlp_encode_span_body(struct otlp_pb_buf *out, const otlp_span_t *span);
 otlp_status_t
 otlp_encode_export_metrics_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -128,6 +130,7 @@ otlp_encode_export_metrics_service_request(struct otlp_pb_buf *out,
 otlp_status_t
 otlp_encode_export_logs_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,

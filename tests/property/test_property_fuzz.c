@@ -227,13 +227,11 @@ prop_fuzz_http_response(uint64_t seed)
 	prng_seed(&p, seed);
 	fuzz_make_response(&p, buf, &len);
 
-	rc = otlp_http_resp_parse(
-		buf, len, (seed & 1) != 0, &out);
+	rc = otlp_http_resp_parse(buf, len, (seed & 1) != 0, &out);
 	check_true(rc == -1 || rc == 0 || rc == 1);
 	if (rc == 1)
 	{
-		check_true(out.http_status >= 100 &&
-			out.http_status <= 999);
+		check_true(out.http_status >= 100 && out.http_status <= 999);
 		check_true(out.body >= buf);
 		check_true(out.body + out.body_len <= buf + len);
 	}

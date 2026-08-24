@@ -36,7 +36,7 @@ prop_field_varint_roundtrip(uint64_t seed)
 	prng_seed(&p, seed);
 	/* Ensure non-zero value (zero would be omitted). */
 	value = prng_next(&p) | 1u;
-	field_num = (uint32_t) (prng_next(&p) % 536870911ULL) + 1; /* 1..2^29 */
+	field_num = (uint32_t)(prng_next(&p) % 536870911ULL) + 1; /* 1..2^29 */
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
@@ -47,7 +47,7 @@ prop_field_varint_roundtrip(uint64_t seed)
 
 	if (decode_varint(buf.data, buf.len, &pos, &key) != OTLP_OK)
 		goto out;
-	if ((uint32_t) (key >> 3) != field_num)
+	if ((uint32_t)(key >> 3) != field_num)
 		goto out;
 	if ((int) (key & 0x7) != OTLP_PB_WIRE_VARINT)
 		goto out;
@@ -78,7 +78,7 @@ prop_field_fixed64_roundtrip(uint64_t seed)
 	/* fixed64 0 is omitted; force the low bit so we get a non-zero. */
 	if (value == 0)
 		value = 1;
-	field_num = (uint32_t) (prng_next(&p) % 536870911ULL) + 1;
+	field_num = (uint32_t)(prng_next(&p) % 536870911ULL) + 1;
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
@@ -89,7 +89,7 @@ prop_field_fixed64_roundtrip(uint64_t seed)
 
 	if (decode_varint(buf.data, buf.len, &pos, &key) != OTLP_OK)
 		goto out;
-	if ((uint32_t) (key >> 3) != field_num)
+	if ((uint32_t)(key >> 3) != field_num)
 		goto out;
 	if ((int) (key & 0x7) != OTLP_PB_WIRE_FIXED64)
 		goto out;
@@ -123,7 +123,7 @@ prop_field_fixed32_roundtrip(uint64_t seed)
 	value = (uint32_t) prng_next(&p);
 	if (value == 0)
 		value = 1;
-	field_num = (uint32_t) (prng_next(&p) % 536870911ULL) + 1;
+	field_num = (uint32_t)(prng_next(&p) % 536870911ULL) + 1;
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
@@ -134,7 +134,7 @@ prop_field_fixed32_roundtrip(uint64_t seed)
 
 	if (decode_varint(buf.data, buf.len, &pos, &key) != OTLP_OK)
 		goto out;
-	if ((uint32_t) (key >> 3) != field_num)
+	if ((uint32_t)(key >> 3) != field_num)
 		goto out;
 	if ((int) (key & 0x7) != OTLP_PB_WIRE_FIXED32)
 		goto out;
@@ -164,13 +164,13 @@ prop_field_string_roundtrip(uint64_t seed)
 	int ok = 0;
 
 	prng_seed(&p, seed);
-	slen = (size_t) prng_u32(&p, (uint32_t) (sizeof(str) - 1)) +
+	slen = (size_t) prng_u32(&p, (uint32_t)(sizeof(str) - 1)) +
 		1; /* 1..63 */
 	for (size_t i = 0; i < slen; i++)
 		/* Printable ASCII 33..126 (avoid '\0' which truncates). */
 		str[i] = (char) (prng_u32(&p, 94) + 33);
 	str[slen] = '\0';
-	field_num = (uint32_t) (prng_next(&p) % 536870911ULL) + 1;
+	field_num = (uint32_t)(prng_next(&p) % 536870911ULL) + 1;
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
@@ -181,7 +181,7 @@ prop_field_string_roundtrip(uint64_t seed)
 
 	if (decode_varint(buf.data, buf.len, &pos, &key) != OTLP_OK)
 		goto out;
-	if ((uint32_t) (key >> 3) != field_num)
+	if ((uint32_t)(key >> 3) != field_num)
 		goto out;
 	if ((int) (key & 0x7) != OTLP_PB_WIRE_LEN)
 		goto out;
@@ -278,7 +278,7 @@ prop_field_message_overhead(uint64_t seed)
 	int ok = 0;
 
 	prng_seed(&p, seed);
-	field_num = (uint32_t) (prng_next(&p) % 536870911ULL) + 1;
+	field_num = (uint32_t)(prng_next(&p) % 536870911ULL) + 1;
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		return 0;
@@ -297,7 +297,7 @@ prop_field_message_overhead(uint64_t seed)
 	/* Decode tag + length prefix; remaining bytes should equal sub.len. */
 	if (decode_varint(buf.data, buf.len, &pos, &key) != OTLP_OK)
 		goto out;
-	if ((uint32_t) (key >> 3) != field_num)
+	if ((uint32_t)(key >> 3) != field_num)
 		goto out;
 	if ((int) (key & 0x7) != OTLP_PB_WIRE_LEN)
 		goto out;

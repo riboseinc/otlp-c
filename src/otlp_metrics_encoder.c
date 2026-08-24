@@ -29,6 +29,7 @@
 	OTLP_EMSR_FIELDS[OTLP_EMSR_FI_RESOURCE_METRICS].number
 #define RM_F_RESOURCE OTLP_RM_FIELDS[OTLP_RM_FI_RESOURCE].number
 #define RM_F_SCOPE_METRICS OTLP_RM_FIELDS[OTLP_RM_FI_SCOPE_METRICS].number
+#define RM_F_SCHEMA_URL OTLP_RM_FIELDS[OTLP_RM_FI_SCHEMA_URL].number
 #define SM_F_SCOPE OTLP_SM_FIELDS[OTLP_SM_FI_SCOPE].number
 #define SM_F_METRICS OTLP_SM_FIELDS[OTLP_SM_FI_METRICS].number
 #define METRIC_F_NAME OTLP_METRIC_FIELDS[OTLP_METRIC_FI_NAME].number
@@ -554,6 +555,7 @@ out:
 otlp_status_t
 otlp_encode_export_metrics_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -601,6 +603,8 @@ otlp_encode_export_metrics_service_request(struct otlp_pb_buf *out,
 	if (sm.len > 0)
 		st = otlp_pb_field_message(
 			&rm, RM_F_SCOPE_METRICS, sm.data, sm.len);
+	if (st == OTLP_OK && schema_url && schema_url[0])
+		st = otlp_pb_field_string(&rm, RM_F_SCHEMA_URL, schema_url);
 	if (st == OTLP_OK)
 		st = otlp_pb_field_message(
 			out, EMSR_F_RESOURCE_METRICS, rm.data, rm.len);

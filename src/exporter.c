@@ -91,6 +91,7 @@ struct otlp_exporter
 	 * sig[s].url.) */
 	char *user_agent;
 	char *service_name;
+	char *schema_url;
 	struct otlp_attr_vec resource_attrs;
 	size_t batch_size;
 	uint32_t batch_ms;
@@ -218,6 +219,7 @@ build_span_request_void(const struct otlp_http_url *url,
 	const otlp_http_header_t *headers,
 	size_t n_headers,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
@@ -232,6 +234,7 @@ build_span_request_void(const struct otlp_http_url *url,
 		headers,
 		n_headers,
 		service_name,
+		schema_url,
 		res_attrs,
 		n_res_attrs,
 		(const otlp_span_t *const *) items,
@@ -248,6 +251,7 @@ build_metric_request_void(const struct otlp_http_url *url,
 	const otlp_http_header_t *headers,
 	size_t n_headers,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
@@ -262,6 +266,7 @@ build_metric_request_void(const struct otlp_http_url *url,
 		headers,
 		n_headers,
 		service_name,
+		schema_url,
 		res_attrs,
 		n_res_attrs,
 		(const otlp_metric_t *const *) items,
@@ -278,6 +283,7 @@ build_log_request_void(const struct otlp_http_url *url,
 	const otlp_http_header_t *headers,
 	size_t n_headers,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
 	const void *const *items,
@@ -292,6 +298,7 @@ build_log_request_void(const struct otlp_http_url *url,
 		headers,
 		n_headers,
 		service_name,
+		schema_url,
 		res_attrs,
 		n_res_attrs,
 		(const otlp_log_record_t *const *) items,
@@ -306,6 +313,7 @@ typedef otlp_status_t (*otlp_build_request_fn)(const struct otlp_http_url *,
 	const char *,
 	const otlp_http_header_t *,
 	size_t n_headers,
+	const char *,
 	const char *,
 	const struct otlp_attribute *,
 	size_t,
@@ -607,9 +615,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 
 			if (s == SIGNAL_SPAN)
 				continue;
-			override = (s == SIGNAL_METRIC)
-				? o.metrics_endpoint
-				: o.logs_endpoint;
+			override = (s == SIGNAL_METRIC) ? o.metrics_endpoint
+							: o.logs_endpoint;
 			if (override && override[0])
 			{
 				st = otlp_http_parse_url(
@@ -630,9 +637,13 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 
 	if (o.service_name && !otlp_str_is_utf8(o.service_name))
 		goto fail;
+	if (o.schema_url && !otlp_str_is_utf8(o.schema_url))
+		goto fail;
 	e->user_agent = otlp_dup_str(o.user_agent);
 	e->service_name = otlp_dup_str(o.service_name);
-	if (!e->user_agent || !e->service_name)
+	e->schema_url = otlp_dup_str(o.schema_url);
+	if (!e->user_agent || !e->service_name ||
+		(o.schema_url && !e->schema_url))
 		goto fail;
 
 	/* Extra HTTP headers: deep-copy (the opts contract — caller
@@ -781,6 +792,7 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 fail:
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	otlp_free(e->schema_url);
 	otlp_free(e->http_headers);
 	otlp_free(e->http_headers_blob);
 	otlp_attr_vec_free(&e->resource_attrs);
@@ -825,6 +837,7 @@ otlp_exporter_free(otlp_exporter_t *e)
 	}
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	otlp_free(e->schema_url);
 	otlp_free(e->http_headers);
 	otlp_free(e->http_headers_blob);
 	otlp_attr_vec_free(&e->resource_attrs);
@@ -968,6 +981,7 @@ try_start_post(struct otlp_exporter *e, int s)
 		e->http_headers,
 		e->n_http_headers,
 		e->service_name,
+		e->schema_url,
 		e->resource_attrs.items,
 		e->resource_attrs.n,
 		(const void *const *) sg->pending,
@@ -1622,12 +1636,8 @@ flush_sync(struct otlp_exporter *e,
 	 * timeouts are permanent (no retry). */
 	for (attempt = 0; attempt <= e->max_retries; attempt++)
 	{
-		st = flush_post_once(e,
-			signal,
-			url,
-			body,
-			body_len,
-			&got_response);
+		st = flush_post_once(
+			e, signal, url, body, body_len, &got_response);
 		if (st == OTLP_OK || got_response)
 			return st;
 		if (attempt < e->max_retries)
@@ -1685,6 +1695,7 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 	arr[0] = m;
 	st = otlp_encode_export_metrics_service_request(&body,
 		e->service_name,
+		e->schema_url,
 		e->resource_attrs.items,
 		e->resource_attrs.n,
 		NULL,
@@ -1692,10 +1703,7 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 		arr,
 		1);
 	if (st == OTLP_OK)
-		st = flush_sync(e,
-			OTLP_SIGNAL_METRICS,
-			body.data,
-			body.len);
+		st = flush_sync(e, OTLP_SIGNAL_METRICS, body.data, body.len);
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
 		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_METRIC].sent,
@@ -1733,6 +1741,7 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 	arr[0] = lr;
 	st = otlp_encode_export_logs_service_request(&body,
 		e->service_name,
+		e->schema_url,
 		e->resource_attrs.items,
 		e->resource_attrs.n,
 		NULL,

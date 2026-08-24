@@ -53,7 +53,7 @@ bench_encode(int n_spans, int n_attrs)
 	otlp_pb_buf_init(&buf, 0);
 	t0 = now_ns();
 	otlp_encode_export_trace_service_request(
-	    &buf, "bench", NULL, 0, "bench", "0",
+	    &buf, "bench", NULL, NULL, 0, "bench", "0",
 	    (const otlp_span_t *const *)spans, (size_t)n_spans);
 	t1 = now_ns();
 

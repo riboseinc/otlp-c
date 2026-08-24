@@ -344,7 +344,7 @@ build_traces(struct otlp_pb_buf *out)
 
 	spans[0] = s;
 	check_ok(otlp_encode_export_trace_service_request(
-		out, "golden-svc", NULL, 0, "golden-scope", "1.2.3", spans, 1));
+		out, "golden-svc", NULL, NULL, 0, "golden-scope", "1.2.3", spans, 1));
 	otlp_span_free(s);
 	return true;
 }
@@ -426,7 +426,7 @@ build_metrics(struct otlp_pb_buf *out)
 	metrics[2] = make_exp_hist();
 	metrics[3] = make_counter();
 	check_ok(otlp_encode_export_metrics_service_request(out,
-		"golden-svc",
+		"golden-svc", NULL,
 		NULL,
 		0,
 		"golden-scope",
@@ -465,7 +465,7 @@ build_logs(struct otlp_pb_buf *out)
 	logs[0] = lr1;
 	logs[1] = lr2;
 	check_ok(otlp_encode_export_logs_service_request(
-		out, "golden-svc", NULL, 0, "golden-scope", "1.2.3", logs, 2));
+		out, "golden-svc", NULL, NULL, 0, "golden-scope", "1.2.3", logs, 2));
 	otlp_log_record_free(lr1);
 	otlp_log_record_free(lr2);
 	return true;

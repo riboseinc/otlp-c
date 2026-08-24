@@ -34,11 +34,11 @@
 
 struct otlp_tracer
 {
-	char		       *service_name; /* owned */
-	char		       *scope_name;	/* owned */
-	char		       *scope_version;/* owned */
-	otlp_sampler_t       *sampler;	/* not owned; default = always_on */
-	otlp_atomic_u64	prng_state;
+	char *service_name; /* owned */
+	char *scope_name; /* owned */
+	char *scope_version; /* owned */
+	otlp_sampler_t *sampler; /* not owned; default = always_on */
+	otlp_atomic_u64 prng_state;
 };
 
 /* ── Internal helpers ─────────────────────────────────────────── */
@@ -51,7 +51,7 @@ get_thread_id(void)
 #else
 	/* pthread_self() returns an opaque pthread_t. Cast via
 	 * uintptr_t to get a deterministic numeric value. */
-	return (uint64_t) (uintptr_t) pthread_self();
+	return (uint64_t)(uintptr_t) pthread_self();
 #endif
 }
 
@@ -100,13 +100,13 @@ tracer_prng_next(struct otlp_tracer *t)
 static void
 put_u64_be(uint8_t out[8], uint64_t v)
 {
-	out[0] = (uint8_t) (v >> 56);
-	out[1] = (uint8_t) (v >> 48);
-	out[2] = (uint8_t) (v >> 40);
-	out[3] = (uint8_t) (v >> 32);
-	out[4] = (uint8_t) (v >> 24);
-	out[5] = (uint8_t) (v >> 16);
-	out[6] = (uint8_t) (v >> 8);
+	out[0] = (uint8_t)(v >> 56);
+	out[1] = (uint8_t)(v >> 48);
+	out[2] = (uint8_t)(v >> 40);
+	out[3] = (uint8_t)(v >> 32);
+	out[4] = (uint8_t)(v >> 24);
+	out[5] = (uint8_t)(v >> 16);
+	out[6] = (uint8_t)(v >> 8);
 	out[7] = (uint8_t) v;
 }
 
@@ -207,8 +207,8 @@ otlp_tracer_set_sampler(otlp_tracer_t *tracer, otlp_sampler_t *sampler)
 
 static otlp_span_t *
 start_span_internal(struct otlp_tracer *t,
-		    const char *name,
-		    const otlp_span_t *parent)
+	const char *name,
+	const otlp_span_t *parent)
 {
 	otlp_span_t *span;
 
@@ -241,23 +241,23 @@ start_span_internal(struct otlp_tracer *t,
 
 	/* Consult the sampler with the freshly-generated trace_id. */
 	{
-		otlp_sampler_t      *sampler = t->sampler;
+		otlp_sampler_t *sampler = t->sampler;
 		otlp_sampling_result_t result;
 
 		if (!sampler)
 			sampler = otlp_sampler_always_on();
 		result = sampler->should_sample(sampler,
-						otlp_span_get_trace_id(span),
-						name,
-						otlp_span_get_kind(span));
+			otlp_span_get_trace_id(span),
+			name,
+			otlp_span_get_kind(span));
 		if (result.decision == OTLP_SAMPLING_DECISION_NOT_RECORD)
 		{
 			otlp_span_free(span);
 			return NULL;
 		}
 		otlp_span_set_sampled(span,
-				      result.decision ==
-					      OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED);
+			result.decision ==
+				OTLP_SAMPLING_DECISION_RECORD_AND_SAMPLED);
 	}
 
 	otlp_span_mark_start(span);

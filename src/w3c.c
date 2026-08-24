@@ -50,16 +50,16 @@ otlp_traceparent_format_raw(const uint8_t trace_id[16],
 	/* trace-id: 16 bytes → 32 hex chars */
 	for (i = 0; i < 16; i++)
 	{
-		buf[3 + i * 2] = hex_digit((uint8_t) (trace_id[i] >> 4));
-		buf[3 + i * 2 + 1] = hex_digit((uint8_t) (trace_id[i] & 0x0F));
+		buf[3 + i * 2] = hex_digit((uint8_t)(trace_id[i] >> 4));
+		buf[3 + i * 2 + 1] = hex_digit((uint8_t)(trace_id[i] & 0x0F));
 	}
 	buf[35] = '-';
 
 	/* span-id: 8 bytes → 16 hex chars */
 	for (i = 0; i < 8; i++)
 	{
-		buf[36 + i * 2] = hex_digit((uint8_t) (span_id[i] >> 4));
-		buf[36 + i * 2 + 1] = hex_digit((uint8_t) (span_id[i] & 0x0F));
+		buf[36 + i * 2] = hex_digit((uint8_t)(span_id[i] >> 4));
+		buf[36 + i * 2 + 1] = hex_digit((uint8_t)(span_id[i] & 0x0F));
 	}
 	buf[52] = '-';
 
@@ -122,7 +122,7 @@ otlp_traceparent_parse(const char *header,
 
 		if (hi < 0 || lo < 0)
 			return OTLP_ERR_INVALID_ARGUMENT;
-		trace_id[i] = (uint8_t) ((hi << 4) | lo);
+		trace_id[i] = (uint8_t)((hi << 4) | lo);
 		if (trace_id[i] != 0)
 			trace_nz = true;
 	}
@@ -137,7 +137,7 @@ otlp_traceparent_parse(const char *header,
 
 		if (hi < 0 || lo < 0)
 			return OTLP_ERR_INVALID_ARGUMENT;
-		span_id[i] = (uint8_t) ((hi << 4) | lo);
+		span_id[i] = (uint8_t)((hi << 4) | lo);
 		if (span_id[i] != 0)
 			span_nz = true;
 	}
@@ -151,7 +151,7 @@ otlp_traceparent_parse(const char *header,
 
 		if (hi < 0 || lo < 0)
 			return OTLP_ERR_INVALID_ARGUMENT;
-		*flags = (uint8_t) ((hi << 4) | lo);
+		*flags = (uint8_t)((hi << 4) | lo);
 	}
 
 	/* W3C: trace-id and span-id must not be all-zero. */

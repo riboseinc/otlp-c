@@ -164,7 +164,7 @@ encode_traces_with_attrs(struct otlp_pb_buf *buf,
 		return OTLP_ERR_NOMEM;
 	internal = otlp_exporter_get_resource_attrs(exp, &n_internal);
 	st = otlp_encode_export_trace_service_request(
-		buf, service, internal, n_internal, NULL, NULL, NULL, 0);
+		buf, service, NULL, internal, n_internal, NULL, NULL, NULL, 0);
 	otlp_exporter_free(exp);
 	return st;
 }
@@ -181,7 +181,7 @@ prop_resource_empty(uint64_t seed)
 	if (st != OTLP_OK)
 		return 0;
 	st = otlp_encode_export_trace_service_request(
-		&buf, NULL, NULL, 0, NULL, NULL, NULL, 0);
+		&buf, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0);
 	if (st == OTLP_OK)
 		ok = (buf.len == 0);
 	otlp_pb_buf_free(&buf);
@@ -202,7 +202,7 @@ prop_resource_service_name_only(uint64_t seed)
 	if (st != OTLP_OK)
 		return 0;
 	st = otlp_encode_export_trace_service_request(
-		&buf, "svc-x", NULL, 0, NULL, NULL, NULL, 0);
+		&buf, "svc-x", NULL, NULL, 0, NULL, NULL, NULL, 0);
 	if (st != OTLP_OK)
 		goto out;
 	if (!descend_to_resource_attrs(buf.data, buf.len, &kvs_pos, &kvs_end))

@@ -21,6 +21,7 @@
 #define ELSR_F_RESOURCE_LOGS OTLP_ELSR_FIELDS[OTLP_ELSR_FI_RESOURCE_LOGS].number
 #define RL_F_RESOURCE OTLP_RL_FIELDS[OTLP_RL_FI_RESOURCE].number
 #define RL_F_SCOPE_LOGS OTLP_RL_FIELDS[OTLP_RL_FI_SCOPE_LOGS].number
+#define RL_F_SCHEMA_URL OTLP_RL_FIELDS[OTLP_RL_FI_SCHEMA_URL].number
 #define SL_F_SCOPE OTLP_SL_FIELDS[OTLP_SL_FI_SCOPE].number
 #define SL_F_LOG_RECORDS OTLP_SL_FIELDS[OTLP_SL_FI_LOG_RECORDS].number
 #define LOG_F_TIME OTLP_LOG_FIELDS[OTLP_LOG_FI_TIME].number
@@ -143,6 +144,7 @@ out:
 otlp_status_t
 otlp_encode_export_logs_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -190,6 +192,8 @@ otlp_encode_export_logs_service_request(struct otlp_pb_buf *out,
 	if (sl.len > 0)
 		st = otlp_pb_field_message(
 			&rl, RL_F_SCOPE_LOGS, sl.data, sl.len);
+	if (st == OTLP_OK && schema_url && schema_url[0])
+		st = otlp_pb_field_string(&rl, RL_F_SCHEMA_URL, schema_url);
 	if (st == OTLP_OK)
 		st = otlp_pb_field_message(
 			out, ELSR_F_RESOURCE_LOGS, rl.data, rl.len);
