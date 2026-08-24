@@ -14,7 +14,8 @@
  *   prop_metrics_gauge_field_nums     — gauge envelope + as_double field.
  *   prop_metrics_histogram_field_nums — histogram + count/sum/buckets/bounds.
  *   prop_metrics_counter_value        — encoded as_double == recorded value.
- *   prop_metrics_attributes_roundtrip — typed attribute (int64/double/bool/bytes) as KeyValue oneof member.
+ *   prop_metrics_attributes_roundtrip — typed attribute
+ * (int64/double/bool/bytes) as KeyValue oneof member.
  */
 #include "decoder.h"
 #include "prng.h"
@@ -168,7 +169,8 @@ prop_metrics_counter_field_nums(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_metrics_service_request(
-		    &buf, "svc", NULL, NULL, 0, "scope", "1.0", arr, 1) != OTLP_OK)
+		    &buf, "svc", NULL, NULL, 0, "scope", "1.0", arr, 1) !=
+		OTLP_OK)
 		goto out_buf;
 
 	pos = 0;

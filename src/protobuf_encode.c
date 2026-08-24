@@ -26,8 +26,8 @@
 static otlp_status_t
 buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 {
-	size_t new_cap;
-	size_t need;
+	size_t   new_cap;
+	size_t   need;
 	uint8_t *p;
 
 	if (!buf)
@@ -61,8 +61,8 @@ buf_reserve(struct otlp_pb_buf *buf, size_t additional)
 		if (!p)
 			return OTLP_ERR_NOMEM;
 	}
-	buf->data = p;
-	buf->cap = new_cap;
+	buf->data	    = p;
+	buf->cap	    = new_cap;
 	buf->owns_heap = true;
 	return OTLP_OK;
 }
@@ -93,9 +93,9 @@ otlp_pb_buf_init(struct otlp_pb_buf *buf, size_t initial_cap)
 	if (!buf)
 		return OTLP_ERR_NULL;
 	/* SBO: point at the inline buffer by default. */
-	buf->data = buf->sbo;
-	buf->len = 0;
-	buf->cap = OTLP_PB_SBO_SIZE;
+	buf->data	    = buf->sbo;
+	buf->len	    = 0;
+	buf->cap	    = OTLP_PB_SBO_SIZE;
 	buf->owns_heap = false;
 
 	if (initial_cap > OTLP_PB_SBO_SIZE)
@@ -104,11 +104,11 @@ otlp_pb_buf_init(struct otlp_pb_buf *buf, size_t initial_cap)
 		buf->data = otlp_malloc(initial_cap);
 		if (!buf->data)
 		{
-			buf->data = buf->sbo;
-			buf->cap = OTLP_PB_SBO_SIZE;
+			buf->data	    = buf->sbo;
+			buf->cap	    = OTLP_PB_SBO_SIZE;
 			return OTLP_ERR_NOMEM;
 		}
-		buf->cap = initial_cap;
+		buf->cap	    = initial_cap;
 		buf->owns_heap = true;
 	}
 	return OTLP_OK;
@@ -121,9 +121,9 @@ otlp_pb_buf_free(struct otlp_pb_buf *buf)
 		return;
 	if (buf->owns_heap)
 		otlp_free(buf->data);
-	buf->data = NULL;
-	buf->len = 0;
-	buf->cap = 0;
+	buf->data	    = NULL;
+	buf->len	    = 0;
+	buf->cap	    = 0;
 	buf->owns_heap = false;
 }
 
@@ -150,7 +150,7 @@ otlp_pb_varint(struct otlp_pb_buf *buf, uint64_t v)
 
 	do
 	{
-		tmp[n++] = (uint8_t)((v & 0x7F) | 0x80);
+		tmp[n++] = (uint8_t) ((v & 0x7F) | 0x80);
 		v >>= 7;
 	} while (v != 0 && n < sizeof(tmp));
 
@@ -166,7 +166,7 @@ otlp_pb_fixed64(struct otlp_pb_buf *buf, uint64_t v)
 
 	/* Little-endian, no platform dependency (shifts, not union). */
 	for (int i = 0; i < 8; i++)
-		tmp[i] = (uint8_t)(v >> (i * 8));
+		tmp[i] = (uint8_t) (v >> (i * 8));
 	return buf_append(buf, tmp, sizeof(tmp));
 }
 
@@ -176,7 +176,7 @@ otlp_pb_fixed32(struct otlp_pb_buf *buf, uint32_t v)
 	uint8_t tmp[4];
 
 	for (int i = 0; i < 4; i++)
-		tmp[i] = (uint8_t)(v >> (i * 8));
+		tmp[i] = (uint8_t) (v >> (i * 8));
 	return buf_append(buf, tmp, sizeof(tmp));
 }
 
@@ -217,7 +217,7 @@ otlp_pb_tag(struct otlp_pb_buf *buf, uint32_t field_number, int wire_type)
 		wire_type != OTLP_PB_WIRE_FIXED32)
 		return OTLP_ERR_INVALID_ARGUMENT;
 
-	key = ((uint64_t) field_number << 3) | (uint64_t)(uint32_t) wire_type;
+	key = ((uint64_t) field_number << 3) | (uint64_t) (uint32_t) wire_type;
 	return otlp_pb_varint(buf, key);
 }
 
