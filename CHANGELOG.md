@@ -4,6 +4,26 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.12] - 2026-08-24
+
+Architecture: one signal table instead of five descriptor families.
+
+### Changed — exporter's per-signal descriptors consolidated
+
+The three signals were dispatched through FIVE descriptor families
+(drain, emit, tick, record, start-post), each with three instances
+hand-assembled at a different call site across a 2006-line module
+— adding a signal would have touched six regions. There is now ONE
+static spec table (id, diagnostics name, free/clone/build-request
+adapters) plus a per-signal state array `sig[3]` (queue, pending
+batch, timers, counters) inside the exporter; every generic driver
+(emit, tick, record_outcome, start-post, drain, stats, signal_name)
+dispatches through it. exporter.c: 2006 → 1738 lines, net −268;
+the three `try_start_*_post` wrappers and the descriptor structs
+are gone. Adding a signal is now one table row plus the typed
+functions it names. No public API change; the stabilization window
+holds.
+
 ## [0.6.11] - 2026-08-24
 
 Architecture: the HTTP response parser is a deep module.
