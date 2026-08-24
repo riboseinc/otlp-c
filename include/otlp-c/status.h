@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Status and error codes. Every fallible public function returns an
  * otlp_status_t. OTLP_OK is 0; errors are negative to make the

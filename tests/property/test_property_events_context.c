@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Property tests for span events, links, trace_state, and the
  * SpanContext propagation API.

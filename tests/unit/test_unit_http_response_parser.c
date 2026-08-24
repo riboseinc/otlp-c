@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Byte-fixture tests for the HTTP response wire-format parser.
  *

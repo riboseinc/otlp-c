@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * HTTP/1.1 response wire-format parser — see http_response_parser.h.
  * Extracted verbatim from http_client.c (v0.6.11): status line,

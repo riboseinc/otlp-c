@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Cross-platform clock helpers. Shared POSIX + Win32 code.
  *

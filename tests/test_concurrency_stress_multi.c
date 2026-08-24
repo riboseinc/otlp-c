@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Multi-signal concurrency stress test. Exercises the v0.5.28
 // async metric/log pipeline under concurrent load: N threads emit

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Targeted unit tests for individual module functions. Complements
 # the property tests with specific known-answer assertions.

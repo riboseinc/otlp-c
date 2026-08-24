@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Property-based test harness. Each property is a function that
  * takes a seed and returns 1 if the invariant held, 0 if not. The

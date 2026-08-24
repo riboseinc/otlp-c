@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Known-answer wire test: every field number and wire type in this
 // file is a literal copied from opentelemetry-proto (metrics.proto,

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Exporter retry test. Uses null_transport mode — no echo server,
  * no threads. Fully deterministic on all platforms.

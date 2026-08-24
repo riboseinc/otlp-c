@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * HTTP echo unit test. Drives otlp_http_request_t against an
  * in-process echo server; verifies:

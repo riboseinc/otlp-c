@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * otlp_exporter_poll_fds() integration test (v0.5.105). The
  * event-loop surface was exported since v0.1 with ZERO coverage:

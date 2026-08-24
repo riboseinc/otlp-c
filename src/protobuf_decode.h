@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Minimal protobuf wire-format reader — the decode counterpart of
  * protobuf_encode.h. Scope: walking well-formed (or malformed, but

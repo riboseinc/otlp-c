@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Golden vectors (v0.5.101): our encoders vs the REFERENCE
 // opentelemetry-proto serialization. tests/golden/generate.py

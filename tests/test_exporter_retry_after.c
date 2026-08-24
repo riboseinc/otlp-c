@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Retry-After wire test (v0.5.95). Real HTTP responses through the
  * echo helper — the null_transport retry test cannot see headers.

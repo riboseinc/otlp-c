@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Internal utilities shared across src/ files. NOT part of the
  * public API; do not include from include/.

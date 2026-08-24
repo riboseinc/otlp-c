@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Property-based tests. QuickCheck-style. See docs/roadmap.md
 # Phase 1+ for the planned properties.

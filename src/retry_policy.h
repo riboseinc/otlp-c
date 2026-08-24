@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Retry timing policy — pure functions, extracted from exporter.c
  * (v0.6.13) so the timing invariants are property-testable without

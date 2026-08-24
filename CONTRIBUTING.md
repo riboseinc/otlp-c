@@ -42,7 +42,7 @@ files before committing.
 ## Signoff
 
 By contributing, you agree that your contributions are licensed
-under the Apache 2.0 license (see [LICENSE](LICENSE)). For
+under the BSD 3-Clause license (see [LICENSE](LICENSE)). For
 eventual CNCF donation, we may require DCO signoff (`git commit -s`)
 in the future; not yet required.
 

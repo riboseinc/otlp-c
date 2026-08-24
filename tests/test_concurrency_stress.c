@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Concurrency stress test for the exporter + tracer + MPSC queue.
 // Spawns N threads, each emitting M spans concurrently into a single

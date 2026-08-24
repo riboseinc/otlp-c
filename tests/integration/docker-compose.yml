@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Integration test topology: otelcol + Jaeger all-in-one.
 # Mirrors the recommended production deployment (sidecar TLS

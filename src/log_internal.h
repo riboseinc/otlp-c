@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 #ifndef OTLP_C_LOG_INTERNAL_H
 #define OTLP_C_LOG_INTERNAL_H
 

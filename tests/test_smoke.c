@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Smoke test — Phase 0. Confirms the library links, the public API
  * has the expected surface, and the stubs return the expected

@@ -3,7 +3,7 @@
 A pure-C library for emitting OpenTelemetry telemetry via the OpenTelemetry Protocol (OTLP/HTTP).
 
 [![Build](https://github.com/riboseinc/otlp-c/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/riboseinc/otlp-c/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 
 ## What this is
 
@@ -16,7 +16,7 @@ dragging in a C++ runtime.
 
 The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp)) is excellent — but it's C++. That closes the door for C-only projects: kernel modules, embedded firmware, language runtimes, libc-preloaded tracing tools, and any project that needs to stay buildable with just a C compiler.
 
-`otlp-c` fills that gap. Pure C99. Zero non-libc dependencies. Apache 2.0 (compatible with [CNCF](https://www.cncf.io/) governance, suitable for future donation to the OpenTelemetry project).
+`otlp-c` fills that gap. Pure C99. Zero non-libc dependencies. BSD 3-Clause.
 
 ## Status
 
@@ -226,7 +226,7 @@ The wire format is platform-independent (Protobuf over HTTP/1.1). The transport 
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+BSD 3-Clause. See [LICENSE](LICENSE).
 
 The OTel proto schema reference (in [docs/otlp-spec.md](docs/otlp-spec.md)) is drawn from the [opentelemetry-proto](https://github.com/open-telemetry/opentelemetry-proto) repository, also Apache 2.0.
 
@@ -238,4 +238,4 @@ For security disclosures, see [SECURITY.md](SECURITY.md) — do not open public 
 
 ## Maintainership
 
-Maintained by [Ribose, Inc.](https://www.ribose.com). Long-term goal: donate to the CNCF / OpenTelemetry project once the API stabilizes and adoption warrants it. Apache 2.0 (not BSD-2) was chosen specifically to ease that path.
+Maintained by [Ribose, Inc.](https://www.ribose.com). Licensed BSD 3-Clause since v0.6.14 (previously Apache 2.0). Note: the earlier CNCF-donation goal required Apache-2.0; that path is closed under BSD-3-Clause unless the license is changed back with contributor consent.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Unit tests for the log record lifecycle. Complements the
 // property tests with known-answer assertions for each public

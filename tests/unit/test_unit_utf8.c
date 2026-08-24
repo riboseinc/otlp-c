@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // UTF-8 boundary validation (v0.5.103). OTLP string fields are
 // proto3 `string` — they MUST be valid UTF-8, and Go-based

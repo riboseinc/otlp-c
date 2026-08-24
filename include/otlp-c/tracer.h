@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Tracer — owns span context (trace ID propagation, instrumentation
  * scope). The typical caller uses one tracer per process, named

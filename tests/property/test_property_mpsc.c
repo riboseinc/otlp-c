@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * MPSC queue contention test. N producer threads push M items each
  * into a single queue; the main thread drains. Verifies:

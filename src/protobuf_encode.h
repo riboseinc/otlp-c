@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Internal Protobuf encoder header. The next agent fills in the
  * definitions; the public surface here is internal-only (not

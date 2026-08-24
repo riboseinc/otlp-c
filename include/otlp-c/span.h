@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Span — the unit of telemetry. A span represents an operation with
  * a start time, end time, attributes, status, and optional events.

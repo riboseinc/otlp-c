@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Protobuf wire-format reader implementation. See protobuf_decode.h.
  *

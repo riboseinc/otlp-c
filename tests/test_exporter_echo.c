@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * End-to-end exporter test. Emits spans via the public API, drives
  * tick(), and verifies the echo server received them.

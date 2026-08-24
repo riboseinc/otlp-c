@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * OTLP Metrics — public API for counter, gauge, histogram, and
  * exponential histogram types.

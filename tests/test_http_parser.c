@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * HTTP response-parser unit tests. Serves raw canned responses
  * (ECHO_RAW_RESPONSE mode) through the echo helper and drives the

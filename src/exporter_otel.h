@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Exporter-internal: build HTTP requests from batches of items.
  * The exporter (src/exporter.c) drives the resulting requests via

@@ -4,6 +4,23 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.14] - 2026-08-24
+
+License change: Apache-2.0 -> BSD 3-Clause.
+
+### Changed — repository license is now BSD 3-Clause
+
+Per maintainer decision, the project license changes from
+Apache-2.0 to BSD 3-Clause: the LICENSE text, all 135
+SPDX-License-Identifier headers (this also fixed a pre-existing
+"Identifier-Identifier" typo in seven files), both vcpkg
+manifests, the README badge and license sections, CONTRIBUTING,
+and the CLAUDE.md license invariant. Two consequences, stated for
+the record: CNCF projects must be Apache-2.0, so the documented
+donation path is closed under this license; and releases up to and
+including v0.6.13 remain Apache-2.0 — relicensing applies going
+forward.
+
 ## [0.6.13] - 2026-08-24
 
 Architecture: retry timing as pure, property-tested functions.

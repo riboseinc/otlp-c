@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Shared test-only protobuf walker. Used by property tests that
  * verify OTLP wire shapes: walks one level at a time and lets the

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * OTLP schema tables — model-driven field-number / wire-type matrix
  * per OTLP message. Single source of truth; the encoders in

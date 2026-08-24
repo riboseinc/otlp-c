@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Minimal usage example. Demonstrates the full v0.5.x API surface:
  * traces (with events, attributes, sampling), metrics (counter),

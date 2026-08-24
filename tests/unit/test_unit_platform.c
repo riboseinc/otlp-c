@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Unit tests for the platform socket layer and tracer edge paths
 // — the coverage-guided targets (v0.5.91): NULL guards, DNS
