@@ -10,6 +10,14 @@ project(otlp-c
 set(OTLP_C_VERSION ${PROJECT_VERSION})
 set(OTLP_C_VERSION_STRING "${PROJECT_VERSION}")
 
+# otlp-c must be side-effect-free when embedded (FetchContent /
+# add_subdirectory): install-layout pinning and CPack below only
+# apply when otlp-c IS the project being configured. CMake 3.20
+# compatibility — PROJECT_IS_TOP_LEVEL needs 3.21.
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(OTLP_C_IS_TOP_LEVEL ON)
+endif()
+
 # Standards. C11 (not C99) because we use <stdatomic.h> for
 # lock-free MPSC queues and PRNG state. CLAUDE.md allows C11 for
 # atomics; we write C99-style code everywhere else.
@@ -164,7 +172,14 @@ endif()
 # Windows MSVC chooses "lib/x64" or similar arch-suffixed paths,
 # and find_package(otlp-c CONFIG) from a consumer CMakeLists can't
 # locate the config without extra hints.
-set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "" FORCE)
+#
+# Top-level only: an embedded otlp-c (FetchContent/add_subdirectory)
+# must respect the parent project's install layout — the FORCE here
+# used to clobber the parent's cache entry (verified: a consumer's
+# lib/x86_64-linux-gnu silently became "lib").
+if(OTLP_C_IS_TOP_LEVEL)
+    set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "" FORCE)
+endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -221,6 +236,10 @@ if(DOXYGEN_FOUND)
 endif()
 
 # ── CPack (binary distribution) ─────────────────────────────────
+# Top-level only: include(CPack) writes CPackConfig.cmake into the
+# TOP-LEVEL build dir — when embedded, that's the consumer's build
+# tree, not ours.
+if(OTLP_C_IS_TOP_LEVEL)
 set(CPACK_PACKAGE_NAME              "otlp-c")
 set(CPACK_PACKAGE_VERSION           "${OTLP_C_VERSION_STRING}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
@@ -251,6 +270,7 @@ set(CPACK_SOURCE_IGNORE_FILES
     "~$")
 
 include(CPack)
+endif()
 
 # ── Code coverage instrumentation ───────────────────────────────
 # `cmake -DOTLP_C_ENABLE_COVERAGE=ON` adds gcov / llvm-cov flags.
