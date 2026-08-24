@@ -169,51 +169,96 @@ static otlp_status_t
 build_request(struct otlp_http_request *r,
 	const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const uint8_t *body,
 	size_t body_len)
 {
 	char head[1024];
-	int n;
+	size_t off = 0;
 	size_t total;
+	size_t i;
 	const char *ua = user_agent ? user_agent : "otlp-c";
 	const char *p;
 
 	/* Reject CR/LF in any field that ends up in a header line.
-	 * Without this, a caller-controlled user_agent containing
-	 * "\r\n" could inject arbitrary HTTP headers (CWE-93). The
-	 * URL is validated at parse time, but user_agent is caller-
-	 * supplied and never sanitized before this point. */
+	 * Without this, a caller-controlled user_agent (or extra
+	 * header, v0.7.2) containing "\r\n" could inject arbitrary
+	 * HTTP headers (CWE-93). The URL is validated at parse time;
+	 * these fields are caller-supplied. */
 	for (p = ua; *p != '\0'; p++)
 		if (*p == '\r' || *p == '\n')
 			return OTLP_ERR_INVALID_ARGUMENT;
+	if (n_headers > 0 && !headers)
+		return OTLP_ERR_NULL;
+	for (i = 0; i < n_headers; i++)
+	{
+		if (!headers[i].name || headers[i].name[0] == '\0')
+			return OTLP_ERR_INVALID_ARGUMENT;
+		for (p = headers[i].name; *p != '\0'; p++)
+			if (*p == '\r' || *p == '\n')
+				return OTLP_ERR_INVALID_ARGUMENT;
+		for (p = headers[i].value ? headers[i].value : "";
+			*p != '\0';
+			p++)
+			if (*p == '\r' || *p == '\n')
+				return OTLP_ERR_INVALID_ARGUMENT;
+	}
 
-	/* Content-Length is always present; we don't chunk. */
-	n = snprintf(head,
-		sizeof(head),
-		"POST %s HTTP/1.1\r\n"
-		"Host: %s\r\n"
-		"User-Agent: %s\r\n"
-		"Content-Type: application/x-protobuf\r\n"
-		"Content-Length: %zu\r\n"
-		"Connection: keep-alive\r\n"
-		"\r\n",
-		url->path,
-		url->host,
-		ua,
-		body_len);
-	if (n < 0 || (size_t) n >= sizeof(head))
-		return OTLP_ERR_OVERFLOW;
+	/* Assemble the head block incrementally; each append checks
+	 * the remaining head space. Extra headers land between
+	 * User-Agent and Content-Type. */
+	{
+		int n = snprintf(head + off,
+			sizeof(head) - off,
+			"POST %s HTTP/1.1\r\n"
+			"Host: %s\r\n"
+			"User-Agent: %s\r\n",
+			url->path,
+			url->host,
+			ua);
 
-	total = (size_t) n + body_len;
+		if (n < 0 || (size_t) n >= sizeof(head) - off)
+			return OTLP_ERR_OVERFLOW;
+		off += (size_t) n;
+	}
+	for (i = 0; i < n_headers; i++)
+	{
+		int n = snprintf(head + off,
+			sizeof(head) - off,
+			"%s: %s\r\n",
+			headers[i].name,
+			headers[i].value ? headers[i].value : "");
+
+		if (n < 0 || (size_t) n >= sizeof(head) - off)
+			return OTLP_ERR_OVERFLOW;
+		off += (size_t) n;
+	}
+	{
+		/* Content-Length is always present; we don't chunk. */
+		int n = snprintf(head + off,
+			sizeof(head) - off,
+			"Content-Type: application/x-protobuf\r\n"
+			"Content-Length: %zu\r\n"
+			"Connection: keep-alive\r\n"
+			"\r\n",
+			body_len);
+
+		if (n < 0 || (size_t) n >= sizeof(head) - off)
+			return OTLP_ERR_OVERFLOW;
+		off += (size_t) n;
+	}
+
+	total = off + body_len;
 	if (total < body_len) /* overflow check */
 		return OTLP_ERR_OVERFLOW;
 
 	r->req_buf = otlp_malloc(total);
 	if (!r->req_buf)
 		return OTLP_ERR_NOMEM;
-	memcpy(r->req_buf, head, (size_t) n);
+	memcpy(r->req_buf, head, off);
 	if (body_len > 0)
-		memcpy(r->req_buf + (size_t) n, body, body_len);
+		memcpy(r->req_buf + off, body, body_len);
 	r->req_len = total;
 	r->req_sent = 0;
 	return OTLP_OK;
@@ -223,6 +268,8 @@ otlp_status_t
 otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const uint8_t *body,
 	size_t body_len,
 	uint32_t connect_timeout_ms,
@@ -254,7 +301,8 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	r->start_ms = otlp_platform_now_mono_ms();
 	r->last_io_ms = r->start_ms;
 
-	st = build_request(r, url, user_agent, body, body_len);
+	st = build_request(
+		r, url, user_agent, headers, n_headers, body, body_len);
 	if (st != OTLP_OK)
 		goto fail;
 
@@ -273,6 +321,8 @@ otlp_status_t
 otlp_http_request_start(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const uint8_t *body,
 	size_t body_len,
 	uint32_t connect_timeout_ms,
@@ -296,7 +346,8 @@ otlp_http_request_start(otlp_http_request_t **out,
 	r->connect_timeout_ms = connect_timeout_ms;
 	r->read_timeout_ms = read_timeout_ms;
 
-	st = build_request(r, url, user_agent, body, body_len);
+	st = build_request(
+		r, url, user_agent, headers, n_headers, body, body_len);
 	if (st != OTLP_OK)
 		goto fail;
 

@@ -70,6 +70,7 @@ prop_connect_timeout_fires(uint64_t seed)
 		return 0;
 
 	st = otlp_http_request_start(&req, &url, "timeout-test",
+				      NULL, 0,
 				      (const uint8_t *) "x", 1,
 				      200,  /* connect_timeout_ms */
 				      2000  /* read_timeout_ms (generous) */);

@@ -188,7 +188,7 @@ prop_keepalive_disabled_on_explicit_close(uint64_t seed)
 	snprintf(url_str, sizeof(url_str), "http://127.0.0.1:%u/", srv.port);
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
-	if (otlp_http_request_start(&req, &url, "test",
+	if (otlp_http_request_start(&req, &url, "test", NULL, 0,
 	    (const uint8_t *) "x", 1, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req) != OTLP_OK)
@@ -223,7 +223,7 @@ prop_keepalive_eligible_by_default(uint64_t seed)
 	snprintf(url_str, sizeof(url_str), "http://127.0.0.1:%u/", srv.port);
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
-	if (otlp_http_request_start(&req, &url, "test",
+	if (otlp_http_request_start(&req, &url, "test", NULL, 0,
 	    (const uint8_t *) "x", 1, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req) != OTLP_OK)
@@ -260,7 +260,7 @@ prop_keepalive_reuse_roundtrip(uint64_t seed)
 	snprintf(url_str, sizeof(url_str), "http://127.0.0.1:%u/", srv.port);
 	if (otlp_http_parse_url(url_str, &url) != OTLP_OK)
 		goto out;
-	if (otlp_http_request_start(&req1, &url, "test",
+	if (otlp_http_request_start(&req1, &url, "test", NULL, 0,
 	    (const uint8_t *) "first", 5, 0, 0) != OTLP_OK)
 		goto out;
 	if (drive_to_done(req1) != OTLP_OK)
@@ -268,8 +268,8 @@ prop_keepalive_reuse_roundtrip(uint64_t seed)
 	sock = otlp_http_request_detach_socket(req1);
 	if (!sock)
 		goto out;
-	if (otlp_http_request_start_with_socket(&req2, &url, "test",
-	    (const uint8_t *) "second", 6, 0, 0, sock) != OTLP_OK) {
+	if (otlp_http_request_start_with_socket(&req2, &url, "test", NULL,
+	    0, (const uint8_t *) "second", 6, 0, 0, sock) != OTLP_OK) {
 		req2 = NULL;
 		sock = NULL;
 		goto out;

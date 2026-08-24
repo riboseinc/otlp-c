@@ -44,6 +44,11 @@ typedef int (*echo_handler_t)(const uint8_t *req_body,
  * malformed headers, HTTP/1.0, ...). */
 #define ECHO_RAW_RESPONSE (-1)
 
+/* The most recently served request, HEADERS INCLUDED (copied by
+ * the worker thread; read after echo_server_join — the join
+ * provides the happens-before). For wire-format assertions. */
+const uint8_t *echo_server_last_request(size_t *len_out);
+
 struct echo_server
 {
 	uint16_t port;

@@ -4,6 +4,40 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-08-24
+
+Extra HTTP headers + OTEL_EXPORTER_OTLP_HEADERS.
+
+### Added — arbitrary HTTP headers on export requests
+
+`otlp_exporter_opts_t.http_headers` (array of the new public
+`otlp_http_header_t`) rides every export request — authentication
+for the collector being the canonical use. Deep-copied at
+`otlp_exporter_create()` (the opts contract holds); CR/LF in
+names/values rejected at create AND re-checked in the request
+builder (the user_agent CWE-93 posture, now covering every
+caller-controlled header field). The builder assembles the head
+block incrementally with per-append bounds checks (replacing the
+single fixed-snprintf form).
+
+### Added — OTEL_EXPORTER_OTLP_HEADERS
+
+The last OTel standard variable: "k=v,k=v" parsed by the shared
+tokenizer (extracted from the resource-attributes parser — one
+"k=v list" engine, two typed sinks) into
+`otlp_env_storage_t.http_headers`. The env-var matrix is now
+complete for everything this library's model can express.
+
+### Tests
+
+Wire-level: the echo helper now captures the full served request
+(headers included; worker writes, join provides the
+happens-before) — `http-parser` asserts headers land between
+User-Agent and Content-Type and that injection attempts are
+rejected pre-wire. Mutation-tested: removing the CRLF scan fails
+the suite. Storage/env parsing unit-tested in
+`unit-env-config`.
+
 ## [0.7.1] - 2026-08-24
 
 OTEL_RESOURCE_ATTRIBUTES, bench/coverage presets, last legacy out.

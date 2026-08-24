@@ -61,6 +61,14 @@ otlp_env_apply_resource_attrs(otlp_exporter_opts_t *opts,
 	const char *value,
 	otlp_env_storage_t *st);
 
+/* OTEL_EXPORTER_OTLP_HEADERS: same "k=v,k=v" shape, parsed into
+ * extra HTTP headers (storage + opts->http_headers). Same skip
+ * and overflow rules as the resource-attributes parser. */
+otlp_status_t
+otlp_env_apply_otlp_headers(otlp_exporter_opts_t *opts,
+	const char *value,
+	otlp_env_storage_t *st);
+
 /* The getenv driver over these helpers is public:
  * otlp_exporter_opts_apply_env() in include/otlp-c/exporter.h. */
 

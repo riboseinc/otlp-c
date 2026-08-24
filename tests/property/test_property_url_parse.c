@@ -148,7 +148,7 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 	if (otlp_http_parse_url("http://example.com/v1/traces", &u) != OTLP_OK)
 		return 0;
 	/* CRLF injection attempt. */
-	st = otlp_http_request_start(&req, &u, "evil\r\nX-Inject: yes",
+	st = otlp_http_request_start(&req, &u, "evil\r\nX-Inject: yes", NULL, 0,
 				     (const uint8_t *) "x", 1, 0, 0);
 	if (st != OTLP_ERR_INVALID_ARGUMENT)
 	{
@@ -157,7 +157,7 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 		return 0;
 	}
 	/* LF only. */
-	st = otlp_http_request_start(&req, &u, "evil\nX-Inject: yes",
+	st = otlp_http_request_start(&req, &u, "evil\nX-Inject: yes", NULL, 0,
 				     (const uint8_t *) "x", 1, 0, 0);
 	if (st != OTLP_ERR_INVALID_ARGUMENT)
 	{
@@ -166,7 +166,7 @@ prop_user_agent_rejects_crlf(uint64_t seed)
 		return 0;
 	}
 	/* Valid user_agent still works. */
-	st = otlp_http_request_start(&req, &u, "otlp-c/0.5.52",
+	st = otlp_http_request_start(&req, &u, "otlp-c/0.5.52", NULL, 0,
 				     (const uint8_t *) "x", 1, 0, 0);
 	if (st != OTLP_OK)
 		return 0;

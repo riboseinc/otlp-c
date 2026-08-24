@@ -46,6 +46,37 @@ main(void)
 }
 #else
 
+#if !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+#include <string.h>
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <Availability.h>
+#endif
+
+/* memmem is POSIX 2008 but missing from MSVC and some libcs the
+ * POSIX path never compiles for; tiny local fallback. */
+#ifndef memmem
+static void *
+local_memmem(const void *hay, size_t hay_len, const void *ndl,
+	size_t ndl_len)
+{
+	if (ndl_len == 0 || hay_len < ndl_len)
+		return NULL;
+	{
+		const uint8_t *h = hay;
+		size_t i;
+
+		for (i = 0; i <= hay_len - ndl_len; i++)
+			if (memcmp(h + i, ndl, ndl_len) == 0)
+				return (void *) (h + i);
+	}
+	return NULL;
+}
+#define memmem local_memmem
+#endif
+
 /* The canned raw response, set per test. */
 static const char *g_raw;
 
@@ -108,8 +139,15 @@ run_raw(const char *raw,
 		"http://127.0.0.1:%u/v1/traces",
 		srv.port);
 	check_true(otlp_http_parse_url(url_str, &url) == OTLP_OK);
-	st = otlp_http_request_start(
-		&req, &url, "otlp-c/test", (const uint8_t *) "x", 1, 0, 0);
+	st = otlp_http_request_start(&req,
+		&url,
+		"otlp-c/test",
+		NULL,
+		0,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0);
 	check_true(st == OTLP_OK);
 	st = drive(req);
 	*st_out = st;
@@ -562,6 +600,8 @@ test_send_stall_times_out(void)
 	st = otlp_http_request_start(&req,
 		&url,
 		"otlp-c/test",
+		NULL,
+		0,
 		big,
 		big_len,
 		0, /* no connect timeout */
@@ -627,6 +667,104 @@ test_send_stall_times_out(void)
 	return 0;
 }
 
+/* v0.7.2: extra headers must appear on the wire, between
+ * User-Agent and Content-Type. */
+static int
+test_extra_headers_on_wire(void)
+{
+	struct echo_server srv;
+	struct otlp_http_url url;
+	otlp_http_request_t *req = NULL;
+	char url_str[128];
+	const uint8_t *wire;
+	size_t wire_len;
+	otlp_http_header_t hdrs[2] = {
+		{ "authorization", "Bearer xyz" },
+		{ "x-tenant", "acme" },
+	};
+
+	g_raw = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+	check_true(echo_server_start(&srv, raw_handler, 1) == OTLP_OK);
+	snprintf(url_str,
+		sizeof(url_str),
+		"http://127.0.0.1:%u/v1/traces",
+		srv.port);
+	check_true(otlp_http_parse_url(url_str, &url) == OTLP_OK);
+	check_true(otlp_http_request_start(&req,
+		&url,
+		"otlp-c/test",
+		hdrs,
+		2,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0) == OTLP_OK);
+	check_true(drive(req) == OTLP_OK);
+	otlp_http_request_free(req);
+	req = NULL;
+	check_ok(echo_server_join(&srv, 2 * 1000 * 1000));
+
+	wire = echo_server_last_request(&wire_len);
+	check_true(wire != NULL);
+	check_true(wire_len > 0);
+	check_true(memmem(wire,
+			  wire_len,
+			  "authorization: Bearer xyz\r\n",
+			  strlen("authorization: Bearer xyz\r\n")) != NULL);
+	check_true(memmem(wire,
+			  wire_len,
+			  "x-tenant: acme\r\n",
+			  strlen("x-tenant: acme\r\n")) != NULL);
+	/* Extra headers sit between User-Agent and Content-Type. */
+	{
+		const uint8_t *ua = memmem(wire, wire_len, "User-Agent:", 11);
+		const uint8_t *au = memmem(
+			wire, wire_len, "authorization:", 14);
+		const uint8_t *ct = memmem(
+			wire, wire_len, "Content-Type:", 13);
+
+		check_true(ua != NULL && au != NULL && ct != NULL);
+		check_true(ua < au && au < ct);
+	}
+	return 0;
+}
+
+/* v0.7.2: CR/LF in an extra header's name or value is rejected
+ * before any bytes hit the wire (CWE-93, same posture as
+ * user_agent). */
+static int
+test_extra_header_injection_rejected(void)
+{
+	struct otlp_http_url url;
+	otlp_http_request_t *req = NULL;
+	otlp_http_header_t bad_name = { "X-A\r\nX-Inject: yes", "1" };
+	otlp_http_header_t bad_value = { "X-B", "2\r\nX-Inject: yes" };
+
+	check_true(otlp_http_parse_url("http://127.0.0.1:1/x", &url) ==
+		OTLP_OK);
+	check_true(otlp_http_request_start(&req,
+		&url,
+		"otlp-c/test",
+		&bad_name,
+		1,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0) == OTLP_ERR_INVALID_ARGUMENT);
+	check_true(req == NULL);
+	check_true(otlp_http_request_start(&req,
+		&url,
+		"otlp-c/test",
+		&bad_value,
+		1,
+		(const uint8_t *) "x",
+		1,
+		0,
+		0) == OTLP_ERR_INVALID_ARGUMENT);
+	check_true(req == NULL);
+	return 0;
+}
+
 int
 main(void)
 {
@@ -646,6 +784,8 @@ main(void)
 	failures += test_retry_after_duplicate_last_wins();
 	failures += test_retry_after_saturates();
 	failures += test_send_stall_times_out();
+	failures += test_extra_headers_on_wire();
+	failures += test_extra_header_injection_rejected();
 
 	if (failures)
 		printf("[http-parser] FAIL (%d test(s))\n", failures);

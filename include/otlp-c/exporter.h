@@ -97,6 +97,13 @@ extern "C"
 		otlp_value_t value;
 	} otlp_resource_attr_t;
 
+	/* One HTTP header for the http_headers opt (name + value). */
+	typedef struct
+	{
+		const char *name;
+		const char *value;
+	} otlp_http_header_t;
+
 	/* Configuration for otlp_exporter_create. Pass zero-initialized +
 	 * fill the fields you care about; the library supplies defaults
 	 * for the rest. */
@@ -170,6 +177,14 @@ extern "C"
 		/* User-Agent header. Default: "otlp-c/<version>". */
 		const char *user_agent;
 
+		/* Extra HTTP headers on every export request (v0.7.2) —
+		 * e.g. authentication for the collector. Name/value must
+		 * contain no CR/LF (rejected at create with NULL);
+		 * deep-copied at otlp_exporter_create() time. May be
+		 * NULL. */
+		const otlp_http_header_t *http_headers;
+		size_t n_http_headers;
+
 		/* MPSC queue capacity (must be power of 2). Default: 4096. */
 		size_t queue_capacity;
 	} otlp_exporter_opts_t;
@@ -188,6 +203,10 @@ extern "C"
 		char attr_vals[32][256];
 		otlp_resource_attr_t attrs[32];
 		size_t n_attrs;
+		char hdr_names[32][128];
+		char hdr_vals[32][256];
+		otlp_http_header_t http_headers[32];
+		size_t n_http_headers;
 	} otlp_env_storage_t;
 
 	/* Apply the OpenTelemetry standard environment variables to
@@ -207,10 +226,14 @@ extern "C"
 	 * composes with hand-filled opts. Environment-derived strings
 	 * and the attribute array live in `storage`.
 	 *
+	 * Also applies OTEL_EXPORTER_OTLP_HEADERS ("k=v,k=v" —
+	 * comma-separated pairs, literal values, malformed segments
+	 * skipped) as extra HTTP headers on every export request.
+	 *
 	 * Returns the first malformed value found
 	 * (OTLP_ERR_INVALID_ARGUMENT), or OTLP_OK. Not supported:
-	 * OTEL_EXPORTER_OTLP_HEADERS and per-signal metric/log
-	 * variables (those paths derive from the traces endpoint).
+	 * per-signal metric/log endpoint variables (those paths
+	 * derive from the traces endpoint).
 	 */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,

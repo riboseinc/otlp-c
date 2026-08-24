@@ -194,10 +194,27 @@ otlp_exporter_t *exp = otlp_exporter_create(&opts);
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | must be `http/protobuf` if set, else error |
 | `OTEL_SERVICE_NAME` | service name |
 | `OTEL_RESOURCE_ATTRIBUTES` | `k=v,k=v` resource attributes (literal values, malformed segments skipped; `service.name` yields to `OTEL_SERVICE_NAME`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `k=v,k=v` extra HTTP headers on every export request (auth for the collector; literal values, malformed segments skipped) |
 
-Not supported: `OTEL_EXPORTER_OTLP_HEADERS` and per-signal
-metric/log endpoint variables (those paths derive from the one
-traces endpoint).
+Not supported: per-signal metric/log endpoint variables (those
+paths derive from the one traces endpoint).
+
+## Extra HTTP headers
+
+Every export request can carry extra headers (v0.7.2) — typically
+authentication for the collector. Set `http_headers` on opts (or
+let `OTEL_EXPORTER_OTLP_HEADERS` do it):
+
+```c
+otlp_http_header_t hdrs[] = {
+    { "authorization", "Bearer <token>" },
+};
+otlp_exporter_opts_t opts = { .service_name = "demo",
+    .http_headers = hdrs, .n_http_headers = 1 };
+```
+
+Names/values containing CR/LF are rejected (`otlp_exporter_create`
+returns NULL) — the same header-injection posture as user_agent.
 
 ## Quick start
 
