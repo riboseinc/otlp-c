@@ -155,12 +155,83 @@ otlp_env_apply_service_name(otlp_exporter_opts_t *opts, const char *value)
 	return OTLP_OK;
 }
 
+/* One "k=v" pair as split by the tokenizer. */
+struct otlp_env_pair
+{
+	const char *key;
+	size_t key_len;
+	const char *val;
+	size_t val_len;
+};
+
+typedef otlp_status_t (*otlp_env_pair_fn)(const struct otlp_env_pair *, void *);
+
+/* Walk "k=v,k=v" segment by segment. Malformed segments are
+ * skipped (OTel's log-and-continue posture); each well-formed
+ * pair goes to the callback. Returns its first error, or OK. */
+static otlp_status_t
+kv_foreach(const char *value, otlp_env_pair_fn cb, void *ctx)
+{
+	const char *seg = value;
+
+	while (*seg != '\0')
+	{
+		const char *comma = strchr(seg, ',');
+		size_t seg_len = comma ? (size_t)(comma - seg) : strlen(seg);
+		const char *eq = memchr(seg, '=', seg_len);
+
+		if (eq != NULL && eq != seg)
+		{
+			struct otlp_env_pair pair;
+			otlp_status_t st;
+
+			pair.key = seg;
+			pair.key_len = (size_t)(eq - seg);
+			pair.val = eq + 1;
+			pair.val_len = seg_len - pair.key_len - 1;
+			st = cb(&pair, ctx);
+			if (st != OTLP_OK)
+				return st;
+		}
+		seg = comma ? comma + 1 : seg + seg_len;
+	}
+	return OTLP_OK;
+}
+
+struct attrs_ctx
+{
+	otlp_env_storage_t *st;
+};
+
+static otlp_status_t
+attrs_one(const struct otlp_env_pair *pair, void *ctx)
+{
+	otlp_env_storage_t *st = ((struct attrs_ctx *) ctx)->st;
+	size_t i = st->n_attrs;
+
+	if (i >= sizeof(st->attrs) / sizeof(st->attrs[0]))
+		return OTLP_ERR_OVERFLOW;
+	if (pair->key_len >= sizeof(st->attr_keys[0]) ||
+		pair->val_len >= sizeof(st->attr_vals[0]))
+		return OTLP_ERR_OVERFLOW;
+	memcpy(st->attr_keys[i], pair->key, pair->key_len);
+	st->attr_keys[i][pair->key_len] = '\0';
+	memcpy(st->attr_vals[i], pair->val, pair->val_len);
+	st->attr_vals[i][pair->val_len] = '\0';
+	st->attrs[i].key = st->attr_keys[i];
+	st->attrs[i].value.type = OTLP_VALUE_STRING;
+	st->attrs[i].value.v.string_val = st->attr_vals[i];
+	st->n_attrs++;
+	return OTLP_OK;
+}
+
 otlp_status_t
 otlp_env_apply_resource_attrs(otlp_exporter_opts_t *opts,
 	const char *value,
 	otlp_env_storage_t *st)
 {
-	const char *seg;
+	struct attrs_ctx ctx;
+	otlp_status_t st2;
 
 	if (!opts || !st)
 		return OTLP_ERR_NULL;
@@ -168,41 +239,61 @@ otlp_env_apply_resource_attrs(otlp_exporter_opts_t *opts,
 		return OTLP_OK;
 
 	st->n_attrs = 0;
-	seg = value;
-	while (*seg != '\0')
-	{
-		const char *comma = strchr(seg, ',');
-		size_t seg_len = comma ? (size_t)(comma - seg) : strlen(seg);
-		const char *eq = memchr(seg, '=', seg_len);
-
-		/* Skip empty segments and segments without '=' (empty
-		 * key included): OTel's log-and-continue posture. */
-		if (eq != NULL && eq != seg)
-		{
-			size_t key_len = (size_t)(eq - seg);
-			size_t val_len = seg_len - key_len - 1;
-
-			if (st->n_attrs >=
-				sizeof(st->attrs) / sizeof(st->attrs[0]))
-				return OTLP_ERR_OVERFLOW;
-			if (key_len >= sizeof(st->attr_keys[0]) ||
-				val_len >= sizeof(st->attr_vals[0]))
-				return OTLP_ERR_OVERFLOW;
-			memcpy(st->attr_keys[st->n_attrs], seg, key_len);
-			st->attr_keys[st->n_attrs][key_len] = '\0';
-			memcpy(st->attr_vals[st->n_attrs], eq + 1, val_len);
-			st->attr_vals[st->n_attrs][val_len] = '\0';
-			st->attrs[st->n_attrs].key = st->attr_keys[st->n_attrs];
-			st->attrs[st->n_attrs].value.type = OTLP_VALUE_STRING;
-			st->attrs[st->n_attrs].value.v.string_val =
-				st->attr_vals[st->n_attrs];
-			st->n_attrs++;
-		}
-		seg = comma ? comma + 1 : seg + seg_len;
-	}
-
+	ctx.st = st;
+	st2 = kv_foreach(value, attrs_one, &ctx);
+	if (st2 != OTLP_OK)
+		return st2;
 	opts->resource_attributes = st->attrs;
 	opts->n_resource_attributes = st->n_attrs;
+	return OTLP_OK;
+}
+
+struct headers_ctx
+{
+	otlp_env_storage_t *st;
+};
+
+static otlp_status_t
+headers_one(const struct otlp_env_pair *pair, void *ctx)
+{
+	otlp_env_storage_t *st = ((struct headers_ctx *) ctx)->st;
+	size_t i = st->n_http_headers;
+
+	if (i >= sizeof(st->http_headers) / sizeof(st->http_headers[0]))
+		return OTLP_ERR_OVERFLOW;
+	if (pair->key_len >= sizeof(st->hdr_names[0]) ||
+		pair->val_len >= sizeof(st->hdr_vals[0]))
+		return OTLP_ERR_OVERFLOW;
+	memcpy(st->hdr_names[i], pair->key, pair->key_len);
+	st->hdr_names[i][pair->key_len] = '\0';
+	memcpy(st->hdr_vals[i], pair->val, pair->val_len);
+	st->hdr_vals[i][pair->val_len] = '\0';
+	st->http_headers[i].name = st->hdr_names[i];
+	st->http_headers[i].value = st->hdr_vals[i];
+	st->n_http_headers++;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_env_apply_otlp_headers(otlp_exporter_opts_t *opts,
+	const char *value,
+	otlp_env_storage_t *st)
+{
+	struct headers_ctx ctx;
+	otlp_status_t st2;
+
+	if (!opts || !st)
+		return OTLP_ERR_NULL;
+	if (!value || value[0] == '\0')
+		return OTLP_OK;
+
+	st->n_http_headers = 0;
+	ctx.st = st;
+	st2 = kv_foreach(value, headers_one, &ctx);
+	if (st2 != OTLP_OK)
+		return st2;
+	opts->http_headers = st->http_headers;
+	opts->n_http_headers = st->n_http_headers;
 	return OTLP_OK;
 }
 
@@ -237,6 +328,10 @@ otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,
 	st = otlp_env_apply_timeout(opts, getenv("OTEL_EXPORTER_OTLP_TIMEOUT"));
 	if (st != OTLP_OK)
 		return st;
-	return otlp_env_apply_resource_attrs(
+	st = otlp_env_apply_resource_attrs(
 		opts, getenv("OTEL_RESOURCE_ATTRIBUTES"), storage);
+	if (st != OTLP_OK)
+		return st;
+	return otlp_env_apply_otlp_headers(
+		opts, getenv("OTEL_EXPORTER_OTLP_HEADERS"), storage);
 }

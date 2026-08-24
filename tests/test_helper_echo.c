@@ -166,6 +166,17 @@ echo_server_stop(struct echo_server *s)
 
 /* ── Internal: parse + serve one request ──────────────────────── */
 
+static uint8_t g_last_request[8192];
+static size_t g_last_request_len;
+
+const uint8_t *
+echo_server_last_request(size_t *len_out)
+{
+	if (len_out)
+		*len_out = g_last_request_len;
+	return g_last_request;
+}
+
 static int
 find_substring(const uint8_t *hay, size_t hay_len, const char *needle)
 {
@@ -245,6 +256,16 @@ serve_one(int conn_fd, echo_handler_t handler)
 	}
 	if (hdr_end < 0)
 		return;
+
+	/* Capture for echo_server_last_request(). */
+	{
+		size_t copy = req_len < sizeof(g_last_request)
+			? req_len
+			: sizeof(g_last_request) - 1;
+
+		memcpy(g_last_request, req, copy);
+		g_last_request_len = copy;
+	}
 
 	if (handler)
 		status = handler(req + body_off,

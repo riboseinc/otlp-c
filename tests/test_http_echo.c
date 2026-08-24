@@ -90,6 +90,8 @@ main(void)
 	check_ok(otlp_http_request_start(&req,
 		&url,
 		"otlp-c/test",
+		NULL,
+		0,
 		(const uint8_t *) body,
 		strlen(body),
 		0,

@@ -174,12 +174,15 @@ test_getenv_driver(void)
 
 	/* TRACES_ENDPOINT beats ENDPOINT. */
 	SETENV("OTEL_RESOURCE_ATTRIBUTES", "env=ci,host=runner-1");
+	SETENV("OTEL_EXPORTER_OTLP_HEADERS", "tenant=ci-runner");
 	SETENV("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
 		"http://signal:9999/v1/traces");
 	check_ok(otlp_exporter_opts_apply_env(&o, &st));
 	check_true(strcmp(o.endpoint, "http://signal:9999/v1/traces") == 0);
 	check_true(o.n_resource_attributes == 2);
 	check_true(strcmp(o.resource_attributes[0].key, "env") == 0);
+	check_true(o.n_http_headers == 1);
+	check_true(strcmp(o.http_headers[0].value, "ci-runner") == 0);
 
 	/* A bad protocol fails the whole call. */
 	SETENV("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc");
@@ -201,6 +204,7 @@ test_getenv_driver(void)
 	UNSETENV("OTEL_SERVICE_NAME");
 	UNSETENV("OTEL_EXPORTER_OTLP_PROTOCOL");
 	UNSETENV("OTEL_RESOURCE_ATTRIBUTES");
+	UNSETENV("OTEL_EXPORTER_OTLP_HEADERS");
 }
 
 static void
@@ -276,6 +280,41 @@ test_resource_attrs(void)
 	}
 }
 
+static void
+test_otlp_headers_env(void)
+{
+	otlp_exporter_opts_t o = { 0 };
+	otlp_env_storage_t st;
+
+	memset(&st, 0, sizeof(st));
+	check_ok(otlp_env_apply_otlp_headers(&o, NULL, &st));
+	check_ok(otlp_env_apply_otlp_headers(&o, "", &st));
+	check_true(o.http_headers == NULL);
+
+	check_ok(otlp_env_apply_otlp_headers(
+		&o, "authorization=Bearer tok,tenant=acme", &st));
+	check_true(o.n_http_headers == 2);
+	check_true(strcmp(o.http_headers[0].name, "authorization") == 0);
+	check_true(strcmp(o.http_headers[0].value, "Bearer tok") == 0);
+	check_true(strcmp(o.http_headers[1].name, "tenant") == 0);
+	check_true(strcmp(o.http_headers[1].value, "acme") == 0);
+
+	/* Malformed segments skipped; '=' in value preserved. */
+	check_ok(otlp_env_apply_otlp_headers(&o, "bad,novalue,x=a=b", &st));
+	check_true(o.n_http_headers == 1);
+	check_true(strcmp(o.http_headers[0].value, "a=b") == 0);
+
+	/* Parsed headers must survive the exporter's deep copy. */
+	{
+		otlp_exporter_t *exp;
+
+		check_ok(otlp_env_apply_otlp_headers(&o, "x-trace=on", &st));
+		exp = otlp_exporter_create(&o);
+		check_true(exp != NULL);
+		otlp_exporter_free(exp);
+	}
+}
+
 int
 main(void)
 {
@@ -285,6 +324,7 @@ main(void)
 	test_protocol();
 	test_service_name();
 	test_resource_attrs();
+	test_otlp_headers_env();
 	test_getenv_driver();
 	printf("unit-env-config: all checks passed\n");
 	return 0;

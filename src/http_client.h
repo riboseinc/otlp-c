@@ -14,6 +14,8 @@
 #ifndef OTLP_C_HTTP_CLIENT_H
 #define OTLP_C_HTTP_CLIENT_H
 
+#include <otlp-c/exporter.h>
+
 #include <otlp-c/status.h>
 
 #include "platform.h"
@@ -73,6 +75,8 @@ otlp_status_t
 otlp_http_request_start(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const uint8_t *body,
 	size_t body_len,
 	uint32_t connect_timeout_ms,
@@ -95,6 +99,8 @@ otlp_status_t
 otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const uint8_t *body,
 	size_t body_len,
 	uint32_t connect_timeout_ms,

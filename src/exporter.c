@@ -128,6 +128,12 @@ struct otlp_exporter
 	uint32_t attempt;
 	uint64_t backoff_deadline_mono;
 	bool backoff_armed;
+	/* Extra HTTP headers (v0.7.2): deep-copied from opts at
+	 * create time; owned strings in one block. */
+	otlp_http_header_t *http_headers;
+	size_t n_http_headers;
+	char *http_headers_blob;
+
 	/* Cached TCP connection for HTTP keep-alive. Owned by the exporter,
 	 * donated to the next in_flight request, re-acquired on success. */
 	otlp_socket_t *keepalive_sock;
@@ -205,6 +211,8 @@ log_clone_void(const void *p)
 static otlp_status_t
 build_span_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const char *service_name,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
@@ -217,6 +225,8 @@ build_span_request_void(const struct otlp_http_url *url,
 {
 	return otlp_exporter_otel_build_span_request(url,
 		user_agent,
+		headers,
+		n_headers,
 		service_name,
 		res_attrs,
 		n_res_attrs,
@@ -231,6 +241,8 @@ build_span_request_void(const struct otlp_http_url *url,
 static otlp_status_t
 build_metric_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const char *service_name,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
@@ -243,6 +255,8 @@ build_metric_request_void(const struct otlp_http_url *url,
 {
 	return otlp_exporter_otel_build_metric_request(url,
 		user_agent,
+		headers,
+		n_headers,
 		service_name,
 		res_attrs,
 		n_res_attrs,
@@ -257,6 +271,8 @@ build_metric_request_void(const struct otlp_http_url *url,
 static otlp_status_t
 build_log_request_void(const struct otlp_http_url *url,
 	const char *user_agent,
+	const otlp_http_header_t *headers,
+	size_t n_headers,
 	const char *service_name,
 	const struct otlp_attribute *res_attrs,
 	size_t n_res_attrs,
@@ -269,6 +285,8 @@ build_log_request_void(const struct otlp_http_url *url,
 {
 	return otlp_exporter_otel_build_log_request(url,
 		user_agent,
+		headers,
+		n_headers,
 		service_name,
 		res_attrs,
 		n_res_attrs,
@@ -282,6 +300,8 @@ build_log_request_void(const struct otlp_http_url *url,
 
 typedef otlp_status_t (*otlp_build_request_fn)(const struct otlp_http_url *,
 	const char *,
+	const otlp_http_header_t *,
+	size_t n_headers,
 	const char *,
 	const struct otlp_attribute *,
 	size_t,
@@ -571,6 +591,73 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->service_name = otlp_dup_str(o.service_name);
 	if (!e->user_agent || !e->service_name)
 		goto fail;
+
+	/* Extra HTTP headers: deep-copy (the opts contract — caller
+	 * may free immediately after create). Reject CR/LF up front
+	 * (the request builder re-checks; CWE-93). */
+	if (o.n_http_headers > 0)
+	{
+		size_t i;
+		size_t blob_len = 0;
+		char *blob;
+		otlp_http_header_t *hdrs;
+
+		if (!o.http_headers)
+			goto fail;
+		for (i = 0; i < o.n_http_headers; i++)
+		{
+			const char *v;
+			const char *p;
+
+			if (!o.http_headers[i].name ||
+				o.http_headers[i].name[0] == '\0')
+				goto fail;
+			for (p = o.http_headers[i].name; *p; p++)
+				if (*p == '\r' || *p == '\n')
+					goto fail;
+			v = o.http_headers[i].value ? o.http_headers[i].value
+						    : "";
+			for (p = v; *p; p++)
+				if (*p == '\r' || *p == '\n')
+					goto fail;
+			/* +1s for NUL terminators. */
+			blob_len += strlen(o.http_headers[i].name) + 1 +
+				strlen(v) + 1;
+		}
+		hdrs = otlp_calloc(o.n_http_headers, sizeof(*hdrs));
+		blob = otlp_malloc(blob_len ? blob_len : 1);
+		if (!hdrs || !blob)
+		{
+			otlp_free(hdrs);
+			otlp_free(blob);
+			goto fail;
+		}
+		{
+			char *cur = blob;
+
+			for (i = 0; i < o.n_http_headers; i++)
+			{
+				size_t l = strlen(o.http_headers[i].name);
+
+				memcpy(cur, o.http_headers[i].name, l + 1);
+				hdrs[i].name = cur;
+				cur += l + 1;
+				l = strlen(o.http_headers[i].value
+						? o.http_headers[i].value
+						: "");
+				memcpy(cur,
+					o.http_headers[i].value
+						? o.http_headers[i].value
+						: "",
+					l + 1);
+				hdrs[i].value = cur;
+				cur += l + 1;
+			}
+		}
+		e->http_headers = hdrs;
+		e->n_http_headers = o.n_http_headers;
+		e->http_headers_blob = blob;
+	}
 	if (o.n_resource_attributes > 0 && o.resource_attributes)
 	{
 		size_t i;
@@ -651,6 +738,8 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 fail:
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	otlp_free(e->http_headers);
+	otlp_free(e->http_headers_blob);
 	otlp_attr_vec_free(&e->resource_attrs);
 	{
 		int s;
@@ -693,6 +782,8 @@ otlp_exporter_free(otlp_exporter_t *e)
 	}
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
+	otlp_free(e->http_headers);
+	otlp_free(e->http_headers_blob);
 	otlp_attr_vec_free(&e->resource_attrs);
 	otlp_free(e);
 	return;
@@ -831,6 +922,8 @@ try_start_post(struct otlp_exporter *e, int s)
 		return OTLP_OK;
 	st = SIGNAL_SPECS[s].build_request(&e->url,
 		e->user_agent,
+		e->http_headers,
+		e->n_http_headers,
 		e->service_name,
 		e->resource_attrs.items,
 		e->resource_attrs.n,
@@ -1356,6 +1449,8 @@ flush_post_once(struct otlp_exporter *e,
 	st = otlp_http_request_start(&req,
 		&u,
 		e->user_agent,
+		e->http_headers,
+		e->n_http_headers,
 		body,
 		body_len,
 		e->connect_timeout_ms,
