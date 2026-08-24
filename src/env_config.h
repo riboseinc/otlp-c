@@ -36,19 +36,30 @@
 otlp_status_t
 otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
-	char *buf,
-	size_t buf_cap);
+	otlp_env_storage_t *st);
 otlp_status_t
 otlp_env_apply_traces_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
-	char *buf,
-	size_t buf_cap);
+	otlp_env_storage_t *st);
 otlp_status_t
 otlp_env_apply_timeout(otlp_exporter_opts_t *opts, const char *value);
 otlp_status_t
 otlp_env_apply_protocol(otlp_exporter_opts_t *opts, const char *value);
 otlp_status_t
 otlp_env_apply_service_name(otlp_exporter_opts_t *opts, const char *value);
+
+/* OTEL_RESOURCE_ATTRIBUTES: "k=v,k=v" — comma-separated pairs.
+ * Split on the first '=' of each segment; empty segments, empty
+ * keys, or segments without '=' are skipped (OTel's
+ * log-and-continue posture). No URL-decoding (values stay
+ * literal). Strings and the parsed array land in `storage`;
+ * opts->resource_attributes points at it. A pair count or
+ * component length over the storage bounds returns
+ * OTLP_ERR_OVERFLOW. */
+otlp_status_t
+otlp_env_apply_resource_attrs(otlp_exporter_opts_t *opts,
+	const char *value,
+	otlp_env_storage_t *st);
 
 /* The getenv driver over these helpers is public:
  * otlp_exporter_opts_apply_env() in include/otlp-c/exporter.h. */

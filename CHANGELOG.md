@@ -4,6 +4,39 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-08-24
+
+OTEL_RESOURCE_ATTRIBUTES, bench/coverage presets, last legacy out.
+
+### Added — OTEL_RESOURCE_ATTRIBUTES
+
+`otlp_exporter_opts_apply_env()` now applies
+`OTEL_RESOURCE_ATTRIBUTES` ("k=v,k=v"): pairs land on the one
+value model as STRING resource attributes; malformed segments are
+skipped (OTel's log-and-continue posture); values stay literal
+(no URL-decoding); a "service.name" entry yields to
+`OTEL_SERVICE_NAME` via the existing create-time map semantics.
+The v0.7.0 raw-endpoint-buffer parameter became
+`otlp_env_storage_t` — one caller-allocated struct holding every
+environment-derived string and the parsed attribute array, so
+future variables extend storage without another signature change
+(documented 0.x change; the API is one day old).
+
+### Added — bench + coverage presets
+
+`cmake --preset bench` (Release + benchmarks) and
+`--preset coverage` join default/release/asan/ubsan/tsan.
+Release perf measured with the new preset: emit **89 ns/span**
+(0 attrs), build+move 135 ns, encode 360 ns + ~60 ns/attribute —
+roughly 2x the Debug numbers, linear scaling intact.
+
+### Removed — docs/release-notes/ deleted
+
+Frozen at v0.5.0 and superseded by CHANGELOG.md + GitHub
+Releases since v0.6.8. The v0.5.0 notes were merged into the
+v0.5.0 GitHub release body before deletion, so nothing was lost;
+recoverable from git history.
+
 ## [0.7.0] - 2026-08-24
 
 OTel environment variables, one-command builds, legacy removed.

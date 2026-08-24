@@ -181,8 +181,8 @@ with hand-filled opts:
 
 ```c
 otlp_exporter_opts_t opts = { .service_name = "demo" };
-char endpoint_buf[256];
-otlp_exporter_opts_apply_env(&opts, endpoint_buf, sizeof(endpoint_buf));
+otlp_env_storage_t env;  /* keep alive through create() */
+otlp_exporter_opts_apply_env(&opts, &env);
 otlp_exporter_t *exp = otlp_exporter_create(&opts);
 ```
 
@@ -193,6 +193,7 @@ otlp_exporter_t *exp = otlp_exporter_create(&opts);
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | request timeout (ms), applied to connect + read |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | must be `http/protobuf` if set, else error |
 | `OTEL_SERVICE_NAME` | service name |
+| `OTEL_RESOURCE_ATTRIBUTES` | `k=v,k=v` resource attributes (literal values, malformed segments skipped; `service.name` yields to `OTEL_SERVICE_NAME`) |
 
 Not supported: `OTEL_EXPORTER_OTLP_HEADERS` and per-signal
 metric/log endpoint variables (those paths derive from the one

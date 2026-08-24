@@ -50,6 +50,24 @@
         "OTLP_C_BUILD_TESTS": true,
         "OTLP_C_ENABLE_TSAN": true
       }
+    },
+    {
+      "name": "bench",
+      "displayName": "Benchmarks (Release)",
+      "binaryDir": "${sourceDir}/build-bench",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OTLP_C_BUILD_BENCH": true
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Coverage (clang profile; see CLAUDE.md for the llvm-cov flow)",
+      "binaryDir": "${sourceDir}/build-cov",
+      "cacheVariables": {
+        "OTLP_C_BUILD_TESTS": true,
+        "OTLP_C_ENABLE_COVERAGE": true
+      }
     }
   ],
   "buildPresets": [
@@ -72,6 +90,14 @@
     {
       "name": "tsan",
       "configurePreset": "tsan"
+    },
+    {
+      "name": "bench",
+      "configurePreset": "bench"
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage"
     }
   ],
   "testPresets": [
