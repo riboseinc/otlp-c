@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.10] - 2026-08-24
+
+CI hygiene: consumer tests moved out of workflow YAML.
+
+### Changed — consumer fixtures are real projects, not heredocs
+
+Both consumer CI jobs carried their `main.c` and `CMakeLists.txt`
+as heredocs inside workflow YAML — code living in strings: no
+linting, no formatting, duplicated, unreviewable, and first
+executed by CI (PR #146's first Windows run failed on exactly
+such a bug). The consumers now live as standalone projects in
+`tests/consumers/` (`find_package/`, `fetchcontent/`), runnable
+locally with the same commands CI runs (see
+`tests/consumers/README.md`). The fetchcontent consumer asserts
+the v0.6.9 hygiene invariants as configure-time FATAL_ERRORs —
+both mutation-tested: bypassing the top-level guard makes it fail
+on "clobbered CMAKE_INSTALL_LIBDIR" / "CPack config leaked".
+The find_package consumer now runs a real emit→flush round trip
+instead of only printing the version. CI jobs shrank to
+`cmake -S tests/consumers/... && build && ctest`.
+
 ## [0.6.9] - 2026-08-24
 
 Embedded-build hygiene: the FetchContent path works and is now
