@@ -4,6 +4,41 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.9] - 2026-08-24
+
+Embedded-build hygiene: the FetchContent path works and is now
+side-effect-free.
+
+### Fixed — embedded otlp-c clobbered the consumer's CMake and CPack state
+
+v0.6.8 documented CMake FetchContent / add_subdirectory as the
+consumer path, but no consumer had ever been built that way.
+Building one surfaced two violations of the library-package
+principle:
+
+- `set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "" FORCE)`
+  overwrote the PARENT project's cache entry — a consumer on a
+  Debian multiarch layout (`lib/x86_64-linux-gnu`) found it
+  silently rewritten to `lib`, redirecting the consumer's own
+  libraries.
+- `include(CPack)` wrote `CPackConfig.cmake` /
+  `CPackSourceConfig.cmake` into the top-level build dir — the
+  consumer's build tree.
+
+Both are now gated on `OTLP_C_IS_TOP_LEVEL`: the install-layout
+pin and CPack run only when otlp-c is the project being
+configured; embedded builds respect the parent's layout and
+write nothing into the parent's tree.
+
+### Added — CI job pinning the documented path
+
+"CMake FetchContent consumer" (ubuntu + windows) builds a real
+consumer against the checked-out tree, runs an emit→flush
+round-trip, FATAL_ERRORs if the consumer's
+`CMAKE_INSTALL_LIBDIR` gets clobbered, and fails if CPack config
+leaks into the consumer's build dir. The documented install
+paths can no longer silently rot.
+
 ## [0.6.8] - 2026-08-24
 
 Install-docs truth sweep.
