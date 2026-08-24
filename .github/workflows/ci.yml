@@ -189,13 +189,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-14, windows-2022]
-    # Linux + macOS find_package works (LIBDIR pinned to "lib" so
-    # config lands at <prefix>/lib/cmake/otlp-c/). Windows has a
-    # bash-on-Windows path mangling issue in the consumer-test step
-    # CMAKE_INSTALL_LIBDIR pinned to "lib" so install path is
-    # deterministic on all platforms. Uses $GITHUB_WORKSPACE env var
-    # (forward slashes) instead of ${{ github.workspace }} (Windows
-    # backslashes mangled by bash).
+    # LIBDIR pinned to "lib" at top level so the installed config
+    # lands deterministically at <prefix>/lib/cmake/otlp-c on every
+    # platform. Uses $GITHUB_WORKSPACE (forward slashes) instead of
+    # ${{ github.workspace }} (Windows backslashes mangled by bash).
+    # The consumer itself is a standalone project in
+    # tests/consumers/find_package (runnable locally, see
+    # tests/consumers/README.md).
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
@@ -213,31 +213,21 @@ jobs:
       - name: Test find_package consumer
         shell: bash
         run: |
-          mkdir -p consumer-test && cd consumer-test
-          cat > main.c << 'EOF'
-          #include <otlp-c/otlp.h>
-          #include <stdio.h>
-          int main(void) { printf("%s\n", otlp_version()); return 0; }
-          EOF
-          cat > CMakeLists.txt << 'EOF'
-          cmake_minimum_required(VERSION 3.20)
-          project(consumer C)
-          find_package(otlp-c CONFIG REQUIRED)
-          add_executable(consumer main.c)
-          target_link_libraries(consumer PRIVATE otlp-c::otlp_c)
-          enable_testing()
-          add_test(NAME consumer_test COMMAND consumer)
-          EOF
-          cmake -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
-          ctest --test-dir build --build-config Release --output-on-failure
+          # The consumer project is a real standalone CMake project
+          # in tests/consumers/find_package — same code CI and local
+          # devs run (see tests/consumers/README.md).
+          cmake -S tests/consumers/find_package -B consumer-build \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -DCMAKE_BUILD_TYPE=Release
+          cmake --build consumer-build --config Release
+          ctest --test-dir consumer-build --build-config Release --output-on-failure
 
-  # The FetchContent path documented in README/quickstart. Pins two
-  # things: (1) an embedded otlp-c builds, links, and runs from a
-  # consumer project; (2) it is side-effect-free — the consumer's
-  # CMAKE_INSTALL_LIBDIR cache entry must survive MakeAvailable
-  # (the CACHE ... FORCE pin clobbered it before v0.6.9) and no
-  # CPack config may appear in the consumer's build tree.
+  # The FetchContent path documented in README/quickstart, exercised
+  # by the standalone consumer project in tests/consumers/fetchcontent
+  # (ubuntu + windows). The consumer asserts both that an embedded
+  # otlp-c builds, links, and runs, and that it is side-effect-free:
+  # its CMAKE_INSTALL_LIBDIR cache entry must survive MakeAvailable
+  # (the CACHE ... FORCE pin clobbered it before v0.6.9) and no CPack
+  # config may appear in its build tree.
   fetchcontent-consumer:
     name: CMake FetchContent consumer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -256,53 +246,10 @@ jobs:
       - name: Test FetchContent consumer
         shell: bash
         run: |
-          mkdir -p consumer-test && cd consumer-test
-          cat > main.c << 'EOF'
-          #include <otlp-c/otlp.h>
-          #include <stdio.h>
-          int main(void) {
-              otlp_exporter_opts_t opts = { .service_name = "consumer" };
-              otlp_exporter_t *exp = otlp_exporter_create(&opts);
-              otlp_exporter_set_null_transport(exp, 1);
-              otlp_tracer_t *tr = otlp_tracer_create("c", "c", "0");
-              otlp_span_t *s = otlp_tracer_start_span(tr, "fc");
-              otlp_span_mark_end(s);
-              otlp_exporter_emit(exp, s);
-              otlp_exporter_flush(exp);
-              otlp_span_free(s);
-              otlp_tracer_free(tr);
-              otlp_exporter_free(exp);
-              printf("otlp-c %s round-trip ok\n", otlp_version());
-              return 0;
-          }
-          EOF
-          cat > CMakeLists.txt << 'EOF'
-          cmake_minimum_required(VERSION 3.20)
-          project(consumer C)
-          set(CMAKE_INSTALL_LIBDIR "lib/consumer-check" CACHE PATH "")
-          include(FetchContent)
-          # TO_CMAKE_PATH: on Windows $ENV{GITHUB_WORKSPACE} carries
-          # backslashes, which FetchContent embeds verbatim into the
-          # subbuild CMakeLists — "\a" parses as an invalid escape.
-          file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}" OTLP_C_SOURCE_DIR)
-          FetchContent_Declare(otlp-c SOURCE_DIR "${OTLP_C_SOURCE_DIR}")
-          FetchContent_MakeAvailable(otlp-c)
-          if(NOT "${CMAKE_INSTALL_LIBDIR}" STREQUAL "lib/consumer-check")
-              message(FATAL_ERROR
-                  "otlp-c clobbered CMAKE_INSTALL_LIBDIR: ${CMAKE_INSTALL_LIBDIR}")
-          endif()
-          add_executable(consumer main.c)
-          target_link_libraries(consumer PRIVATE otlp-c::otlp_c)
-          enable_testing()
-          add_test(NAME consumer_test COMMAND consumer)
-          EOF
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
-          if ls build/CPackConfig.cmake >/dev/null 2>&1; then
-              echo "FAIL: CPack config leaked into consumer build tree"
-              exit 1
-          fi
-          ctest --test-dir build --build-config Release --output-on-failure
+          cmake -S tests/consumers/fetchcontent -B consumer-build \
+            -DOTLP_C_SOURCE_DIR="$GITHUB_WORKSPACE" -DCMAKE_BUILD_TYPE=Release
+          cmake --build consumer-build --config Release
+          ctest --test-dir consumer-build --build-config Release --output-on-failure
 
   # End-to-end integration against a real otelcol + Jaeger.
   # Validates the wire-format fixes (v0.5.48 Event/Status field

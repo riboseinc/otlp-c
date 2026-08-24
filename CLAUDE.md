@@ -124,6 +124,7 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `tests/golden/` | Reference-serialized golden vectors + generator |
 | `tests/test_util.h` | check_ok/check_true — always-evaluated, always-enforced test checks |
 | `tests/property/` | Property-based tests (QuickCheck-style, deterministic) |
+| `tests/consumers/` | Standalone consumer projects (find_package / FetchContent) — packaging tests driven by CI, runnable locally; NOT in the build tree |
 | `tests/integration/` | End-to-end against a local otelcol |
 | `bench/bench_emit.c` | Emit pipeline throughput benchmark |
 | `docs/architecture.md` | Layered design (21+ modules) |
