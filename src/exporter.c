@@ -62,6 +62,24 @@
 #define OTLP_DEFAULT_FLUSH_TIMEOUT_MS 30000
 #define OTLP_DEFAULT_QUEUE_CAP 4096
 
+/* Per-signal runtime state (one instance per signal, sig[3]).
+ * The static-constant half of the descriptor (name, free/clone/
+ * build adapters) lives in SIGNAL_SPECS below. */
+struct signal_state
+{
+	struct mpsc_queue queue;
+	void **pending;
+	size_t pending_cap;
+	size_t pending_count;
+	bool first_set;
+	uint64_t first_mono;
+	otlp_atomic_u64 emitted;
+	otlp_atomic_u64 dropped_full;
+	otlp_atomic_u64 dropped_err;
+	otlp_atomic_u64 sent;
+	otlp_atomic_u64 rejected;
+};
+
 struct otlp_exporter
 {
 	/* Immutable after create. */
@@ -78,33 +96,19 @@ struct otlp_exporter
 	uint32_t connect_timeout_ms;
 	uint32_t read_timeout_ms;
 
-	/* MPSC queue of pending otlp_span_t*. */
-	struct mpsc_queue queue;
+	/* Per-signal state, indexed by signal kind (SIGNAL_SPAN=0,
+	 * SIGNAL_METRIC=1, SIGNAL_LOG=2): queue, pending batch, batch
+	 * timer, and the per-signal stats counters, ONE struct instead
+	 * of fifteen hand-named fields per signal. Every signal-generic
+	 * driver (emit, tick, record_outcome, start-post, drain, stats)
+	 * indexes this array. */
+	struct signal_state sig[3];
 
-	/* MPSC queues for async metric/log (v0.5.28). */
-	struct mpsc_queue metric_queue;
-	struct mpsc_queue log_queue;
-
-	/* Atomic stats + state. */
-	otlp_atomic_u64 emitted;
-	otlp_atomic_u64 dropped_full;
-	otlp_atomic_u64 dropped_err;
-	otlp_atomic_u64 sent;
+	/* HTTP-level counters (not per-signal). */
 	otlp_atomic_u64 http_2xx;
 	otlp_atomic_u64 http_4xx;
 	otlp_atomic_u64 http_5xx;
 	otlp_atomic_u64 network_err;
-	otlp_atomic_u64 emitted_metrics;
-	otlp_atomic_u64 sent_metrics;
-	otlp_atomic_u64 dropped_metrics_full;
-	otlp_atomic_u64 dropped_metrics_err;
-	otlp_atomic_u64 emitted_logs;
-	otlp_atomic_u64 sent_logs;
-	otlp_atomic_u64 dropped_logs_full;
-	otlp_atomic_u64 dropped_logs_err;
-	otlp_atomic_u64 rejected_spans;
-	otlp_atomic_u64 rejected_metrics;
-	otlp_atomic_u64 rejected_logs;
 	otlp_atomic_int shutdown_requested;
 
 	/* Optional diagnostic callbacks (NULL = no-op). The event
@@ -114,25 +118,6 @@ struct otlp_exporter
 	void *log_ctx;
 	otlp_event_fn event_fn;
 	void *event_ctx;
-
-	/* Tick-private state (no synchronisation needed). */
-	otlp_span_t **pending;
-	size_t pending_cap;
-	size_t pending_count;
-	bool first_pending_set;
-	uint64_t first_pending_mono;
-
-	/* Metric/log pending batches (tick-private). */
-	otlp_metric_t **metric_pending;
-	size_t metric_pending_cap;
-	size_t metric_pending_count;
-	bool metric_first_set;
-	uint64_t metric_first_mono;
-	otlp_log_record_t **log_pending;
-	size_t log_pending_cap;
-	size_t log_pending_count;
-	bool log_first_set;
-	uint64_t log_first_mono;
 
 	/* In-flight request state. in_flight_signal identifies which
 	 * signal's batch is being POSTed (0=span, 1=metric, 2=log). */
@@ -153,6 +138,200 @@ struct otlp_exporter
 	 * non-atomic state is correct. */
 	uint64_t jitter_prng;
 };
+
+/* ── The signal table ────────────────────────────────────────────
+ *
+ * ONE row per signal: the public id, the diagnostics name, and the
+ * three type-erased adapters (free / clone / build-request). This
+ * is the single place a signal's type-specific knowledge lives;
+ * every signal-generic driver (emit, tick, record_outcome,
+ * start-post, drain) dispatches through it. Adding a signal (OTLP
+ * profiles someday) = one row + the typed functions it names.
+ *
+ * The RUNTIME half (queues, pending batches, counters) lives in
+ * struct otlp_exporter's sig[3], indexed by the same kind. */
+
+/* Signal kind constants — also the index into sig[] and
+ * SIGNAL_SPECS[]. Matches otlp_signal_id_t's values. */
+enum
+{
+	SIGNAL_SPAN = 0,
+	SIGNAL_METRIC = 1,
+	SIGNAL_LOG = 2,
+	N_SIGNALS
+};
+
+static void
+span_free_void(void *p)
+{
+	otlp_span_free(p);
+}
+
+static void
+metric_free_void(void *p)
+{
+	otlp_metric_free(p);
+}
+
+static void
+log_free_void(void *p)
+{
+	otlp_log_record_free(p);
+}
+
+static void *
+span_clone_void(const void *p)
+{
+	return otlp_span_clone((const otlp_span_t *) p);
+}
+
+static void *
+metric_clone_void(const void *p)
+{
+	return otlp_metric_clone((const otlp_metric_t *) p);
+}
+
+static void *
+log_clone_void(const void *p)
+{
+	return otlp_log_record_clone((const otlp_log_record_t *) p);
+}
+
+/* Type-erased wrappers around the typed otlp_exporter_otel_build_*
+ * functions. Each takes const void *const * items so the spec table
+ * can hold a single function-pointer type. The cast is localized
+ * here; the typed build helpers retain full type safety. */
+static otlp_status_t
+build_span_request_void(const struct otlp_http_url *url,
+	const char *user_agent,
+	const char *service_name,
+	const struct otlp_attribute *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_span_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_span_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
+}
+
+static otlp_status_t
+build_metric_request_void(const struct otlp_http_url *url,
+	const char *user_agent,
+	const char *service_name,
+	const struct otlp_attribute *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_metric_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_metric_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
+}
+
+static otlp_status_t
+build_log_request_void(const struct otlp_http_url *url,
+	const char *user_agent,
+	const char *service_name,
+	const struct otlp_attribute *res_attrs,
+	size_t n_res_attrs,
+	const void *const *items,
+	size_t n_items,
+	uint32_t connect_to,
+	uint32_t read_to,
+	otlp_socket_t *reuse,
+	otlp_http_request_t **out)
+{
+	return otlp_exporter_otel_build_log_request(url,
+		user_agent,
+		service_name,
+		res_attrs,
+		n_res_attrs,
+		(const otlp_log_record_t *const *) items,
+		n_items,
+		connect_to,
+		read_to,
+		reuse,
+		out);
+}
+
+typedef otlp_status_t (*otlp_build_request_fn)(const struct otlp_http_url *,
+	const char *,
+	const char *,
+	const struct otlp_attribute *,
+	size_t,
+	const void *const *,
+	size_t,
+	uint32_t,
+	uint32_t,
+	otlp_socket_t *,
+	otlp_http_request_t **);
+
+/* The static-constant half of the per-signal descriptor. */
+struct signal_spec
+{
+	otlp_signal_id_t id;
+	const char *name;
+	void (*free_item)(void *);
+	void *(*clone_item)(const void *);
+	otlp_build_request_fn build_request;
+};
+
+static const struct signal_spec SIGNAL_SPECS[N_SIGNALS] = {
+	[SIGNAL_SPAN] = { OTLP_SIGNAL_TRACES,
+		"spans",
+		span_free_void,
+		span_clone_void,
+		build_span_request_void },
+	[SIGNAL_METRIC] = { OTLP_SIGNAL_METRICS,
+		"metrics",
+		metric_free_void,
+		metric_clone_void,
+		build_metric_request_void },
+	[SIGNAL_LOG] = { OTLP_SIGNAL_LOGS,
+		"logs",
+		log_free_void,
+		log_clone_void,
+		build_log_request_void },
+};
+
+/* Drain one signal: pop everything from the queue and free it,
+ * then free the pending batch. */
+static void
+drain_signal(struct signal_state *sg, void (*free_item)(void *))
+{
+	void *item;
+	size_t i;
+
+	while ((item = mpsc_queue_pop(&sg->queue)) != NULL)
+		free_item(item);
+	for (i = 0; i < sg->pending_count; i++)
+		free_item(sg->pending[i]);
+}
 
 /* ── Helpers ──────────────────────────────────────────────────── */
 
@@ -205,15 +384,12 @@ backoff_delay_ms(const struct otlp_exporter *e, uint32_t attempt)
 static const char *
 signal_name(otlp_signal_id_t s)
 {
-	switch (s)
-	{
-		case OTLP_SIGNAL_METRICS:
-			return "metrics";
-		case OTLP_SIGNAL_LOGS:
-			return "logs";
-		default:
-			return "spans";
-	}
+	int k;
+
+	for (k = 0; k < N_SIGNALS; k++)
+		if (SIGNAL_SPECS[k].id == s)
+			return SIGNAL_SPECS[k].name;
+	return "spans";
 }
 
 /* Render the event's human-readable line. THE single presentation
@@ -405,57 +581,6 @@ normalize_opts(otlp_exporter_opts_t *o)
 
 /* ── Lifecycle ────────────────────────────────────────────────── */
 
-/* Type-erased free / clone wrappers. Each signal's typed function
- * is wrapped in a void*-signature helper so it can be stored in a
- * signal-path descriptor and dispatched uniformly. Defined early
- * so all sections (lifecycle, emit, record_outcome, start_post)
- * can reference them. */
-static void
-span_free_void(void *p)
-{
-	otlp_span_free(p);
-}
-
-static void
-metric_free_void(void *p)
-{
-	otlp_metric_free(p);
-}
-
-static void
-log_free_void(void *p)
-{
-	otlp_log_record_free(p);
-}
-
-/* Per-signal descriptor for the free-path drain. Bundles the queue
- * (to pop un-sent items from) with the pending array (to free
- * batched-but-not-yet-POSTed items) and the type-erased free fn.
- *
- * Used by otlp_exporter_free to drain all three signals in one loop
- * instead of triplicating the drain+free_pending pair. */
-struct signal_drain_path
-{
-	struct mpsc_queue *queue;
-	void **pending;
-	size_t pending_count;
-	void (*free_item)(void *);
-};
-
-/* Drain one signal: pop everything from the queue and free it,
- * then free the pending batch. */
-static void
-drain_signal(const struct signal_drain_path *p)
-{
-	void *item;
-	size_t i;
-
-	while ((item = mpsc_queue_pop(p->queue)) != NULL)
-		p->free_item(item);
-	for (i = 0; i < p->pending_count; i++)
-		p->free_item(p->pending[i]);
-}
-
 const struct otlp_attribute *
 otlp_exporter_get_resource_attrs(const otlp_exporter_t *e, size_t *n)
 {
@@ -537,32 +662,22 @@ otlp_exporter_create(const otlp_exporter_opts_t *opts_in)
 	e->connect_timeout_ms = o.connect_timeout_ms;
 	e->read_timeout_ms = o.read_timeout_ms;
 
-	e->pending_cap = e->batch_size * 2;
-	e->pending = otlp_malloc(e->pending_cap * sizeof(*e->pending));
-	if (!e->pending)
-		goto fail;
+	{
+		int s;
 
-	e->metric_pending_cap = e->batch_size * 2;
-	e->metric_pending =
-		otlp_malloc(e->metric_pending_cap * sizeof(*e->metric_pending));
-	if (!e->metric_pending)
-		goto fail;
-
-	e->log_pending_cap = e->batch_size * 2;
-	e->log_pending =
-		otlp_malloc(e->log_pending_cap * sizeof(*e->log_pending));
-	if (!e->log_pending)
-		goto fail;
-
-	st = mpsc_queue_init(&e->queue, o.queue_capacity);
-	if (st != OTLP_OK)
-		goto fail;
-	st = mpsc_queue_init(&e->metric_queue, o.queue_capacity);
-	if (st != OTLP_OK)
-		goto fail;
-	st = mpsc_queue_init(&e->log_queue, o.queue_capacity);
-	if (st != OTLP_OK)
-		goto fail;
+		for (s = 0; s < N_SIGNALS; s++)
+		{
+			e->sig[s].pending_cap = e->batch_size * 2;
+			e->sig[s].pending = otlp_malloc(e->sig[s].pending_cap *
+				sizeof(*e->sig[s].pending));
+			if (!e->sig[s].pending)
+				goto fail;
+			st = mpsc_queue_init(
+				&e->sig[s].queue, o.queue_capacity);
+			if (st != OTLP_OK)
+				goto fail;
+		}
+	}
 
 	e->in_flight_signal = 0; /* SPAN */
 	{
@@ -582,16 +697,19 @@ fail:
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
 	otlp_attr_vec_free(&e->resource_attrs);
-	otlp_free(e->pending);
-	otlp_free(e->metric_pending);
-	otlp_free(e->log_pending);
-	/* mpsc_queue_free is safe on uninitialized queues (slots=NULL
-	 * → otlp_free(NULL) is a no-op). If any of the three queue
-	 * inits succeeded before the failure, its slots must be freed;
-	 * otherwise they'd leak. */
-	mpsc_queue_free(&e->queue);
-	mpsc_queue_free(&e->metric_queue);
-	mpsc_queue_free(&e->log_queue);
+	{
+		int s;
+
+		/* mpsc_queue_free is safe on uninitialized queues
+		 * (slots=NULL → otlp_free(NULL) is a no-op). If any
+		 * queue init succeeded before the failure, its slots
+		 * must be freed; otherwise they'd leak. */
+		for (s = 0; s < N_SIGNALS; s++)
+		{
+			otlp_free(e->sig[s].pending);
+			mpsc_queue_free(&e->sig[s].queue);
+		}
+	}
 	otlp_free(e);
 	return NULL;
 }
@@ -599,96 +717,41 @@ fail:
 void
 otlp_exporter_free(otlp_exporter_t *e)
 {
-	struct signal_drain_path drains[3];
-	size_t i;
+	int s;
 
 	if (!e)
 		return;
-	/* Drain queues + free pending batches, all signals. The drain
-	 * is table-driven: adding a 4th signal is one entry, not a
-	 * copy-paste of the while + for pair. */
-	drains[0] = (struct signal_drain_path){
-		.queue = &e->queue,
-		.pending = (void **) e->pending,
-		.pending_count = e->pending_count,
-		.free_item = span_free_void,
-	};
-	drains[1] = (struct signal_drain_path){
-		.queue = &e->metric_queue,
-		.pending = (void **) e->metric_pending,
-		.pending_count = e->metric_pending_count,
-		.free_item = metric_free_void,
-	};
-	drains[2] = (struct signal_drain_path){
-		.queue = &e->log_queue,
-		.pending = (void **) e->log_pending,
-		.pending_count = e->log_pending_count,
-		.free_item = log_free_void,
-	};
-	for (i = 0; i < 3; i++)
-		drain_signal(&drains[i]);
+	/* Drain queues + free pending batches, all signals — one loop
+	 * over the signal table. */
+	for (s = 0; s < N_SIGNALS; s++)
+		drain_signal(&e->sig[s], SIGNAL_SPECS[s].free_item);
 	/* Free in-flight request. */
 	if (e->in_flight)
 		otlp_http_request_free(e->in_flight);
 	/* Close any cached keep-alive socket. */
 	if (e->keepalive_sock)
 		otlp_socket_close(e->keepalive_sock);
-	mpsc_queue_free(&e->queue);
-	mpsc_queue_free(&e->metric_queue);
-	mpsc_queue_free(&e->log_queue);
-	otlp_free(e->pending);
-	otlp_free(e->metric_pending);
-	otlp_free(e->log_pending);
+	for (s = 0; s < N_SIGNALS; s++)
+	{
+		mpsc_queue_free(&e->sig[s].queue);
+		otlp_free(e->sig[s].pending);
+	}
 	otlp_free(e->user_agent);
 	otlp_free(e->service_name);
 	otlp_attr_vec_free(&e->resource_attrs);
 	otlp_free(e);
+	return;
 }
 
 /* ── emit (any thread) ────────────────────────────────────────── */
 
-/* Type-erased clone wrappers. The free wrappers
- * (span_free_void, metric_free_void, log_free_void) are defined
- * in the Lifecycle section above; they're shared across sections. */
-static void *
-span_clone_void(const void *p)
-{
-	return otlp_span_clone((const otlp_span_t *) p);
-}
-
-static void *
-metric_clone_void(const void *p)
-{
-	return otlp_metric_clone((const otlp_metric_t *) p);
-}
-
-static void *
-log_clone_void(const void *p)
-{
-	return otlp_log_record_clone((const otlp_log_record_t *) p);
-}
-
-/* Per-signal descriptor for the emit pipeline. Bundles the queue,
- * counters, and type-erased free/clone hooks so the emit logic can
- * be table-driven. Adding a new signal = a new descriptor + a
- * public wrapper; the core logic doesn't change. */
-struct signal_emit_path
-{
-	struct mpsc_queue *queue;
-	otlp_atomic_u64 *emitted_counter;
-	otlp_atomic_u64 *dropped_full_counter;
-	void (*free_item)(void *);
-	void *(*clone_item)(const void *);
-	otlp_signal_id_t signal;
-};
-
 /* Core of every emit_move variant. NULL + shutdown + push + stats
- * are signal-agnostic; only the descriptor varies. */
+ * are signal-agnostic; only the signal kind varies. */
 static otlp_status_t
-emit_move_common(struct otlp_exporter *e,
-	const struct signal_emit_path *p,
-	void *item)
+emit_move_common(struct otlp_exporter *e, int kind, void *item)
 {
+	const struct signal_spec *sp = &SIGNAL_SPECS[kind];
+	struct signal_state *sg = &e->sig[kind];
 	otlp_status_t st;
 
 	if (!e || !item)
@@ -698,29 +761,28 @@ emit_move_common(struct otlp_exporter *e,
 	{
 		/* Honor the move contract: we own the item from call entry.
 		 * The docstring promises the library frees on drop. */
-		p->free_item(item);
+		sp->free_item(item);
 		return OTLP_ERR_SHUTDOWN;
 	}
 
-	st = mpsc_queue_push(p->queue, item);
+	st = mpsc_queue_push(&sg->queue, item);
 	if (st != OTLP_OK)
 	{
 		otlp_event_t ev = {
 			.code = OTLP_EVT_QUEUE_FULL,
 			.level = OTLP_LOG_WARN,
-			.signal = p->signal,
+			.signal = sp->id,
 			.count = 1,
 			.drop_reason = OTLP_DROP_QUEUE_FULL,
 		};
 
-		p->free_item(item);
+		sp->free_item(item);
 		otlp_atomic_fetch_add_u64(
-			p->dropped_full_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
+			&sg->dropped_full, 1, OTLP_MEMORY_ORDER_RELAXED);
 		event_log(e, &ev);
 		return st;
 	}
-	otlp_atomic_fetch_add_u64(
-		p->emitted_counter, 1, OTLP_MEMORY_ORDER_RELAXED);
+	otlp_atomic_fetch_add_u64(&sg->emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
 
@@ -729,9 +791,7 @@ emit_move_common(struct otlp_exporter *e,
  * shutdown contention. The move variant's re-check catches the
  * race between clone and shutdown. */
 static otlp_status_t
-emit_clone_common(struct otlp_exporter *e,
-	const struct signal_emit_path *p,
-	const void *item)
+emit_clone_common(struct otlp_exporter *e, int kind, const void *item)
 {
 	void *clone;
 
@@ -740,348 +800,87 @@ emit_clone_common(struct otlp_exporter *e,
 	if (otlp_atomic_load_int(
 		    &e->shutdown_requested, OTLP_MEMORY_ORDER_ACQUIRE))
 		return OTLP_ERR_SHUTDOWN;
-	clone = p->clone_item(item);
+	clone = SIGNAL_SPECS[kind].clone_item(item);
 	if (!clone)
 		return OTLP_ERR_NOMEM;
-	return emit_move_common(e, p, clone);
+	return emit_move_common(e, kind, clone);
 }
 
 otlp_status_t
 otlp_exporter_emit_move(otlp_exporter_t *e, otlp_span_t *span)
 {
-	struct signal_emit_path p = {
-		.queue = &e->queue,
-		.emitted_counter = &e->emitted,
-		.dropped_full_counter = &e->dropped_full,
-		.free_item = span_free_void,
-		.clone_item = span_clone_void,
-		.signal = OTLP_SIGNAL_TRACES,
-	};
-	return emit_move_common(e, &p, span);
+	return emit_move_common(e, SIGNAL_SPAN, span);
 }
 
 otlp_status_t
 otlp_exporter_emit_metric_move(otlp_exporter_t *e, otlp_metric_t *metric)
 {
-	struct signal_emit_path p = {
-		.queue = &e->metric_queue,
-		.emitted_counter = &e->emitted_metrics,
-		.dropped_full_counter = &e->dropped_metrics_full,
-		.free_item = metric_free_void,
-		.clone_item = metric_clone_void,
-		.signal = OTLP_SIGNAL_METRICS,
-	};
-	return emit_move_common(e, &p, metric);
+	return emit_move_common(e, SIGNAL_METRIC, metric);
 }
 
 otlp_status_t
 otlp_exporter_emit_log_move(otlp_exporter_t *e, otlp_log_record_t *log)
 {
-	struct signal_emit_path p = {
-		.queue = &e->log_queue,
-		.emitted_counter = &e->emitted_logs,
-		.dropped_full_counter = &e->dropped_logs_full,
-		.free_item = log_free_void,
-		.clone_item = log_clone_void,
-		.signal = OTLP_SIGNAL_LOGS,
-	};
-	return emit_move_common(e, &p, log);
+	return emit_move_common(e, SIGNAL_LOG, log);
 }
 
 otlp_status_t
 otlp_exporter_emit(otlp_exporter_t *e, const otlp_span_t *span)
 {
-	struct signal_emit_path p = {
-		.queue = &e->queue,
-		.emitted_counter = &e->emitted,
-		.dropped_full_counter = &e->dropped_full,
-		.free_item = span_free_void,
-		.clone_item = span_clone_void,
-		.signal = OTLP_SIGNAL_TRACES,
-	};
-	return emit_clone_common(e, &p, span);
+	return emit_clone_common(e, SIGNAL_SPAN, span);
 }
 
 otlp_status_t
 otlp_exporter_emit_metric(otlp_exporter_t *e, const otlp_metric_t *metric)
 {
-	struct signal_emit_path p = {
-		.queue = &e->metric_queue,
-		.emitted_counter = &e->emitted_metrics,
-		.dropped_full_counter = &e->dropped_metrics_full,
-		.free_item = metric_free_void,
-		.clone_item = metric_clone_void,
-		.signal = OTLP_SIGNAL_METRICS,
-	};
-	return emit_clone_common(e, &p, metric);
+	return emit_clone_common(e, SIGNAL_METRIC, metric);
 }
 
 otlp_status_t
 otlp_exporter_emit_log(otlp_exporter_t *e, const otlp_log_record_t *log)
 {
-	struct signal_emit_path p = {
-		.queue = &e->log_queue,
-		.emitted_counter = &e->emitted_logs,
-		.dropped_full_counter = &e->dropped_logs_full,
-		.free_item = log_free_void,
-		.clone_item = log_clone_void,
-		.signal = OTLP_SIGNAL_LOGS,
-	};
-	return emit_clone_common(e, &p, log);
+	return emit_clone_common(e, SIGNAL_LOG, log);
 }
 
 /* ── tick (single thread) ─────────────────────────────────────── */
 
-/* Signal kind constants (0=span, 1=metric, 2=log). */
-enum
-{
-	SIGNAL_SPAN = 0,
-	SIGNAL_METRIC = 1,
-	SIGNAL_LOG = 2
-};
-
-/* Table-driven signal descriptor. Bundles the per-signal state
- * (queue, pending array, timer, start_post function) so tick()
- * can iterate over all three signals in one loop instead of
- * triplicating the drain/null-transport/POST-start/backoff logic.
- *
- * All pointer fields point INTO the exporter struct, so mutations
- * through this descriptor update the exporter directly. Built once
- * at the top of tick(); valid for the duration of the call.
- *
- * Adding a new signal = one more paths[] entry (OCP). */
-struct signal_path
-{
-	struct mpsc_queue *queue;
-	void **pending;
-	size_t pending_cap;
-	size_t *pending_count;
-	bool *first_set;
-	uint64_t *first_mono;
-	int signal_kind;
-	otlp_status_t (*start_post)(struct otlp_exporter *e);
-};
-
-/* Per-signal descriptor for the record_outcome path. Bundles the
- * pending batch (type-erased), the sent/dropped counters, and the
- * signal name so outcome handling is table-driven rather than
- * switch-on-in_flight_signal.
- *
- * Built once at the top of record_outcome; passed by const pointer
- * to the helpers that need it. */
-struct signal_record_path
-{
-	void **pending;
-	size_t *pending_count;
-	bool *first_set;
-	void (*free_item)(void *);
-	otlp_atomic_u64 *sent_counter;
-	otlp_atomic_u64 *dropped_err_counter;
-	otlp_atomic_u64 *rejected_counter;
-	otlp_signal_id_t signal;
-};
-
-/* Look up the record-path descriptor for the in-flight signal. */
-static struct signal_record_path
-record_path_for(struct otlp_exporter *e)
-{
-	switch (e->in_flight_signal)
-	{
-		case SIGNAL_METRIC:
-			return (struct signal_record_path){
-				.pending = (void **) e->metric_pending,
-				.pending_count = &e->metric_pending_count,
-				.first_set = &e->metric_first_set,
-				.free_item = metric_free_void,
-				.sent_counter = &e->sent_metrics,
-				.dropped_err_counter = &e->dropped_metrics_err,
-				.rejected_counter = &e->rejected_metrics,
-				.signal = OTLP_SIGNAL_METRICS,
-			};
-		case SIGNAL_LOG:
-			return (struct signal_record_path){
-				.pending = (void **) e->log_pending,
-				.pending_count = &e->log_pending_count,
-				.first_set = &e->log_first_set,
-				.free_item = log_free_void,
-				.sent_counter = &e->sent_logs,
-				.dropped_err_counter = &e->dropped_logs_err,
-				.rejected_counter = &e->rejected_logs,
-				.signal = OTLP_SIGNAL_LOGS,
-			};
-		case SIGNAL_SPAN:
-		default:
-			return (struct signal_record_path){
-				.pending = (void **) e->pending,
-				.pending_count = &e->pending_count,
-				.first_set = &e->first_pending_set,
-				.free_item = span_free_void,
-				.sent_counter = &e->sent,
-				.dropped_err_counter = &e->dropped_err,
-				.rejected_counter = &e->rejected_spans,
-				.signal = OTLP_SIGNAL_TRACES,
-			};
-	}
-}
-
 /* Clear the pending batch for whichever signal is in-flight. */
 static void
 clear_in_flight_batch(struct otlp_exporter *e,
-	const struct signal_record_path *p)
+	struct signal_state *sg,
+	const struct signal_spec *sp)
 {
 	size_t i;
-	for (i = 0; i < *p->pending_count; i++)
-		p->free_item(p->pending[i]);
-	*p->pending_count = 0;
-	*p->first_set = false;
+
+	for (i = 0; i < sg->pending_count; i++)
+		sp->free_item(sg->pending[i]);
+	sg->pending_count = 0;
+	sg->first_set = false;
 	/* Reset retry state for the next batch. */
 	e->attempt = 0;
 	e->backoff_armed = false;
 }
 
-static void
-add_sent_for_signal(const struct signal_record_path *p,
-	uint64_t in_flight_count)
-{
-	otlp_atomic_fetch_add_u64(
-		p->sent_counter, in_flight_count, OTLP_MEMORY_ORDER_RELAXED);
-}
-
-static void
-add_dropped_err_for_signal(const struct signal_record_path *p,
-	uint64_t in_flight_count)
-{
-	otlp_atomic_fetch_add_u64(p->dropped_err_counter,
-		in_flight_count,
-		OTLP_MEMORY_ORDER_RELAXED);
-}
-
-/* Type-erased wrappers around the typed otlp_exporter_otel_build_*
- * functions. Each takes const void *const * items so the start-post
- * descriptor can hold a single function-pointer type. The cast is
- * localized here; the typed build helpers retain full type safety. */
-static otlp_status_t
-build_span_request_void(const struct otlp_http_url *url,
-	const char *user_agent,
-	const char *service_name,
-	const struct otlp_attribute *res_attrs,
-	size_t n_res_attrs,
-	const void *const *items,
-	size_t n_items,
-	uint32_t connect_to,
-	uint32_t read_to,
-	otlp_socket_t *reuse,
-	otlp_http_request_t **out)
-{
-	return otlp_exporter_otel_build_span_request(url,
-		user_agent,
-		service_name,
-		res_attrs,
-		n_res_attrs,
-		(const otlp_span_t *const *) items,
-		n_items,
-		connect_to,
-		read_to,
-		reuse,
-		out);
-}
-
-static otlp_status_t
-build_metric_request_void(const struct otlp_http_url *url,
-	const char *user_agent,
-	const char *service_name,
-	const struct otlp_attribute *res_attrs,
-	size_t n_res_attrs,
-	const void *const *items,
-	size_t n_items,
-	uint32_t connect_to,
-	uint32_t read_to,
-	otlp_socket_t *reuse,
-	otlp_http_request_t **out)
-{
-	return otlp_exporter_otel_build_metric_request(url,
-		user_agent,
-		service_name,
-		res_attrs,
-		n_res_attrs,
-		(const otlp_metric_t *const *) items,
-		n_items,
-		connect_to,
-		read_to,
-		reuse,
-		out);
-}
-
-static otlp_status_t
-build_log_request_void(const struct otlp_http_url *url,
-	const char *user_agent,
-	const char *service_name,
-	const struct otlp_attribute *res_attrs,
-	size_t n_res_attrs,
-	const void *const *items,
-	size_t n_items,
-	uint32_t connect_to,
-	uint32_t read_to,
-	otlp_socket_t *reuse,
-	otlp_http_request_t **out)
-{
-	return otlp_exporter_otel_build_log_request(url,
-		user_agent,
-		service_name,
-		res_attrs,
-		n_res_attrs,
-		(const otlp_log_record_t *const *) items,
-		n_items,
-		connect_to,
-		read_to,
-		reuse,
-		out);
-}
-
-/* Per-signal descriptor for the start-post path. Bundles the
- * type-erased pending array, count, first_set flag, signal kind,
- * and a build_request fn pointer so the start logic can be
- * table-driven rather than triplicated. */
-struct signal_start_path
-{
-	const void *pending;
-	size_t pending_count;
-	bool *first_set;
-	int signal_kind;
-	otlp_status_t (*build_request)(const struct otlp_http_url *,
-		const char *,
-		const char *,
-		const struct otlp_attribute *,
-		size_t,
-		const void *const *,
-		size_t,
-		uint32_t,
-		uint32_t,
-		otlp_socket_t *,
-		otlp_http_request_t **);
-};
-
-/* Encode + start the HTTP POST for whichever signal's descriptor
- * is passed. Caller pre-builds the descriptor from exporter state.
- * On success: in_flight is set, keepalive_sock is consumed (or
- * cleared), in_flight_signal/count are populated, first_set cleared.
+/* Encode + start the HTTP POST for signal kind `s`. On success:
+ * in_flight is set, keepalive_sock is consumed (or cleared),
+ * in_flight_signal/count are populated, first_set cleared.
  * On failure: keepalive_sock is cleared (the build path closed it
  * or did not take it). */
 static otlp_status_t
-try_start_post_common(struct otlp_exporter *e,
-	const struct signal_start_path *p)
+try_start_post(struct otlp_exporter *e, int s)
 {
+	struct signal_state *sg = &e->sig[s];
 	otlp_status_t st;
 
-	if (e->in_flight || p->pending_count == 0)
+	if (e->in_flight || sg->pending_count == 0)
 		return OTLP_OK;
-	st = p->build_request(&e->url,
+	st = SIGNAL_SPECS[s].build_request(&e->url,
 		e->user_agent,
 		e->service_name,
 		e->resource_attrs.items,
 		e->resource_attrs.n,
-		(const void *const *) p->pending,
-		p->pending_count,
+		(const void *const *) sg->pending,
+		sg->pending_count,
 		e->connect_timeout_ms,
 		e->read_timeout_ms,
 		e->keepalive_sock,
@@ -1096,54 +895,15 @@ try_start_post_common(struct otlp_exporter *e,
 	}
 	/* The request now owns the donated socket (if any). */
 	e->keepalive_sock = NULL;
-	e->in_flight_signal = p->signal_kind;
-	e->in_flight_count = p->pending_count;
+	e->in_flight_signal = s;
+	e->in_flight_count = sg->pending_count;
 	/* IMPORTANT: do NOT free the pending batch here. It must stay
 	 * alive until the in-flight request completes successfully or
 	 * is permanently dropped, so retry can re-encode it. The batch
 	 * is freed in record_outcome on success / permanent-failure
 	 * paths. */
-	*p->first_set = false;
+	sg->first_set = false;
 	return OTLP_OK;
-}
-
-static otlp_status_t
-try_start_post(struct otlp_exporter *e)
-{
-	struct signal_start_path p = {
-		.pending = e->pending,
-		.pending_count = e->pending_count,
-		.first_set = &e->first_pending_set,
-		.signal_kind = SIGNAL_SPAN,
-		.build_request = build_span_request_void,
-	};
-	return try_start_post_common(e, &p);
-}
-
-static otlp_status_t
-try_start_metric_post(struct otlp_exporter *e)
-{
-	struct signal_start_path p = {
-		.pending = e->metric_pending,
-		.pending_count = e->metric_pending_count,
-		.first_set = &e->metric_first_set,
-		.signal_kind = SIGNAL_METRIC,
-		.build_request = build_metric_request_void,
-	};
-	return try_start_post_common(e, &p);
-}
-
-static otlp_status_t
-try_start_log_post(struct otlp_exporter *e)
-{
-	struct signal_start_path p = {
-		.pending = e->log_pending,
-		.pending_count = e->log_pending_count,
-		.first_set = &e->log_first_set,
-		.signal_kind = SIGNAL_LOG,
-		.build_request = build_log_request_void,
-	};
-	return try_start_post_common(e, &p);
 }
 
 /* What the in-flight HTTP exchange produced, handed to
@@ -1206,7 +966,8 @@ report_partial_success(struct otlp_exporter *e,
 static void
 record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 {
-	struct signal_record_path p = record_path_for(e);
+	struct signal_state *sg = &e->sig[e->in_flight_signal];
+	const struct signal_spec *sp = &SIGNAL_SPECS[e->in_flight_signal];
 	uint64_t count = e->in_flight_count;
 	int http_status = o->status;
 
@@ -1223,15 +984,17 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 			otlp_event_t ev = {
 				.code = OTLP_EVT_ITEMS_DROPPED,
 				.level = OTLP_LOG_ERROR,
-				.signal = p.signal,
+				.signal = sp->id,
 				.count = count,
 				.max_retries = e->max_retries,
 				.drop_reason = OTLP_DROP_MAX_RETRIES,
 			};
 
-			add_dropped_err_for_signal(&p, count);
+			otlp_atomic_fetch_add_u64(&sg->dropped_err,
+				count,
+				OTLP_MEMORY_ORDER_RELAXED);
 			event_log(e, &ev);
-			clear_in_flight_batch(e, &p);
+			clear_in_flight_batch(e, sg, sp);
 			return;
 		}
 		{
@@ -1239,7 +1002,7 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 			otlp_event_t ev = {
 				.code = OTLP_EVT_RETRY_ARMED,
 				.level = OTLP_LOG_WARN,
-				.signal = p.signal,
+				.signal = sp->id,
 				.attempt = e->attempt,
 				.max_retries = e->max_retries,
 				.delay_ms = delay,
@@ -1255,12 +1018,13 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 	{
 		otlp_atomic_fetch_add_u64(
 			&e->http_2xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-		add_sent_for_signal(&p, count);
+		otlp_atomic_fetch_add_u64(
+			&sg->sent, count, OTLP_MEMORY_ORDER_RELAXED);
 		{
 			otlp_event_t ev = {
 				.code = OTLP_EVT_BATCH_SENT,
 				.level = OTLP_LOG_DEBUG,
-				.signal = p.signal,
+				.signal = sp->id,
 				.count = count,
 				.http_status = http_status,
 			};
@@ -1271,13 +1035,13 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 		 * PartialSuccess in the response body (v0.5.96). */
 		if (o->body && o->body_len > 0)
 			report_partial_success(e,
-				p.signal,
-				p.rejected_counter,
+				sp->id,
+				&sg->rejected,
 				count,
 				o->body,
 				o->body_len);
 		/* Success — free the pending batch (kept across retries). */
-		clear_in_flight_batch(e, &p);
+		clear_in_flight_batch(e, sg, sp);
 		return;
 	}
 	if (http_status == 429 || (http_status >= 500 && http_status < 600))
@@ -1294,17 +1058,19 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 			otlp_event_t ev = {
 				.code = OTLP_EVT_ITEMS_DROPPED,
 				.level = OTLP_LOG_ERROR,
-				.signal = p.signal,
+				.signal = sp->id,
 				.count = count,
 				.http_status = http_status,
 				.max_retries = e->max_retries,
 				.drop_reason = OTLP_DROP_MAX_RETRIES,
 			};
 
-			add_dropped_err_for_signal(&p, count);
+			otlp_atomic_fetch_add_u64(&sg->dropped_err,
+				count,
+				OTLP_MEMORY_ORDER_RELAXED);
 			event_log(e, &ev);
 			/* Permanent failure — free the pending batch. */
-			clear_in_flight_batch(e, &p);
+			clear_in_flight_batch(e, sg, sp);
 		}
 		else
 		{
@@ -1324,7 +1090,7 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 				otlp_event_t ev = {
 					.code = OTLP_EVT_RETRY_ARMED,
 					.level = OTLP_LOG_WARN,
-					.signal = p.signal,
+					.signal = sp->id,
 					.http_status = http_status,
 					.attempt = e->attempt,
 					.max_retries = e->max_retries,
@@ -1342,12 +1108,13 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 	}
 	/* Permanent 4xx (non-429). */
 	otlp_atomic_fetch_add_u64(&e->http_4xx, 1, OTLP_MEMORY_ORDER_RELAXED);
-	add_dropped_err_for_signal(&p, count);
+	otlp_atomic_fetch_add_u64(
+		&sg->dropped_err, count, OTLP_MEMORY_ORDER_RELAXED);
 	{
 		otlp_event_t ev = {
 			.code = OTLP_EVT_ITEMS_DROPPED,
 			.level = OTLP_LOG_ERROR,
-			.signal = p.signal,
+			.signal = sp->id,
 			.count = count,
 			.http_status = http_status,
 			.drop_reason = OTLP_DROP_HTTP_STATUS,
@@ -1356,7 +1123,7 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 		event_log(e, &ev);
 	}
 	/* Permanent failure — free the pending batch. */
-	clear_in_flight_batch(e, &p);
+	clear_in_flight_batch(e, sg, sp);
 }
 
 otlp_status_t
@@ -1364,45 +1131,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 {
 	uint64_t deadline;
 	bool work_done;
-	struct signal_path paths[3];
 	int s;
-
-	if (!e)
-		return OTLP_ERR_NULL;
-
-	/* Build the signal descriptor table once. All pointer fields
-	 * point into the exporter struct; mutations through paths[]
-	 * update e directly. */
-	paths[SIGNAL_SPAN] = (struct signal_path){
-		.queue = &e->queue,
-		.pending = (void **) e->pending,
-		.pending_cap = e->pending_cap,
-		.pending_count = &e->pending_count,
-		.first_set = &e->first_pending_set,
-		.first_mono = &e->first_pending_mono,
-		.signal_kind = SIGNAL_SPAN,
-		.start_post = try_start_post,
-	};
-	paths[SIGNAL_METRIC] = (struct signal_path){
-		.queue = &e->metric_queue,
-		.pending = (void **) e->metric_pending,
-		.pending_cap = e->metric_pending_cap,
-		.pending_count = &e->metric_pending_count,
-		.first_set = &e->metric_first_set,
-		.first_mono = &e->metric_first_mono,
-		.signal_kind = SIGNAL_METRIC,
-		.start_post = try_start_metric_post,
-	};
-	paths[SIGNAL_LOG] = (struct signal_path){
-		.queue = &e->log_queue,
-		.pending = (void **) e->log_pending,
-		.pending_cap = e->log_pending_cap,
-		.pending_count = &e->log_pending_count,
-		.first_set = &e->log_first_set,
-		.first_mono = &e->log_first_mono,
-		.signal_kind = SIGNAL_LOG,
-		.start_post = try_start_log_post,
-	};
 
 	deadline = now_mono_ms() + max_wait_ms;
 
@@ -1413,18 +1142,18 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		/* 1. Drain all three queues into their pending arrays. */
 		for (s = 0; s < 3; s++)
 		{
-			while (*paths[s].pending_count < paths[s].pending_cap)
+			while (e->sig[s].pending_count < e->sig[s].pending_cap)
 			{
-				void *item = mpsc_queue_pop(paths[s].queue);
+				void *item = mpsc_queue_pop(&e->sig[s].queue);
 
 				if (!item)
 					break;
-				paths[s].pending[(*paths[s].pending_count)++] =
+				e->sig[s].pending[e->sig[s].pending_count++] =
 					item;
-				if (!*paths[s].first_set)
+				if (!e->sig[s].first_set)
 				{
-					*paths[s].first_mono = now_mono_ms();
-					*paths[s].first_set = true;
+					e->sig[s].first_mono = now_mono_ms();
+					e->sig[s].first_set = true;
 				}
 				work_done = true;
 			}
@@ -1435,15 +1164,14 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		{
 			for (s = 0; s < 3; s++)
 			{
-				if (*paths[s].pending_count > 0)
+				if (e->sig[s].pending_count > 0)
 				{
 					int http_status = 200;
 					struct http_outcome o = { 0 };
 
-					e->in_flight_signal =
-						paths[s].signal_kind;
+					e->in_flight_signal = s;
 					e->in_flight_count =
-						*paths[s].pending_count;
+						e->sig[s].pending_count;
 					if (e->null_transport_status_fn)
 						http_status = e->null_transport_status_fn(
 							e->null_transport_status_ctx);
@@ -1467,14 +1195,14 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			{
 				if (e->in_flight || e->backoff_armed)
 					break;
-				if (*paths[s].pending_count >= e->batch_size ||
-					(*paths[s].first_set &&
-						now_ms - *paths[s].first_mono >=
+				if (e->sig[s].pending_count >= e->batch_size ||
+					(e->sig[s].first_set &&
+						now_ms - e->sig[s].first_mono >=
 							e->batch_ms) ||
 					(shutdown &&
-						*paths[s].pending_count > 0))
+						e->sig[s].pending_count > 0))
 				{
-					if (paths[s].start_post(e) == OTLP_OK)
+					if (try_start_post(e, s) == OTLP_OK)
 						work_done = true;
 				}
 			}
@@ -1524,7 +1252,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			(void) st;
 		}
 
-		/* 5. Backoff retry (table-driven via paths[]). */
+		/* 5. Backoff retry. */
 		if (e->backoff_armed && !e->in_flight &&
 			now_mono_ms() >= e->backoff_deadline_mono)
 		{
@@ -1536,7 +1264,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			 * double-processes the batch (double-counting in
 			 * stats). */
 			if (!e->null_transport)
-				paths[e->in_flight_signal].start_post(e);
+				try_start_post(e, e->in_flight_signal);
 			if (e->in_flight)
 				work_done = true;
 		}
@@ -1572,12 +1300,12 @@ otlp_exporter_flush(otlp_exporter_t *e)
 	{
 		otlp_exporter_tick(e, 100);
 		now = now_mono_ms();
-	} while ((e->pending_count > 0 || e->in_flight ||
-			 mpsc_queue_size(&e->queue) > 0 ||
-			 e->metric_pending_count > 0 ||
-			 mpsc_queue_size(&e->metric_queue) > 0 ||
-			 e->log_pending_count > 0 ||
-			 mpsc_queue_size(&e->log_queue) > 0) &&
+	} while ((e->sig[SIGNAL_SPAN].pending_count > 0 || e->in_flight ||
+			 mpsc_queue_size(&e->sig[SIGNAL_SPAN].queue) > 0 ||
+			 e->sig[SIGNAL_METRIC].pending_count > 0 ||
+			 mpsc_queue_size(&e->sig[SIGNAL_METRIC].queue) > 0 ||
+			 e->sig[SIGNAL_LOG].pending_count > 0 ||
+			 mpsc_queue_size(&e->sig[SIGNAL_LOG].queue) > 0) &&
 		now < deadline);
 
 	/* The return-status check must match the loop condition. The
@@ -1587,11 +1315,12 @@ otlp_exporter_flush(otlp_exporter_t *e)
 	 * before the next drain), the user needs to know items remain.
 	 * Pre-v0.5.58 this check omitted the queue sizes, so flush
 	 * could silently return OK with unsent items. */
-	if (e->pending_count > 0 || e->in_flight ||
-		e->metric_pending_count > 0 || e->log_pending_count > 0 ||
-		mpsc_queue_size(&e->queue) > 0 ||
-		mpsc_queue_size(&e->metric_queue) > 0 ||
-		mpsc_queue_size(&e->log_queue) > 0)
+	if (e->sig[SIGNAL_SPAN].pending_count > 0 || e->in_flight ||
+		e->sig[SIGNAL_METRIC].pending_count > 0 ||
+		e->sig[SIGNAL_LOG].pending_count > 0 ||
+		mpsc_queue_size(&e->sig[SIGNAL_SPAN].queue) > 0 ||
+		mpsc_queue_size(&e->sig[SIGNAL_METRIC].queue) > 0 ||
+		mpsc_queue_size(&e->sig[SIGNAL_LOG].queue) > 0)
 		return OTLP_ERR_NETWORK;
 	return OTLP_OK;
 }
@@ -1843,15 +1572,16 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 	if (!e || !m)
 		return OTLP_ERR_NULL;
 	otlp_atomic_fetch_add_u64(
-		&e->emitted_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
+		&e->sig[SIGNAL_METRIC].emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
 	{
 		/* Accounting invariant: emitted == sent + dropped_err.
 		 * Pre-v0.5.59 this path returned without updating
 		 * dropped_err, breaking the invariant under OOM. */
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_metrics_err, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_METRIC].dropped_err,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
 	arr[0] = m;
@@ -1871,11 +1601,13 @@ otlp_exporter_flush_metric(otlp_exporter_t *e, const otlp_metric_t *m)
 			body.len);
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
-		otlp_atomic_fetch_add_u64(
-			&e->sent_metrics, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_METRIC].sent,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 	else
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_metrics_err, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_METRIC].dropped_err,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
@@ -1889,15 +1621,16 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 	if (!e || !lr)
 		return OTLP_ERR_NULL;
 	otlp_atomic_fetch_add_u64(
-		&e->emitted_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
+		&e->sig[SIGNAL_LOG].emitted, 1, OTLP_MEMORY_ORDER_RELAXED);
 	st = otlp_pb_buf_init(&body, 0);
 	if (st != OTLP_OK)
 	{
 		/* Accounting invariant: emitted == sent + dropped_err.
 		 * Pre-v0.5.59 this path returned without updating
 		 * dropped_err, breaking the invariant under OOM. */
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_logs_err, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_LOG].dropped_err,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 		return st;
 	}
 	arr[0] = lr;
@@ -1915,10 +1648,11 @@ otlp_exporter_flush_log(otlp_exporter_t *e, const otlp_log_record_t *lr)
 	otlp_pb_buf_free(&body);
 	if (st == OTLP_OK)
 		otlp_atomic_fetch_add_u64(
-			&e->sent_logs, 1, OTLP_MEMORY_ORDER_RELAXED);
+			&e->sig[SIGNAL_LOG].sent, 1, OTLP_MEMORY_ORDER_RELAXED);
 	else
-		otlp_atomic_fetch_add_u64(
-			&e->dropped_logs_err, 1, OTLP_MEMORY_ORDER_RELAXED);
+		otlp_atomic_fetch_add_u64(&e->sig[SIGNAL_LOG].dropped_err,
+			1,
+			OTLP_MEMORY_ORDER_RELAXED);
 	return st;
 }
 
@@ -1963,15 +1697,49 @@ otlp_exporter_poll_fds(otlp_exporter_t *e,
 otlp_status_t
 otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 {
+	int k;
+
 	if (!e || !out)
 		return OTLP_ERR_NULL;
-	out->emitted =
-		otlp_atomic_load_u64(&e->emitted, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_full = otlp_atomic_load_u64(
-		&e->dropped_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_err = otlp_atomic_load_u64(
-		&e->dropped_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->sent = otlp_atomic_load_u64(&e->sent, OTLP_MEMORY_ORDER_RELAXED);
+	for (k = 0; k < N_SIGNALS; k++)
+	{
+		otlp_exporter_stats_t *o = out;
+		uint64_t emitted = otlp_atomic_load_u64(
+			&e->sig[k].emitted, OTLP_MEMORY_ORDER_RELAXED);
+		uint64_t dropped_full = otlp_atomic_load_u64(
+			&e->sig[k].dropped_full, OTLP_MEMORY_ORDER_RELAXED);
+		uint64_t dropped_err = otlp_atomic_load_u64(
+			&e->sig[k].dropped_err, OTLP_MEMORY_ORDER_RELAXED);
+		uint64_t sent = otlp_atomic_load_u64(
+			&e->sig[k].sent, OTLP_MEMORY_ORDER_RELAXED);
+		uint64_t rejected = otlp_atomic_load_u64(
+			&e->sig[k].rejected, OTLP_MEMORY_ORDER_RELAXED);
+
+		switch (k)
+		{
+			case SIGNAL_SPAN:
+				o->emitted = emitted;
+				o->dropped_full = dropped_full;
+				o->dropped_err = dropped_err;
+				o->sent = sent;
+				o->rejected_spans = rejected;
+				break;
+			case SIGNAL_METRIC:
+				o->emitted_metrics = emitted;
+				o->dropped_metrics_full = dropped_full;
+				o->dropped_metrics_err = dropped_err;
+				o->sent_metrics = sent;
+				o->rejected_metrics = rejected;
+				break;
+			case SIGNAL_LOG:
+				o->emitted_logs = emitted;
+				o->dropped_logs_full = dropped_full;
+				o->dropped_logs_err = dropped_err;
+				o->sent_logs = sent;
+				o->rejected_logs = rejected;
+				break;
+		}
+	}
 	out->http_2xx =
 		otlp_atomic_load_u64(&e->http_2xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->http_4xx =
@@ -1980,27 +1748,5 @@ otlp_exporter_get_stats(otlp_exporter_t *e, otlp_exporter_stats_t *out)
 		otlp_atomic_load_u64(&e->http_5xx, OTLP_MEMORY_ORDER_RELAXED);
 	out->network_err = otlp_atomic_load_u64(
 		&e->network_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->emitted_metrics = otlp_atomic_load_u64(
-		&e->emitted_metrics, OTLP_MEMORY_ORDER_RELAXED);
-	out->sent_metrics = otlp_atomic_load_u64(
-		&e->sent_metrics, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_metrics_full = otlp_atomic_load_u64(
-		&e->dropped_metrics_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_metrics_err = otlp_atomic_load_u64(
-		&e->dropped_metrics_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->emitted_logs = otlp_atomic_load_u64(
-		&e->emitted_logs, OTLP_MEMORY_ORDER_RELAXED);
-	out->sent_logs =
-		otlp_atomic_load_u64(&e->sent_logs, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_logs_full = otlp_atomic_load_u64(
-		&e->dropped_logs_full, OTLP_MEMORY_ORDER_RELAXED);
-	out->dropped_logs_err = otlp_atomic_load_u64(
-		&e->dropped_logs_err, OTLP_MEMORY_ORDER_RELAXED);
-	out->rejected_spans = otlp_atomic_load_u64(
-		&e->rejected_spans, OTLP_MEMORY_ORDER_RELAXED);
-	out->rejected_metrics = otlp_atomic_load_u64(
-		&e->rejected_metrics, OTLP_MEMORY_ORDER_RELAXED);
-	out->rejected_logs = otlp_atomic_load_u64(
-		&e->rejected_logs, OTLP_MEMORY_ORDER_RELAXED);
 	return OTLP_OK;
 }
