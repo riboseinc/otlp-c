@@ -182,4 +182,49 @@ extern "C"
 }
 #endif
 
+/* ── Exemplars (v0.8.0) ───────────────────────────────────────── */
+
+/* A trace-correlated exemplar data point (OTLP metrics Exemplar):
+ * a value captured at a moment, optionally tied to the trace/span
+ * that produced it. Added to counter/gauge/histogram metrics via
+ * otlp_metric_add_exemplar (cloned; caller retains ownership). */
+typedef struct otlp_exemplar otlp_exemplar_t;
+
+/* Create/free/clone. Zero-value exemplar until a value is set. */
+OTLP_C_EXPORT
+otlp_exemplar_t *otlp_exemplar_create(void);
+OTLP_C_EXPORT
+void otlp_exemplar_free(otlp_exemplar_t *ex);
+OTLP_C_EXPORT
+otlp_exemplar_t *otlp_exemplar_clone(const otlp_exemplar_t *ex);
+
+/* Set the exemplar's value — double (field 2) or int64 (field 3).
+ * The last setter called wins. */
+OTLP_C_EXPORT
+otlp_status_t otlp_exemplar_set_double_value(otlp_exemplar_t *ex,
+	double value);
+OTLP_C_EXPORT
+otlp_status_t otlp_exemplar_set_int_value(otlp_exemplar_t *ex,
+	int64_t value);
+
+/* Correlate with the trace that produced the value. IDs are
+ * copied; all-zero IDs are rejected (v0.5.54 rule). Either
+ * pointer may be NULL to leave that ID unset. */
+OTLP_C_EXPORT
+otlp_status_t otlp_exemplar_set_trace_context(otlp_exemplar_t *ex,
+	const uint8_t *trace_id /* 16 bytes */,
+	const uint8_t *span_id /* 8 bytes */);
+
+/* Stamp the exemplar with the current time (field 6). */
+OTLP_C_EXPORT
+otlp_status_t otlp_exemplar_mark_time(otlp_exemplar_t *ex);
+
+/* Clone `ex` into the metric's exemplar list (emitted on the
+ * metric's data point: NumberDataPoint field 5, HistogramDataPoint
+ * field 8). Metrics without a value set at encode time return
+ * OTLP_ERR_INVALID_ARGUMENT. */
+OTLP_C_EXPORT
+otlp_status_t otlp_metric_add_exemplar(otlp_metric_t *m,
+	const otlp_exemplar_t *ex);
+
 #endif

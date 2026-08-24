@@ -1,6 +1,6 @@
 {
   "name": "otlp-c",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "description": "Pure-C99 OTLP/HTTP client for OpenTelemetry. Zero non-libc dependencies.",
   "homepage": "https://github.com/riboseinc/otlp-c",
   "license": "BSD-3-Clause",

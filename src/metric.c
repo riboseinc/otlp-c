@@ -90,6 +90,7 @@ otlp_metric_free(otlp_metric_t *m)
 	otlp_free(m->exp_pos_counts);
 	otlp_free(m->exp_neg_counts);
 	otlp_attr_vec_free(&m->attrs);
+	otlp_free(m->exemplars);
 	otlp_free(m);
 }
 
@@ -520,6 +521,22 @@ otlp_metric_clone(const otlp_metric_t *src)
 	if (otlp_attr_vec_copy(&dst->attrs, &src->attrs) != OTLP_OK)
 		goto fail;
 
+	/* Exemplars (v0.8.0): flat array deep copy. */
+	if (src->n_exemplars > 0)
+	{
+		if (src->n_exemplars > SIZE_MAX / sizeof(*src->exemplars))
+			goto fail;
+		dst->exemplars =
+			otlp_malloc(src->n_exemplars * sizeof(*src->exemplars));
+		if (!dst->exemplars)
+			goto fail;
+		memcpy(dst->exemplars,
+			src->exemplars,
+			src->n_exemplars * sizeof(*src->exemplars));
+		dst->n_exemplars = src->n_exemplars;
+		dst->cap_exemplars = src->n_exemplars;
+	}
+
 	/* Histogram bounds + bucket counts. src was validated at
 	 * create but a defensive overflow check is cheap. */
 	if (src->n_bounds > 0 && src->bounds)
@@ -579,4 +596,133 @@ otlp_metric_clone(const otlp_metric_t *src)
 fail:
 	otlp_metric_free(dst);
 	return NULL;
+}
+
+
+/* ── Exemplars (v0.8.0) ───────────────────────────────────────── */
+
+otlp_exemplar_t *
+otlp_exemplar_create(void)
+{
+	return otlp_calloc(1, sizeof(otlp_exemplar_t));
+}
+
+void
+otlp_exemplar_free(otlp_exemplar_t *ex)
+{
+	otlp_free(ex);
+}
+
+otlp_exemplar_t *
+otlp_exemplar_clone(const otlp_exemplar_t *ex)
+{
+	otlp_exemplar_t *out;
+
+	if (!ex)
+		return NULL;
+	out = otlp_exemplar_create();
+	if (!out)
+		return NULL;
+	*out = *ex;
+	return out;
+}
+
+otlp_status_t
+otlp_exemplar_set_double_value(otlp_exemplar_t *ex, double value)
+{
+	if (!ex)
+		return OTLP_ERR_NULL;
+	ex->double_val = value;
+	ex->has_double = true;
+	ex->has_int = false;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_exemplar_set_int_value(otlp_exemplar_t *ex, int64_t value)
+{
+	if (!ex)
+		return OTLP_ERR_NULL;
+	ex->int_val = value;
+	ex->has_int = true;
+	ex->has_double = false;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_exemplar_set_trace_context(otlp_exemplar_t *ex,
+	const uint8_t *trace_id,
+	const uint8_t *span_id)
+{
+	if (!ex)
+		return OTLP_ERR_NULL;
+	if (trace_id)
+	{
+		if (otlp_id_is_all_zero(trace_id, 16))
+			return OTLP_ERR_INVALID_ARGUMENT;
+		memcpy(ex->trace_id, trace_id, 16);
+		ex->has_trace = true;
+	}
+	if (span_id)
+	{
+		if (otlp_id_is_all_zero(span_id, 8))
+			return OTLP_ERR_INVALID_ARGUMENT;
+		memcpy(ex->span_id, span_id, 8);
+		ex->has_span = true;
+	}
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_exemplar_mark_time(otlp_exemplar_t *ex)
+{
+	uint64_t now = 0;
+
+	if (!ex)
+		return OTLP_ERR_NULL;
+	if (otlp_platform_now_unix_nano(&now) != OTLP_OK)
+		return OTLP_ERR_NETWORK;
+	ex->time_unix_nano = now;
+	ex->has_time = true;
+	return OTLP_OK;
+}
+
+otlp_status_t
+otlp_metric_add_exemplar(otlp_metric_t *m, const otlp_exemplar_t *ex)
+{
+	if (!m || !ex)
+		return OTLP_ERR_NULL;
+	if (!ex->has_double && !ex->has_int)
+		return OTLP_ERR_INVALID_ARGUMENT;
+	if (m->n_exemplars == m->cap_exemplars)
+	{
+		size_t new_cap = m->cap_exemplars ? m->cap_exemplars * 2 : 4;
+		struct otlp_exemplar *grown;
+
+		if (new_cap < m->cap_exemplars)
+			return OTLP_ERR_OVERFLOW;
+		grown = otlp_realloc(m->exemplars,
+			new_cap * sizeof(*grown));
+		if (!grown)
+			return OTLP_ERR_NOMEM;
+		m->exemplars = grown;
+		m->cap_exemplars = new_cap;
+	}
+	m->exemplars[m->n_exemplars] = *ex;
+	m->n_exemplars++;
+	return OTLP_OK;
+}
+
+size_t
+otlp_metric_get_n_exemplars(const otlp_metric_t *m)
+{
+	return m ? m->n_exemplars : 0;
+}
+
+const struct otlp_exemplar *
+otlp_metric_get_exemplar(const otlp_metric_t *m, size_t i)
+{
+	if (!m || i >= m->n_exemplars)
+		return NULL;
+	return &m->exemplars[i];
 }

@@ -697,6 +697,53 @@ static const struct otlp_field_spec OTLP_EH_FIELDS[] = {
 		false },
 };
 
+/* ── Exemplar ──────────────────────────────────────────────────── */
+
+enum
+{
+	OTLP_EX_FI_FILTERED_ATTRIBUTES,
+	OTLP_EX_FI_DOUBLE_VALUE,
+	OTLP_EX_FI_INT_VALUE,
+	OTLP_EX_FI_TRACE_ID,
+	OTLP_EX_FI_SPAN_ID,
+	OTLP_EX_FI_TIME,
+	OTLP_EX_FI_NFIELDS,
+};
+
+static const struct otlp_field_spec OTLP_EX_FIELDS[] = {
+	[OTLP_EX_FI_FILTERED_ATTRIBUTES] = { "filtered_attributes",
+		1,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		true },
+	[OTLP_EX_FI_DOUBLE_VALUE] = { "double_value",
+		2,
+		OTLP_PB_WIRE_FIXED64,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		false },
+	/* sfixed64 → fixed64 wire type. */
+	[OTLP_EX_FI_INT_VALUE] = { "int_value",
+		3,
+		OTLP_PB_WIRE_FIXED64,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		false },
+	[OTLP_EX_FI_TRACE_ID] = { "trace_id",
+		4,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		false },
+	[OTLP_EX_FI_SPAN_ID] = { "span_id",
+		5,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		false },
+	[OTLP_EX_FI_TIME] = { "time_unix_nano",
+		6,
+		OTLP_PB_WIRE_FIXED64,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		false },
+};
+
 /* ── NumberDataPoint (oneof value: as_double=4, as_int=6) ─────── */
 
 enum
@@ -705,6 +752,7 @@ enum
 	OTLP_NDP_FI_TIME,
 	OTLP_NDP_FI_AS_DOUBLE,
 	OTLP_NDP_FI_ATTRIBUTES,
+	OTLP_NDP_FI_EXEMPLARS,
 	OTLP_NDP_FI_COUNT,
 };
 
@@ -725,9 +773,14 @@ static const struct otlp_field_spec OTLP_NDP_FIELDS[] = {
 		OTLP_PB_WIRE_FIXED64,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		false },
-	/* Fields 5 (exemplars), 6 (as_int), 8 (flags) not emitted. */
+	/* Field 6 (as_int), 8 (flags) not emitted. */
 	[OTLP_NDP_FI_ATTRIBUTES] = { "attributes",
 		7,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		true },
+	[OTLP_NDP_FI_EXEMPLARS] = { "exemplars",
+		5,
 		OTLP_PB_WIRE_LEN,
 		OTLP_PRESENCE_DEFAULT_OMITTED,
 		true },
@@ -746,6 +799,7 @@ enum
 	OTLP_HDP_FI_SUM,
 	OTLP_HDP_FI_BUCKET_COUNTS,
 	OTLP_HDP_FI_EXPLICIT_BOUNDS,
+	OTLP_HDP_FI_EXEMPLARS,
 	OTLP_HDP_FI_ATTRIBUTES,
 	OTLP_HDP_FI_MIN,
 	OTLP_HDP_FI_MAX,
@@ -786,6 +840,11 @@ static const struct otlp_field_spec OTLP_HDP_FIELDS[] = {
 		true },
 	/* Fields 8 (exemplars) and 10 (flags, uint32 varint) not
 	 * emitted. */
+	[OTLP_HDP_FI_EXEMPLARS] = { "exemplars",
+		8,
+		OTLP_PB_WIRE_LEN,
+		OTLP_PRESENCE_DEFAULT_OMITTED,
+		true },
 	[OTLP_HDP_FI_ATTRIBUTES] = { "attributes",
 		9,
 		OTLP_PB_WIRE_LEN,

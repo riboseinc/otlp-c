@@ -80,6 +80,37 @@ find_submessage(struct otlp_pb_reader *r,
 	}
 }
 
+/* Like find_submessage, but for a FIXED64 field: advance to it
+ * and read the 8 raw bytes. */
+static bool
+find_field_fixed64(struct otlp_pb_reader *r,
+	uint32_t want_field,
+	uint64_t *v)
+{
+	for (;;)
+	{
+		uint32_t field;
+		int wt;
+
+		if (!otlp_pb_read_key(r, &field, &wt))
+			return false;
+		if (field == want_field && wt == OTLP_PB_WIRE_FIXED64)
+			return read_fixed64_raw(r, v);
+		if (!otlp_pb_skip(r, wt))
+			return false;
+	}
+}
+
+/* Like find_submessage, but for a LEN field read as raw bytes. */
+static bool
+find_field_bytes(struct otlp_pb_reader *r,
+	uint32_t want_field,
+	const uint8_t **b,
+	size_t *b_len)
+{
+	return find_submessage(r, want_field, b, b_len);
+}
+
 /* Descend ExportMetricsServiceRequest → ResourceMetrics →
  * ScopeMetrics → Metric → <oneof field> → data points. All numbers
  * are upstream literals (see file header). */
@@ -504,6 +535,15 @@ pin_table(const char *table,
 
 #define N_PINS(a) (sizeof(a) / sizeof((a)[0]))
 
+static const struct wire_pin PINS_EX[] = {
+	{ OTLP_EX_FI_FILTERED_ATTRIBUTES, 1, OTLP_PB_WIRE_LEN },
+	{ OTLP_EX_FI_DOUBLE_VALUE, 2, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EX_FI_INT_VALUE, 3, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EX_FI_TRACE_ID, 4, OTLP_PB_WIRE_LEN },
+	{ OTLP_EX_FI_SPAN_ID, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_EX_FI_TIME, 6, OTLP_PB_WIRE_FIXED64 }
+};
+
 static const struct wire_pin PINS_ETSR[] = {
 	{ OTLP_ETSR_FI_RESOURCE_SPANS, 1, OTLP_PB_WIRE_LEN }
 };
@@ -718,6 +758,7 @@ static const struct wire_pin PINS_EPS[] = {
 static int
 test_schema_pins_upstream(void)
 {
+	pin_table("EX", OTLP_EX_FIELDS, PINS_EX, N_PINS(PINS_EX));
 	pin_table("ETSR", OTLP_ETSR_FIELDS, PINS_ETSR, N_PINS(PINS_ETSR));
 	pin_table("RS", OTLP_RS_FIELDS, PINS_RS, N_PINS(PINS_RS));
 	pin_table("R", OTLP_R_FIELDS, PINS_R, N_PINS(PINS_R));
@@ -858,6 +899,64 @@ test_schema_url_emitted(void)
 	return 0;
 }
 
+/* v0.8.0: exemplars — wire-pinned emission on NumberDataPoint
+ * (field 5) and HistogramDataPoint (field 8), with the exemplar's
+ * own fields at their upstream literals. */
+static int
+test_exemplars_emitted(void)
+{
+	otlp_metric_t *m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "exprobe", "1", NULL, NULL, 0);
+	otlp_exemplar_t *ex = otlp_exemplar_create();
+	const uint8_t trace[16] = { 1 };
+	const uint8_t span[8] = { 2 };
+	struct otlp_pb_buf buf = { 0 };
+	const uint8_t *dp, *exb;
+	size_t dp_len, exb_len;
+	struct otlp_pb_reader r;
+	uint64_t v;
+	const uint8_t *b;
+	size_t b_len;
+	const otlp_metric_t *mets[1];
+
+	check_true(m && ex);
+	check_ok(otlp_exemplar_set_double_value(ex, 3.5));
+	check_ok(otlp_exemplar_set_trace_context(ex, trace, span));
+	/* Timestamp via the API; captured below from the wire. */
+	check_ok(otlp_exemplar_mark_time(ex));
+	check_ok(otlp_metric_add_exemplar(m, ex));
+	otlp_exemplar_free(ex);
+	otlp_metric_record(m, 7.0);
+	mets[0] = m;
+
+	check_ok(otlp_pb_buf_init(&buf, 0));
+	check_ok(otlp_encode_export_metrics_service_request(&buf, "svc",
+		NULL, NULL, 0, NULL, NULL, mets, 1));
+	check_true(find_metric_data_point(
+		buf.data, buf.len, 7 /* Sum oneof */, &dp, &dp_len));
+	otlp_pb_reader_init(&r, dp, dp_len);
+	check_true(find_submessage(&r, 5 /* exemplars */, &exb, &exb_len));
+	{
+		struct otlp_pb_reader er;
+
+		otlp_pb_reader_init(&er, exb, exb_len);
+		check_true(find_field_fixed64(&er, 2, &v));
+		check_true(bits_of(3.5) == v);
+		otlp_pb_reader_init(&er, exb, exb_len);
+		check_true(find_field_bytes(&er, 4, &b, &b_len));
+		check_true(b_len == 16 && b[0] == 1);
+		otlp_pb_reader_init(&er, exb, exb_len);
+		check_true(find_field_bytes(&er, 5, &b, &b_len));
+		check_true(b_len == 8 && b[0] == 2);
+		otlp_pb_reader_init(&er, exb, exb_len);
+		check_true(find_field_fixed64(&er, 6, &v));
+		check_true(v > 0); /* stamped, not absent */
+	}
+	otlp_pb_buf_free(&buf);
+	otlp_metric_free(m);
+	return 0;
+}
+
 int
 main(void)
 {
@@ -867,6 +966,7 @@ main(void)
 	failures += test_exp_histogram_wire_numbers();
 	failures += test_schema_pins_upstream();
 	failures += test_schema_url_emitted();
+	failures += test_exemplars_emitted();
 
 	if (failures)
 		printf("[unit-wire] FAIL (%d test(s))\n", failures);

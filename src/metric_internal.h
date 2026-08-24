@@ -8,6 +8,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Exemplar model (v0.8.0): one value (double or int64), optional
+ * trace/span correlation, optional timestamp. */
+struct otlp_exemplar
+{
+	double double_val;
+	int64_t int_val;
+	bool has_double;
+	bool has_int;
+	uint8_t trace_id[16];
+	uint8_t span_id[8];
+	bool has_trace;
+	bool has_span;
+	uint64_t time_unix_nano;
+	bool has_time;
+};
+
 struct otlp_metric
 {
 	otlp_metric_type_t type;
@@ -48,9 +64,20 @@ struct otlp_metric
 	uint64_t *exp_neg_counts; /* owned */
 	size_t exp_neg_n;
 	bool has_exp_scale;
+	/* Exemplars (v0.8.0): owned clones added via
+	 * otlp_metric_add_exemplar; emitted on the data point. */
+	struct otlp_exemplar *exemplars;
+	size_t n_exemplars;
+	size_t cap_exemplars;
 };
 
 /* Accessors for encoder. */
+/* Exemplar accessors for the encoder. */
+size_t
+otlp_metric_get_n_exemplars(const otlp_metric_t *m);
+const struct otlp_exemplar *
+otlp_metric_get_exemplar(const otlp_metric_t *m, size_t i);
+
 const char *
 otlp_metric_get_name(const otlp_metric_t *m);
 const char *
