@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-08-24
+
+Conformance gates CI-enforced; the 1.x surface validated live.
+
+### Added — conformance-gates CI job
+
+The v1.0.2 manual tools are now CI-enforced (ubuntu): the schema
+tables are audited against the pinned opentelemetry-proto
+descriptors (`pip install opentelemetry-proto==1.44.0`),
+and the golden vectors are REGENERATED and must match the
+checked-in files byte-for-byte — so schema drift, stale fixtures,
+and upstream proto changes all fail the build. Regeneration is
+idempotent (verified locally).
+
+### Added — the full 1.x surface against a real collector
+
+The Jaeger integration test gains a scenario exercising
+everything the frozen API added this cycle on one exporter:
+`schema_url`, an extra HTTP header, env-var opts
+(`OTEL_EXPORTER_OTLP_TIMEOUT` via `otlp_exporter_opts_apply_env`),
+a per-signal `metrics_endpoint`, and a metric carrying an
+exemplar (double value + trace/span correlation + timestamp). A
+2xx from otelcol — whose real protobuf parser would reject
+malformed exemplars — is the acceptance gate.
+
 ## [1.0.2] - 2026-08-24
 
 Descriptor audit of all 32 schema tables; a second released wire
