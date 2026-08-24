@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-08-24
+
+**The API freeze.** All five Path-to-1.0 criteria re-audited and
+confirmed at v0.8.0; the source API is now frozen for the 1.x
+line — additions only, no breaking changes to signatures, types,
+or semantics (the C ABI is explicitly not guaranteed across
+builds; consumers compile against the headers).
+
+### The 1.0 audit (TODO.complete/168)
+
+- 133 exported symbols across 10 headers — the v0.5.104 audit's
+  124 plus the 9 added since (env config, HTTP headers,
+  per-signal endpoints, schema_url, exemplars), each reviewed for
+  docstrings, return codes, ownership, and thread-safety.
+- No stubs anywhere in the tree; strerror covers every error
+  code (pinned); 31+1 schema tables pinned against upstream
+  literals; golden payloads reference-validated; live otelcol +
+  Jaeger integration green in CI on every PR.
+- Two freeze-hazard fixes shipped with this release: the ~26 KiB
+  `otlp_env_storage_t` stack cost is now documented (prefer
+  static/heap placement on constrained stacks), and
+  `otlp_exporter_opts_apply_env`'s getenv thread contract is
+  documented (call during single-threaded init).
+- Deliberately NOT in 1.x (design constraints, not gaps): TLS
+  (sidecar terminates — ADR-0004), gRPC, payload compression —
+  the path to those is a 2.x optional-deps model.
+
 ## [0.8.0] - 2026-08-24
 
 Exemplars: the last substantive OTLP metrics feature.

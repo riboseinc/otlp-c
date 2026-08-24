@@ -208,7 +208,9 @@ extern "C"
 	 * next to opts — and keeps it alive through the following
 	 * otlp_exporter_create(); opts fields point into it for
 	 * whatever the environment supplied. Bounded: at most 32
-	 * resource-attribute pairs, keys 128 bytes, values 256. */
+	 * resource-attribute pairs and 32 headers, keys 128 bytes,
+	 * values 256 — roughly 26 KiB total, so prefer static or heap
+	 * placement on constrained stacks. */
 	typedef struct
 	{
 		char endpoint[256];
@@ -256,6 +258,10 @@ extern "C"
 	 * Returns the first malformed value found
 	 * (OTLP_ERR_INVALID_ARGUMENT), or OTLP_OK. Not supported:
 	 * per-signal TIMEOUT variables.
+	 *
+	 * THREAD SAFETY: reads the process environment (getenv).
+	 * Call during single-threaded initialization, before any
+	 * thread might call setenv/putenv.
 	 */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,

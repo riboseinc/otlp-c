@@ -816,8 +816,8 @@ test_schema_url_emitted(void)
 	const otlp_span_t *spans[1] = { NULL };
 	const otlp_metric_t *mets[1] = { NULL };
 	const otlp_log_record_t *logs[1] = { NULL };
+	/* (bodies asserted in place; no cross-signal capture needed) */
 	otlp_span_t *sp = otlp_span_create("schema-url-probe");
-	const uint8_t *trace_body, *metrics_body, *logs_body;
 
 	check_true(sp != NULL);
 	spans[0] = sp;
