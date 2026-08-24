@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * POSIX non-blocking socket primitives. Compiled on Linux, macOS,
  * BSDs. The Win32 equivalent lives in platform_win.c.

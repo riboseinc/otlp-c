@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Integration test. Requires Docker (docker compose) to run otelcol
 # + Jaeger. Gated by OTLP_C_RUN_INTEGRATION=1 so the test no-ops

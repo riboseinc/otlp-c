@@ -3,7 +3,7 @@
     "version": "0.5.17",
     "description": "Pure-C99 OTLP/HTTP client for OpenTelemetry. Zero non-libc dependencies.",
     "homepage": "https://github.com/riboseinc/otlp-c",
-    "license": "Apache-2.0",
+    "license": "BSD-3-Clause",
     "dependencies": [
         {
             "name": "vcpkg-cmake",

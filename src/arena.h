@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Bump-allocator arena. Single-grow buffer with no per-allocation
  * headers. Designed for the OTLP encoder's per-POST sub-message

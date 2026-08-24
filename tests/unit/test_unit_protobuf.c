@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Unit tests for the protobuf wire encoder. Complements the property
 // tests with specific known-answer test vectors from the Protobuf

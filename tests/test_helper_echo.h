@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * In-process HTTP echo server, for tests. Test-only thread; never
  * used by the library itself.

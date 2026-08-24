@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Exporter internals — internal-only header for tests. NOT
  * installed. The public exporter API remains the surface in

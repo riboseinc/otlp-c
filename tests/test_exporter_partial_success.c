@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * PartialSuccess wire test (v0.5.96). The OTLP spec lets a
  * collector answer 200 OK while reporting server-side data loss in

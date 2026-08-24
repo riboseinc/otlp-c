@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Lock-free bounded MPSC ring. Vyukov-style with per-slot sequence
  * numbers — the canonical pattern for multi-producer/single-consumer

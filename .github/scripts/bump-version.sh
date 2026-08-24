@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 # bump-version.sh -- bump the version across CMakeLists.txt, vcpkg.json,
 # version.h, and CHANGELOG.md.
 #

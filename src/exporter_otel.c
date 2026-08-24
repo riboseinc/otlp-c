@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Exporter-internal: build HTTP POSTs from batches of items.
  * See src/exporter_otel.h.

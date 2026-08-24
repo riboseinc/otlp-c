@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Integration test: emit 100 spans to a local otelcol + Jaeger
  * deployment, query Jaeger's API, assert the spans appear.

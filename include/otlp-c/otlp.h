@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * otlp-c — umbrella public header. Include this to get everything
  * the typical caller needs. Power users can include the specific

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Deep-clone round-trips (v0.6.2). The coverage re-measurement
 // found the clone/copy arms for everything richer than plain

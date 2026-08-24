@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Symbol visibility macros. Public symbols are tagged OTLP_C_EXPORT;
  * internal symbols have no annotation and default to hidden (set via

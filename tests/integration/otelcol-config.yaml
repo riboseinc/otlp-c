@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # otelcol configuration for the otlp-c integration test.
 # Receives OTLP/HTTP traces on :4318 and exports them to a local

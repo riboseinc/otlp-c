@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Property test harness — Phase 0 seed. The implementing agent
  * will populate this file with real properties as each phase of

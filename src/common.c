@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * otlp_version() and otlp_strerror() — runtime version string and
  * human-readable error messages.

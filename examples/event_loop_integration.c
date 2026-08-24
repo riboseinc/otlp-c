@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Event-loop integration example (the Phase 7 deliverable, finally
  * built in v0.5.105): drives the exporter from a poll() loop via

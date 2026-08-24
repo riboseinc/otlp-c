@@ -14,7 +14,7 @@ These are not stylistic preferences; they are load-bearing. Breaking any of them
 
 1. **Pure C99.** No C++ files. No `extern "C"` wrappers around C++ implementations. If you need atomic operations, use C11 `<stdatomic.h>` or platform intrinsics — never C++ atomics.
 2. **Zero non-libc runtime dependencies.** No protobuf, no gRPC, no libcurl, no OpenSSL, no zlib. The encoder is hand-rolled for the ~6 OTLP message types we need. See `docs/otlp-spec.md` for the schema.
-3. **Apache 2.0 only.** Every line committed must be Apache-2.0 compatible. Don't introduce BSD-only or GPL code. This matters for the eventual CNCF donation path.
+3. **BSD 3-Clause only.** Every line committed must be BSD-3-Clause compatible (changed from Apache-2.0 in v0.6.14). Don't introduce GPL code. NOTE: this closes the CNCF-donation path — CNCF projects must be Apache-2.0.
 4. **No telemetry from otlp-c itself.** The library does not phone home. No version checks. No usage reporting.
 5. **Public API stability within a major version.** Once 1.0.0 ships, no breaking API changes within the 1.x line. New features = new functions or new opt-in structs. See `docs/roadmap.md` for the version policy.
 6. **Clean default builds.** `cmake -B build && cmake --build build` must succeed and link a working library. All implementations are real — no stubs, no `OTLP_ERR_NOT_IMPLEMENTED`.

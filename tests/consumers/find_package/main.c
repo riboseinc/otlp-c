@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /* Consumer smoke test: link against the INSTALLED otlp-c and run
  * a real emit -> flush round trip (null transport, no
  * network). */

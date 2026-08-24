@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Microbenchmarks. Not run by default CI; invoke manually with
 # `cmake --build build --target otlp_bench_encode`.

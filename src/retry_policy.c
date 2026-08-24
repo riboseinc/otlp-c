@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /* Retry timing policy — see retry_policy.h. Logic extracted
  * verbatim from exporter.c (v0.6.13); behavior is unchanged. */
 #include "retry_policy.h"

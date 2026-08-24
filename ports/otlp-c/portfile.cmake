@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # vcpkg port recipe for otlp-c. Consumers can use this as an overlay:
 #   vcpkg install otlp-c --overlay-ports=ports

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Property-based test PRNG. xorshift64 — deterministic from a seed,
  * tiny (4 lines of state), good statistical properties for testing.

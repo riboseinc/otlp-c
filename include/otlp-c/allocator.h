@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Custom allocator hook. Allows the caller to replace the library's
  * internal malloc/free/realloc with a custom implementation.

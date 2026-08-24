@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // otlp_strerror() completeness pin (v0.5.105): every status code
 // in the public enum must map to a non-empty, DISTINCT message.

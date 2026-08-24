@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * In-process HTTP echo server implementation. POSIX only (test
  * code; the library is portable, the test helper is not).

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Microbenchmark: encode N spans, time the wall clock per call.
  * Not a regression benchmark — just a baseline measurement tool.

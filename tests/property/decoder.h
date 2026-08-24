@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Hand-rolled protobuf decoder, for property tests that need to
  * round-trip encoder output. Test-only; lives under tests/property

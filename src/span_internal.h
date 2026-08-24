@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Span internals — internal-only header. Exposes the attribute type
  * and read-only accessors so the OTLP encoder (src/otlp_messages.c)
