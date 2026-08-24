@@ -86,12 +86,17 @@ transport-agnostic via callback-based carriers.
 │   └──────────────┘ └──────────────┘ └──────────────┘         │
 │          │                                              │     │
 │          ▼                                              │     │
-│   ┌──────────────────┐         ┌──────────────────┐       │
-│   │ protobuf_encode.c│         │ http_client.c    │       │
-│   │ Wire encoder +   │         │ HTTP/1.1 state   │       │
-│   │ SBO buffer.      │         │ machine + keep-  │       │
-│   │                  │         │ alive.           │       │
-│   └──────────────────┘         └──────────────────┘       │
+│   ┌──────────────────┐  ┌────────────────┐  ┌──────────┐ │
+│   │ protobuf_encode.c│  │http_client.c   │  │retry_    │ │
+│   │ Wire encoder +   │  │HTTP/1.1 state  │  │policy.c  │ │
+│   │ SBO buffer.      │  │machine + keep- │  │Pure tim- │ │
+│   │                  │  │alive + timeouts│  │ing fns.  │ │
+│   └──────────────────┘  └───────┬────────┘  └──────────┘ │
+│   ┌──────────────────┐  ┌──────┴─────────┐               │
+│   │ otlp_schema.h    │  │http_response_  │               │
+│   │ Model-driven     │  │parser.c (pure  │               │
+│   │ field tables.    │  │wire format)    │               │
+│   └──────────────────┘  └────────────────┘               │
 │          │                                  │              │
 │   ┌──────────────────┐              ┌──────────────────┐   │
 │   │ otlp_schema.h    │              │ platform.c       │   │

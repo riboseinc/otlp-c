@@ -120,11 +120,13 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `src/otlp_logs_encoder.c` | Logs encoder |
 | `src/exporter.c` | Exporter lifecycle — 3 MPSC queues, batch, retry, flush, diagnostics |
 | `src/http_client.c` | HTTP/1.1 non-blocking state machine + keep-alive + timeouts |
+| `src/http_response_parser.{h,c}` | HTTP response wire format: header scan, chunked decode, smuggling rejection (pure — byte fixtures, runs on MSVC) |
+| `src/retry_policy.{h,c}` | Retry timing as pure functions: full jitter, exponent clamp, Retry-After floor/cap |
 | `src/atomic_compat.h` | Atomic abstraction (MSVC intrinsics fallback) |
 | `tests/golden/` | Reference-serialized golden vectors + generator |
 | `tests/test_util.h` | check_ok/check_true — always-evaluated, always-enforced test checks |
 | `tests/property/` | Property-based tests (QuickCheck-style, deterministic) |
-| `tests/consumers/` | Standalone consumer projects (find_package / FetchContent) — packaging tests driven by CI, runnable locally; NOT in the build tree |
+| `tests/consumers/` | Standalone consumer projects (find_package / FetchContent / vcpkg overlay) — packaging tests driven by CI, runnable locally; NOT in the build tree |
 | `tests/integration/` | End-to-end against a local otelcol |
 | `bench/bench_emit.c` | Emit pipeline throughput benchmark |
 | `docs/architecture.md` | Layered design (21+ modules) |
