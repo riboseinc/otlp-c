@@ -302,3 +302,12 @@ add_test(NAME property-async-metrics
 set_tests_properties(property-async-metrics PROPERTIES
     LABELS "property;unit"
     TIMEOUT 60)
+
+# Retry timing policy properties (v0.6.13): full-jitter bounds,
+# shift-count cap, Retry-After floor semantics — pure functions,
+# portable.
+add_executable(otlp_property_retry test_property_retry.c)
+target_link_libraries(otlp_property_retry PRIVATE otlp_c)
+add_test(NAME property-retry
+	COMMAND otlp_property_retry)
+set_tests_properties(property-retry PROPERTIES LABELS "property;unit")

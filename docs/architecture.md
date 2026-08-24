@@ -137,8 +137,10 @@ transport-agnostic via callback-based carriers.
 | `otlp_logs_encoder.c` | Logs encoder | Traces/metrics encoding |
 | `otlp_schema.h` | Model-driven field tables (single source of truth) | Encoder logic |
 | `protobuf_encode.c` | Protobuf wire encoding + SBO buffer (192 B inline — sized so span envelopes and typical attribute KeyValues never touch the heap, v0.5.86) | OTLP schema, transport |
-| `http_client.c` | HTTP/1.1 state machine + keep-alive | OTLP semantics |
-| `platform.c` / `_unix.c` / `_win.c` | Clocks, non-blocking sockets | Public API |
+| `http_client.c` | HTTP/1.1 state machine + keep-alive + timeouts | OTLP semantics, response parsing |
+| `http_response_parser.c` | HTTP/1.1 response wire format: status line, line-aligned header scan, chunked decode (in place), smuggling rejection, Retry-After | Sockets, clocks, allocation |
+| `retry_policy.c` | Retry timing as pure functions: full-jitter draws, exponent clamp, Retry-After floor + cap | Clocks, exporter state |
+| `platform.c` / `_unix.c` / `_win.c` | Clocks (nano + ms), non-blocking sockets | Public API |
 | `mpsc_queue.c` | Lock-free MPSC ring buffer | Exporter logic |
 | `atomic_compat.h` | Atomic operations (GCC/Clang pass-through, MSVC intrinsics) | Lock-free algorithms |
 | `slab.c` | Slab allocator + global allocator integration | Memory layout of types |

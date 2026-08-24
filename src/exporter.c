@@ -32,6 +32,7 @@
 #include "mpsc_queue.h"
 #include "otlp_messages.h"
 #include "platform.h"
+#include "retry_policy.h"
 #include "span_internal.h"
 
 #include "atomic_compat.h"
@@ -334,52 +335,6 @@ drain_signal(struct signal_state *sg, void (*free_item)(void *))
 }
 
 /* ── Helpers ──────────────────────────────────────────────────── */
-
-static uint64_t
-now_mono_ms(void)
-{
-	uint64_t n;
-
-	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
-							    : 0;
-}
-
-/* xorshift64s — state must be non-zero. */
-static uint64_t
-jitter_next(uint64_t *s)
-{
-	uint64_t v = *s;
-
-	v ^= v << 13;
-	v ^= v >> 7;
-	v ^= v << 17;
-	*s = v;
-	return v * 0x2545F4914F6CDD1DULL;
-}
-
-/* Retry delay for `attempt` (1-based): exponential backoff with
- * FULL jitter — uniform in [0, min(initial << (attempt-1), max)].
- * The shift is computed in uint64_t with the shift count clamped
- * (a caller-set max_retries above ~33 would otherwise shift a
- * uint32 by >= its width: undefined behavior). One helper for
- * every retry path (DRY: the network-error and 429/5xx paths
- * previously duplicated this computation). */
-static uint32_t
-backoff_delay_ms(const struct otlp_exporter *e, uint32_t attempt)
-{
-	uint64_t exp;
-	uint32_t shift = attempt - 1;
-	uint64_t delay;
-
-	if (shift > 31)
-		shift = 31; /* beyond any uint32 magnitude anyway */
-	exp = (uint64_t) e->backoff_initial_ms << shift;
-	delay = exp > e->backoff_max_ms ? e->backoff_max_ms : exp;
-	if (delay == 0)
-		return 0;
-	return (uint32_t)(
-		jitter_next((uint64_t *) &e->jitter_prng) % (delay + 1));
-}
 
 static const char *
 signal_name(otlp_signal_id_t s)
@@ -998,7 +953,12 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 			return;
 		}
 		{
-			uint32_t delay = backoff_delay_ms(e, e->attempt);
+			struct otlp_retry_cfg cfg = {
+				e->backoff_initial_ms,
+				e->backoff_max_ms,
+			};
+			uint32_t delay = otlp_retry_delay_ms(
+				&e->jitter_prng, e->attempt, 0, &cfg, NULL);
 			otlp_event_t ev = {
 				.code = OTLP_EVT_RETRY_ARMED,
 				.level = OTLP_LOG_WARN,
@@ -1008,7 +968,8 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 				.delay_ms = delay,
 			};
 
-			e->backoff_deadline_mono = now_mono_ms() + delay;
+			e->backoff_deadline_mono =
+				otlp_platform_now_mono_ms() + delay;
 			e->backoff_armed = true;
 			event_log(e, &ev);
 		}
@@ -1079,13 +1040,16 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 			 * a hostile/buggy server stall exports beyond our
 			 * own cap — delay = max(jitter, Retry-After),
 			 * clamped to backoff_max_ms. */
-			uint32_t delay = backoff_delay_ms(e, e->attempt);
-			bool server_driven = o->retry_after_ms > delay;
-
-			if (server_driven)
-				delay = o->retry_after_ms;
-			if (delay > e->backoff_max_ms)
-				delay = e->backoff_max_ms;
+			struct otlp_retry_cfg cfg = {
+				e->backoff_initial_ms,
+				e->backoff_max_ms,
+			};
+			bool server_driven = false;
+			uint32_t delay = otlp_retry_delay_ms(&e->jitter_prng,
+				e->attempt,
+				o->retry_after_ms,
+				&cfg,
+				&server_driven);
 			{
 				otlp_event_t ev = {
 					.code = OTLP_EVT_RETRY_ARMED,
@@ -1099,7 +1063,7 @@ record_outcome(struct otlp_exporter *e, const struct http_outcome *o)
 				};
 
 				e->backoff_deadline_mono =
-					now_mono_ms() + delay;
+					otlp_platform_now_mono_ms() + delay;
 				e->backoff_armed = true;
 				event_log(e, &ev);
 			}
@@ -1133,7 +1097,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 	bool work_done;
 	int s;
 
-	deadline = now_mono_ms() + max_wait_ms;
+	deadline = otlp_platform_now_mono_ms() + max_wait_ms;
 
 	do
 	{
@@ -1152,7 +1116,8 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 					item;
 				if (!e->sig[s].first_set)
 				{
-					e->sig[s].first_mono = now_mono_ms();
+					e->sig[s].first_mono =
+						otlp_platform_now_mono_ms();
 					e->sig[s].first_set = true;
 				}
 				work_done = true;
@@ -1189,7 +1154,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 			bool shutdown =
 				otlp_atomic_load_int(&e->shutdown_requested,
 					OTLP_MEMORY_ORDER_RELAXED);
-			uint64_t now_ms = now_mono_ms();
+			uint64_t now_ms = otlp_platform_now_mono_ms();
 
 			for (s = 0; s < 3; s++)
 			{
@@ -1254,7 +1219,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 
 		/* 5. Backoff retry. */
 		if (e->backoff_armed && !e->in_flight &&
-			now_mono_ms() >= e->backoff_deadline_mono)
+			otlp_platform_now_mono_ms() >= e->backoff_deadline_mono)
 		{
 			e->backoff_armed = false;
 			/* When null_transport is enabled, skip the HTTP
@@ -1281,7 +1246,7 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		}
 
 	tick_continue:;
-	} while (work_done && now_mono_ms() < deadline);
+	} while (work_done && otlp_platform_now_mono_ms() < deadline);
 
 	return OTLP_OK;
 }
@@ -1294,12 +1259,12 @@ otlp_exporter_flush(otlp_exporter_t *e)
 
 	if (!e)
 		return OTLP_ERR_NULL;
-	deadline = now_mono_ms() + e->flush_timeout_ms;
+	deadline = otlp_platform_now_mono_ms() + e->flush_timeout_ms;
 
 	do
 	{
 		otlp_exporter_tick(e, 100);
-		now = now_mono_ms();
+		now = otlp_platform_now_mono_ms();
 	} while ((e->sig[SIGNAL_SPAN].pending_count > 0 || e->in_flight ||
 			 mpsc_queue_size(&e->sig[SIGNAL_SPAN].queue) > 0 ||
 			 e->sig[SIGNAL_METRIC].pending_count > 0 ||
@@ -1407,7 +1372,7 @@ flush_post_once(struct otlp_exporter *e,
 		event_log(e, &ev);
 		return st;
 	}
-	deadline = now_mono_ms() + e->flush_timeout_ms;
+	deadline = otlp_platform_now_mono_ms() + e->flush_timeout_ms;
 	for (;;)
 	{
 		st = otlp_http_request_step(req);
@@ -1471,7 +1436,7 @@ flush_post_once(struct otlp_exporter *e,
 			event_log(e, &ev);
 			return st;
 		}
-		now = now_mono_ms();
+		now = otlp_platform_now_mono_ms();
 		if (now >= deadline)
 		{
 			otlp_event_t ev = {
