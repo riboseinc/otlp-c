@@ -91,3 +91,13 @@ target_include_directories(otlp_unit_clone PRIVATE
 add_test(NAME unit-clone
     COMMAND otlp_unit_clone)
 set_tests_properties(unit-clone PROPERTIES LABELS "unit")
+
+# HTTP response wire-format parser: pure byte fixtures — no
+# sockets/threads, runs on every platform including MSVC (v0.6.11).
+add_executable(otlp_unit_http_response_parser test_unit_http_response_parser.c)
+target_link_libraries(otlp_unit_http_response_parser PRIVATE otlp_c)
+target_include_directories(otlp_unit_http_response_parser PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-http-response-parser
+    COMMAND otlp_unit_http_response_parser)
+set_tests_properties(unit-http-response-parser PROPERTIES LABELS "unit")
