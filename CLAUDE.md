@@ -147,7 +147,7 @@ What you need to know day-to-day:
 
 ## For the implementing agent
 
-All phases are complete (v0.5.97). The library implements:
+All phases are complete (v1.0.0). The library implements:
 - Full protobuf wire encoder with schema-driven field tables
   (every OTLP message has its own field-spec entry — v0.5.48/49/61
   fixed 10 field-number/wire-type bugs found by cross-checking
@@ -349,7 +349,11 @@ PRs require green CI before merge. Rebase-merge is the canonical merge style.
 
 ## Versioning
 
-Semantic versioning (semver.org). Within the 0.x line, the API may break between minor versions — document changes in `CHANGELOG.md`. At 1.0.0, the API freezes for the 1.x line.
+Semantic versioning (semver.org). **Since 1.0.0 the source API is
+frozen for the 1.x line**: no breaking changes to signatures, types,
+or semantics — additions only. The C ABI (struct layouts, symbol
+set) is not guaranteed across builds. Document every change in
+`CHANGELOG.md`.
 
 The version is defined in `include/otlp-c/version.h` and bumped in lockstep with `CMakeLists.txt` and `vcpkg.json`.
 

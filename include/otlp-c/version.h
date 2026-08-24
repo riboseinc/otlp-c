@@ -3,12 +3,15 @@
  * Version constants. Bumped in lockstep with CMakeLists.txt and
  * vcpkg.json. See docs/roadmap.md for the version policy.
  *
- * ABI stability promise:
+ * Stability promise (since 1.0.0):
  *   - MAJOR bumps on incompatible API changes.
  *   - MINOR bumps on backwards-compatible feature additions.
  *   - PATCH bumps on backwards-compatible bug fixes.
  *
- * Within the 0.x line, the API is unstable.
+ * The 1.x line freezes the SOURCE API: no breaking changes to
+ * signatures, types, or semantics — additions only. The C ABI
+ * (struct layouts, symbol set) is NOT guaranteed across builds;
+ * consumers compile against the headers.
  */
 #ifndef OTLP_C_VERSION_H
 #define OTLP_C_VERSION_H
@@ -22,8 +25,8 @@ extern "C"
 {
 #endif
 
-#define OTLP_C_VERSION_MAJOR 0
-#define OTLP_C_VERSION_MINOR 8
+#define OTLP_C_VERSION_MAJOR 1
+#define OTLP_C_VERSION_MINOR 0
 #define OTLP_C_VERSION_PATCH 0
 
 /* Derived from the numeric macros so the string can never drift

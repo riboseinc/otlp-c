@@ -170,6 +170,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.8 | Install-docs truth: consumer instructions pointed at a nonexistent vcpkg port (verified against the registry) — FetchContent/add_subdirectory/install now documented; release-notes/ marked frozen at v0.5.0 with pointers to the canonical CHANGELOG + GitHub Releases; property-http-timeout made VPN-safe (cap no longer equals the read deadline); roadmap backslash-ref literal fixed | #145 |
 | 0.6.9 | **Embedded-build hygiene**: the just-documented FetchContent path clobbered the consumer's CMAKE_INSTALL_LIBDIR (CACHE FORCE) and leaked CPack config into its build tree — both gated on top-level-only; new CI job builds a real FetchContent consumer (ubuntu+windows) with clobber/leak assertions | #146 |
 | 0.6.10 | CI hygiene: consumer fixtures move from workflow-YAML heredocs (unlintable, first-executed-by-CI) to standalone projects in tests/consumers/ — runnable locally with the exact CI commands; hygiene assertions now configure-time FATAL_ERRORs, both mutation-tested | #147 |
+| 1.0.0 | **THE API FREEZE** — deep re-audit (TODO.complete/168) confirmed all five Path-to-1.0 criteria at v0.8.0; source API frozen for 1.x (ABI explicitly not guaranteed); version-policy declarations updated in version.h/CLAUDE.md; two freeze-hazard doc fixes (storage stack cost, apply_env thread contract) | #159 |
 | 0.8.0 | **Exemplars** (the last substantive OTLP metrics feature): otlp_exemplar_t (value + trace/span correlation + time) added to metrics, emitted on NDP(5)/HDP(8); new pinned Exemplar schema table + wire emission test | #158 |
 | 0.7.4 | **schema_url conformance gap closed**: opts.schema_url emitted as field 3 on all three resource-level messages (tables were pinned; encoders never emitted); wire-pinned per signal + absence | #157 |
 | 0.7.3 | **Per-signal endpoints** (user-confirmed model change): sig[s].url + default-path column in the signal table; metrics_endpoint/logs_endpoint opts; OTEL_EXPORTER_OTLP_METRICS/LOGS_ENDPOINT + spec-correct base-ENDPOINT composition; sync-flush path hack gone; wire-proven override | #156 |
@@ -182,7 +183,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.12 | **One signal table**: exporter's five descriptor families (drain/emit/tick/record/start-post, three instances each assembled at five call sites) collapse into one static spec table + per-signal sig[3] state; exporter.c −268 lines; add-a-signal = one table row (mutation-tested: wrong row id aborts the events suite) | #149 |
 | 0.6.11 | **Response parser as a deep module**: ~300 lines of wire-format logic (smuggling rejection, chunked decode) extracted from the socket machine into src/http_response_parser; byte-fixture suite (no sockets/threads, runs on MSVC — closes the Windows smuggling-coverage gap); fuzz property pure + portable, 300 → 20000 iterations | #148 |
 
-**Key metrics (v0.8.0):** 167 TODOs complete, 52 tests, **50+
+**Key metrics (v1.0.0):** 168 TODOs complete, 52 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:
@@ -199,11 +200,10 @@ library file at 82%+ region coverage. `sizeof(otlp_span)`:
 (SBO 192).
 
 
-## Path to 1.0
+## Path to 1.0 — SHIPPED (v1.0.0, 2026-08-24)
 
-The 0.x line may break the API between minors (documented in
-CHANGELOG). 1.0 freezes it. The library enters the stabilization
-window when all of the following hold — the audit as of v0.5.104:
+The 0.x line could break the API between minors (documented in
+CHANGELOG). 1.0 froze it. The criteria, re-audited at v0.8.0:
 
 1. **Public surface audited**: all 124 exported functions across
    10 headers reviewed for docstring, return codes, ownership,
@@ -220,8 +220,15 @@ window when all of the following hold — the audit as of v0.5.104:
    malformed-response decoding — all enforced at the boundary
    with dedicated tests.
 4. **No open P1/P2 items** in TODO.complete.
-5. **One full minor cycle (0.6) with additive-only API changes.**
-   (Window OPENED at 0.6.0 — 2026-08-23.)
+5. **One full minor cycle with additive-only API changes** —
+   held across the ENTIRE 0.6/0.7/0.8 window (0.6.0 → 0.8.0;
+   every change internal, additive, or docs/tests).
+
+The v1.0.0 re-audit (TODO.complete/168): 133 exported symbols
+(124 at the v0.5.104 audit + the 9 added since, each reviewed);
+no stubs; strerror coverage pinned; the 26 KiB
+otlp_env_storage_t stack cost documented; apply_env's getenv
+thread-safety contract documented; docs version pins current.
 
 Deliberately NOT in 1.0 (design constraints, not gaps): TLS
 (sidecar terminates), gRPC, payload compression — all would

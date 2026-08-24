@@ -138,7 +138,7 @@ FetchContent against a release tag (`v0.6.8` shown):
 include(FetchContent)
 FetchContent_Declare(otlp-c
     GIT_REPOSITORY https://github.com/riboseinc/otlp-c
-    GIT_TAG        v0.6.15)
+    GIT_TAG        v1.0.0)
 FetchContent_MakeAvailable(otlp-c)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
