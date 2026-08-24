@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.13] - 2026-08-24
+
+Architecture: retry timing as pure, property-tested functions.
+
+### Changed — retry policy extracted; one shared millisecond clock
+
+The full-jitter draw, the exponent clamp, and the Retry-After
+floor/cap semantics moved from exporter.c into
+`src/retry_policy.{h,c}` — pure functions of their arguments, no
+clocks, no exporter state. The 429/5xx branch's inline clamp
+collapsed into the one decision function, which also reports
+whether the server floor won (the `server_driven` event field).
+The millisecond clock that existed as two private copies
+(`now_mono_ms` in exporter.c, `mono_ms` in http_client.c) is now
+one `otlp_platform_now_mono_ms()`.
+
+### Added — retry-invariant properties (test #51)
+
+`property-retry` pins the timing contract directly: full-jitter
+bounds against the computed ceiling, saturation at `max` for
+attempt=UINT32_MAX (the undefined-shift trap, UBSAN-enforced),
+the Retry-After floor never lowering the delay below
+min(floor, max), the cap always holding, and `server_driven`
+exactly meaning "the floor beat the drawn jitter" (verified by
+replaying the PRNG). Mutation-tested: ignoring the floor fails
+the property at the floor invariant.
+
 ## [0.6.12] - 2026-08-24
 
 Architecture: one signal table instead of five descriptor families.
