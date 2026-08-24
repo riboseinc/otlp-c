@@ -223,6 +223,16 @@ def logs_payload():
                 ])])])
 
 
+def traces_response():
+    """Reference-encoded ExportTraceServiceResponse carrying
+    PartialSuccess — decodes the v1.0.2 fix against the real
+    format (our echo fixtures had matched our own wrong table).
+    """
+    return trace_service.ExportTraceServiceResponse(
+        partial_success=trace_service.ExportTracePartialSuccess(
+            rejected_spans=3, error_message="queue full")).SerializeToString()
+
+
 def c_array(name, data):
     body = ", ".join(f"0x{b:02x}" for b in data)
     wrapped = "\n".join(
@@ -239,6 +249,7 @@ def main():
         ("GOLDEN_TRACES", traces_payload().SerializeToString()),
         ("GOLDEN_METRICS", metrics_payload().SerializeToString()),
         ("GOLDEN_LOGS", logs_payload().SerializeToString()),
+        ("GOLDEN_TRACES_RESPONSE", traces_response()),
     ]
 
     header = [

@@ -22,6 +22,7 @@
 #include "../golden/golden_vectors.h"
 #include "../test_util.h"
 #include "otlp_messages.h"
+#include "exporter_otel.h"
 #include "protobuf_decode.h"
 #include "protobuf_encode.h"
 
@@ -507,6 +508,28 @@ build_logs(struct otlp_pb_buf *out)
 	return true;
 }
 
+/* v1.0.2: the reference-encoded ExportTraceServiceResponse —
+ * PartialSuccess at the REAL field number (the v0.5.96 table had
+ * 5; the descriptor says 1, so real-collector data loss was
+ * silently ignored). Decoded here with the production decoder. */
+static void
+check_reference_response(void)
+{
+	int64_t rejected = -1;
+	const char *msg = NULL;
+	size_t msg_len = 0;
+
+	check_true(otlp_exporter_otel_decode_partial_success(
+		GOLDEN_TRACES_RESPONSE,
+		GOLDEN_TRACES_RESPONSE_LEN,
+		&rejected,
+		&msg,
+		&msg_len));
+	check_true(rejected == 3);
+	check_true(msg != NULL && msg_len == strlen("queue full") &&
+		memcmp(msg, "queue full", msg_len) == 0);
+}
+
 int
 main(void)
 {
@@ -542,6 +565,8 @@ main(void)
 	failures +=
 		!compare_vector("logs", GOLDEN_LOGS, GOLDEN_LOGS_LEN, &ours);
 	otlp_pb_buf_free(&ours);
+
+	check_reference_response();
 
 	if (failures)
 		printf("[golden] FAIL (%d vector(s))\n", failures);

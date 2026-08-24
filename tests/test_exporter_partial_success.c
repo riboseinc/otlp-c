@@ -152,7 +152,9 @@ build_response_body(uint8_t *out, size_t out_cap, int64_t r, const char *msg)
 	size_t sub_len = build_ps(sub, r, msg);
 
 	check_true(sub_len < 128 && sub_len + 2 <= out_cap);
-	out[0] = 0x2a; /* field 5, LEN */
+	out[0] = 0x0a; /* field 1, LEN — the REAL wire format
+	 * (v1.0.2: this fixture encoded field 5, matching our own
+	 * wrong table instead of the proto — self-referential). */
 	out[1] = (uint8_t) sub_len;
 	memcpy(out + 2, sub, sub_len);
 	return sub_len + 2;

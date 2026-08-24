@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-08-24
+
+Descriptor audit of all 32 schema tables; a second released wire
+bug found and fixed.
+
+### Fixed — PartialSuccess was decoded at the wrong field (since v0.5.96)
+
+A new maintenance tool (`tests/golden/audit_tables.py`) diffs
+every schema table in otlp_schema.h against the INSTALLED
+opentelemetry-proto descriptors — the class-closing response to
+the v1.0.1 exemplar bug. Result: 30/32 clean, and the decoder's
+ExportXServiceResponse table had `partial_success` at field 5
+where the real proto puts it at field 1 — meaning
+server-reported data loss from REAL collectors has been silently
+ignored since PartialSuccess decoding shipped (v0.5.96). The
+echo and protobuf unit fixtures had encoded field 5 themselves,
+matching our own wrong table — the same self-referential failure
+class; all fixtures now encode the real format, and a
+reference-generated response vector (via the golden generator)
+is decoded by the production decoder in unit-golden, so the
+DECODE side is now reference-validated too.
+
+### Added — schema audit tool
+
+`python3 tests/golden/audit_tables.py` (needs opentelemetry-proto)
+verifies every table's field numbers and computed wire types —
+including packed-repeated LEN handling — against the installed
+descriptors. Run it whenever a schema table changes; its exit
+code gates.
+
 ## [1.0.1] - 2026-08-24
 
 Golden corpus extended; a real exemplar wire bug found and fixed.

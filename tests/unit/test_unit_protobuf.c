@@ -413,8 +413,10 @@ build_response(struct otlp_pb_buf *resp,
 		check_true(otlp_pb_tag(&sub, 2, OTLP_PB_WIRE_LEN) == OTLP_OK);
 		check_true(otlp_pb_string(&sub, message) == OTLP_OK);
 	}
+	/* Field 1 — the REAL response format (v1.0.2: this fixture
+	 * built field 5, matching the wrong table). */
 	check_true(
-		otlp_pb_field_message(resp, 5, sub.data, sub.len) == OTLP_OK);
+		otlp_pb_field_message(resp, 1, sub.data, sub.len) == OTLP_OK);
 	otlp_pb_buf_free(&sub);
 }
 
@@ -438,12 +440,12 @@ test_decode_partial_success(void)
 	check_true(!otlp_exporter_otel_decode_partial_success(
 		NULL, 0, &rejected, &msg, &msg_len));
 
-	/* Explicitly-present-but-empty submessage (2a 00): a conformant
+	/* Explicitly-present-but-empty submessage (0a 00): a conformant
 	 * proto3 serializer never emits this (presence rule — and note
 	 * otlp_pb_field_message omits it too), but the decoder must
 	 * accept it: true, zero outputs. */
 	{
-		static const uint8_t empty_ps[] = { 0x2a, 0x00 };
+		static const uint8_t empty_ps[] = { 0x0a, 0x00 };
 
 		check_true(otlp_exporter_otel_decode_partial_success(
 			empty_ps, sizeof(empty_ps), &rejected, &msg, &msg_len));
@@ -471,7 +473,7 @@ test_decode_partial_success(void)
 
 	/* Truncated submessage length: malformed — false. */
 	{
-		static const uint8_t bad[] = { 0x2a, 0x10, 0x08, 0x01 };
+		static const uint8_t bad[] = { 0x0a, 0x10, 0x08, 0x01 };
 
 		check_true(!otlp_exporter_otel_decode_partial_success(
 			bad, sizeof(bad), &rejected, &msg, &msg_len));
