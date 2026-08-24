@@ -24,6 +24,7 @@
 #define ETSR_F_RESOURCE_SPANS \
 	OTLP_ETSR_FIELDS[OTLP_ETSR_FI_RESOURCE_SPANS].number
 #define RS_F_RESOURCE OTLP_RS_FIELDS[OTLP_RS_FI_RESOURCE].number
+#define RS_F_SCHEMA_URL OTLP_RS_FIELDS[OTLP_RS_FI_SCHEMA_URL].number
 #define RS_F_SCOPE_SPANS OTLP_RS_FIELDS[OTLP_RS_FI_SCOPE_SPANS].number
 #define R_F_ATTRIBUTES OTLP_R_FIELDS[OTLP_R_FI_ATTRIBUTES].number
 #define SS_F_SCOPE OTLP_SS_FIELDS[OTLP_SS_FI_SCOPE].number
@@ -707,6 +708,7 @@ static otlp_status_t
 emit_resource_spans(struct otlp_pb_buf *parent,
 	uint32_t field_num,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -738,6 +740,11 @@ emit_resource_spans(struct otlp_pb_buf *parent,
 	if (st != OTLP_OK)
 		goto out;
 
+	if (schema_url && schema_url[0])
+		st = otlp_pb_field_string(&sub, RS_F_SCHEMA_URL, schema_url);
+	if (st != OTLP_OK)
+		goto out;
+
 	if (sub.len > 0)
 		st = otlp_pb_field_message(
 			parent, field_num, sub.data, sub.len);
@@ -752,6 +759,7 @@ out:
 otlp_status_t
 otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 	const char *service_name,
+	const char *schema_url,
 	const struct otlp_attribute *resource_attributes,
 	size_t n_resource_attributes,
 	const char *scope_name,
@@ -770,6 +778,7 @@ otlp_encode_export_trace_service_request(struct otlp_pb_buf *out,
 	return emit_resource_spans(out,
 		ETSR_F_RESOURCE_SPANS,
 		service_name,
+		schema_url,
 		resource_attributes,
 		n_resource_attributes,
 		scope_name,

@@ -22,21 +22,24 @@
 /* Phase 0 seed property: the library's version string is non-NULL
  * and matches the OTLP_C_VERSION_STRING macro. Real properties
  * land in Phase 1+. */
-static int prop_version_consistent(uint64_t seed)
+static int
+prop_version_consistent(uint64_t seed)
 {
 	const char *v = otlp_version();
 
 	(void) seed;
-	return (v != NULL && v[0] != '\0' &&
-		str_eq(v, OTLP_C_VERSION_STRING)) ? 1 : 0;
+	return (v != NULL && v[0] != '\0' && str_eq(v, OTLP_C_VERSION_STRING))
+		? 1
+		: 0;
 }
 
-int main(void)
+int
+main(void)
 {
 	int failures = 0;
 
-	failures += property_run(prop_version_consistent,
-				 "prop_version_consistent", 100, 1);
+	failures += property_run(
+		prop_version_consistent, "prop_version_consistent", 100, 1);
 
 	if (failures)
 		printf("[property] %d property(ies) failed\n", failures);

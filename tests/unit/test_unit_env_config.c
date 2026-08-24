@@ -44,9 +44,9 @@ test_endpoint(void)
 	check_ok(otlp_env_apply_endpoint(&o, "http://collector:4318", &st));
 	check_true(strcmp(o.endpoint, "http://collector:4318/v1/traces") == 0);
 	check_true(strcmp(o.metrics_endpoint,
-		"http://collector:4318/v1/metrics") == 0);
-	check_true(strcmp(o.logs_endpoint, "http://collector:4318/v1/logs") ==
-		0);
+			   "http://collector:4318/v1/metrics") == 0);
+	check_true(
+		strcmp(o.logs_endpoint, "http://collector:4318/v1/logs") == 0);
 	check_true(o.endpoint == st.endpoint);
 
 	/* Base carrying a path: stripped; paths derive per signal. */

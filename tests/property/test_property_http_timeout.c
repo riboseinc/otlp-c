@@ -50,7 +50,7 @@ mono_ms(void)
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t) ts.tv_sec * 1000ULL +
-	       (uint64_t) ts.tv_nsec / 1000000ULL;
+		(uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
 static int
@@ -58,32 +58,39 @@ prop_connect_timeout_fires(uint64_t seed)
 {
 	struct otlp_http_url url;
 	otlp_http_request_t *req = NULL;
-	otlp_status_t       st;
-	uint64_t             t0, t1, elapsed;
-	int                  ok = 0;
-	int                  i;
+	otlp_status_t st;
+	uint64_t t0, t1, elapsed;
+	int ok = 0;
+	int i;
 
 	(void) seed;
 
 	/* 192.0.2.1 — RFC 5737 TEST-NET-1, IANA-reserved, never routed. */
-	if (otlp_http_parse_url("http://192.0.2.1:4318/v1/traces", &url) != OTLP_OK)
+	if (otlp_http_parse_url("http://192.0.2.1:4318/v1/traces", &url) !=
+		OTLP_OK)
 		return 0;
 
-	st = otlp_http_request_start(&req, &url, "timeout-test",
-				      NULL, 0,
-				      (const uint8_t *) "x", 1,
-				      200,  /* connect_timeout_ms */
-				      2000  /* read_timeout_ms (generous) */);
+	st = otlp_http_request_start(&req,
+		&url,
+		"timeout-test",
+		NULL,
+		0,
+		(const uint8_t *) "x",
+		1,
+		200, /* connect_timeout_ms */
+		2000 /* read_timeout_ms (generous) */);
 	if (st != OTLP_OK)
 		return 0;
 
 	t0 = mono_ms();
-	for (i = 0; i < 10000; i++) {
+	for (i = 0; i < 10000; i++)
+	{
 		otlp_http_req_state_t s;
 
 		(void) otlp_http_request_step(req);
 		s = otlp_http_request_state(req);
-		if (s == OTLP_HTTP_REQ_DONE || s == OTLP_HTTP_REQ_FAILED) {
+		if (s == OTLP_HTTP_REQ_DONE || s == OTLP_HTTP_REQ_FAILED)
+		{
 			t1 = mono_ms();
 			elapsed = t1 - t0;
 			/* Bounded completion: the request reached a terminal
@@ -105,10 +112,12 @@ prop_connect_timeout_fires(uint64_t seed)
 
 	otlp_http_request_free(req);
 
-	if (!ok) {
+	if (!ok)
+	{
 		t1 = mono_ms();
 		elapsed = t1 - t0;
-		fprintf(stderr, "[property] connect timeout FAILED: elapsed=%llums\n",
+		fprintf(stderr,
+			"[property] connect timeout FAILED: elapsed=%llums\n",
 			(unsigned long long) elapsed);
 	}
 	return ok;
@@ -119,12 +128,12 @@ main(void)
 {
 	int failures = 0;
 
-	failures += property_run(prop_connect_timeout_fires,
-				 "prop_connect_timeout_fires", 3, 1);
+	failures += property_run(
+		prop_connect_timeout_fires, "prop_connect_timeout_fires", 3, 1);
 
 	if (failures)
 		printf("[property] %d http-timeout property(ies) failed\n",
-		       failures);
+			failures);
 	else
 		printf("[property] all http-timeout properties passed\n");
 	return failures ? 1 : 0;

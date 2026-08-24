@@ -42,7 +42,7 @@ mono_ms(void)
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t) ts.tv_sec * 1000ULL +
-	       (uint64_t) ts.tv_nsec / 1000000ULL;
+		(uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
 static int
@@ -56,12 +56,12 @@ static int
 prop_flush_timeout_respected(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp = NULL;
-	otlp_tracer_t       *tracer = NULL;
-	otlp_span_t         *span;
-	uint64_t             t0, t1, elapsed;
-	int                  ok = 0;
-	otlp_status_t        st;
+	otlp_exporter_t *exp = NULL;
+	otlp_tracer_t *tracer = NULL;
+	otlp_span_t *span;
+	uint64_t t0, t1, elapsed;
+	int ok = 0;
+	otlp_status_t st;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
@@ -115,11 +115,13 @@ main(void)
 	int failures = 0;
 
 	failures += property_run(prop_flush_timeout_respected,
-				 "prop_flush_timeout_respected", 5, 1);
+		"prop_flush_timeout_respected",
+		5,
+		1);
 
 	if (failures)
 		printf("[property] %d flush-timeout property(ies) failed\n",
-		       failures);
+			failures);
 	else
 		printf("[property] all flush-timeout properties passed\n");
 	return failures ? 1 : 0;

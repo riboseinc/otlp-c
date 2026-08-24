@@ -381,11 +381,11 @@ prop_attr_upsert_wire_identical(uint64_t seed)
 		goto out;
 	arr[0] = twice;
 	if (otlp_encode_export_trace_service_request(
-		    &buf_twice, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf_twice, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out;
 	arr[0] = once;
 	if (otlp_encode_export_trace_service_request(
-		    &buf_once, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf_once, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out;
 	ok = (buf_twice.len == buf_once.len &&
 		memcmp(buf_twice.data, buf_once.data, buf_twice.len) == 0);
@@ -439,7 +439,7 @@ prop_attr_array_wire(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -545,7 +545,7 @@ prop_attr_kvlist_wire(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;

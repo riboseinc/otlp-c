@@ -29,23 +29,27 @@ static int
 prop_async_metric_sent(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_metric_t       *m;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
 	otlp_exporter_stats_t stats;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_status_t st;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "async-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
 	otlp_exporter_set_null_transport(exp, true);
 
-	m = otlp_metric_create(OTLP_METRIC_COUNTER, "requests", "1",
-			       "total requests", NULL, 0);
+	m = otlp_metric_create(OTLP_METRIC_COUNTER,
+		"requests",
+		"1",
+		"total requests",
+		NULL,
+		0);
 	if (!m)
 		goto out;
 	otlp_metric_record(m, 42.0);
@@ -70,16 +74,16 @@ static int
 prop_async_log_sent(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_log_record_t   *lr;
+	otlp_exporter_t *exp;
+	otlp_log_record_t *lr;
 	otlp_exporter_stats_t stats;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_status_t st;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "async-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -108,17 +112,17 @@ static int
 prop_async_spans_coexist(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_tracer_t       *tracer;
-	otlp_metric_t       *m;
-	otlp_span_t         *span;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	otlp_metric_t *m;
+	otlp_span_t *span;
 	otlp_exporter_stats_t stats;
-	int                  ok = 0;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "coexist-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -153,7 +157,7 @@ prop_async_spans_coexist(uint64_t seed)
 	otlp_exporter_get_stats(exp, &stats);
 	/* Both span and metric should have been sent. */
 	ok = (stats.emitted >= 1 && stats.sent >= 1 &&
-	      stats.emitted_metrics == 1 && stats.sent_metrics == 1);
+		stats.emitted_metrics == 1 && stats.sent_metrics == 1);
 
 out:
 	if (tracer)
@@ -166,15 +170,15 @@ static int
 prop_async_metric_drop_full(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_metric_t       *m;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
 	otlp_exporter_stats_t stats;
-	int                  ok = 0;
-	int                  i;
+	int ok = 0;
+	int i;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
-	opts.service_name   = "overflow-test";
+	opts.service_name = "overflow-test";
 	opts.queue_capacity = 4;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
@@ -184,7 +188,8 @@ prop_async_metric_drop_full(uint64_t seed)
 	/* Emit 20 metrics into a 4-deep queue with no ticking. */
 	for (i = 0; i < 20; i++)
 	{
-		m = otlp_metric_create(OTLP_METRIC_COUNTER, "x", "1", "", NULL, 0);
+		m = otlp_metric_create(
+			OTLP_METRIC_COUNTER, "x", "1", "", NULL, 0);
 		if (!m)
 			goto out;
 		otlp_metric_record(m, 1.0);
@@ -193,8 +198,7 @@ prop_async_metric_drop_full(uint64_t seed)
 
 	otlp_exporter_get_stats(exp, &stats);
 	/* 4 accepted (emitted_metrics), 16 dropped (dropped_metrics_full). */
-	ok = (stats.emitted_metrics == 4 &&
-	      stats.dropped_metrics_full >= 1);
+	ok = (stats.emitted_metrics == 4 && stats.dropped_metrics_full >= 1);
 
 out:
 	otlp_exporter_free(exp);
@@ -207,24 +211,24 @@ out:
 static int
 prop_async_metric_emit_clone(uint64_t seed)
 {
-	otlp_exporter_opts_t  opts;
-	otlp_exporter_t      *exp;
-	otlp_metric_t        *m;
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
 	otlp_exporter_stats_t stats;
-	otlp_status_t        st;
-	int                   ok = 0;
+	otlp_status_t st;
+	int ok = 0;
 
 	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "clone-test";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
 	otlp_exporter_set_null_transport(exp, true);
 
-	m = otlp_metric_create(OTLP_METRIC_COUNTER, "counter", "1",
-			       "test counter", NULL, 0);
+	m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "counter", "1", "test counter", NULL, 0);
 	if (!m)
 		goto out;
 	otlp_metric_record(m, 99.0);
@@ -258,7 +262,7 @@ static int retry_calls_metric = 0;
 static int
 retry_status_metric(void *ctx)
 {
-	(void)ctx;
+	(void) ctx;
 	retry_calls_metric++;
 	return retry_calls_metric == 1 ? 500 : 200;
 }
@@ -266,13 +270,13 @@ retry_status_metric(void *ctx)
 static int
 prop_async_metric_retry(uint64_t seed)
 {
-	otlp_exporter_opts_t  opts;
-	otlp_exporter_t      *exp;
-	otlp_metric_t        *m;
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
 	otlp_exporter_stats_t stats;
-	int                   ok = 0;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "retry";
 	opts.batch_size = 1;
@@ -284,8 +288,8 @@ prop_async_metric_retry(uint64_t seed)
 		return 0;
 	otlp_exporter_set_null_transport(exp, true);
 	retry_calls_metric = 0;
-	otlp_exporter_set_null_transport_status_fn(exp,
-		retry_status_metric, NULL);
+	otlp_exporter_set_null_transport_status_fn(
+		exp, retry_status_metric, NULL);
 
 	m = otlp_metric_create(OTLP_METRIC_COUNTER, "r", "1", "", NULL, 0);
 	if (!m)
@@ -299,9 +303,8 @@ prop_async_metric_retry(uint64_t seed)
 
 	otlp_exporter_get_stats(exp, &stats);
 	/* Sent exactly once (not double-counted). */
-	ok = (stats.emitted_metrics == 1 &&
-	      stats.sent_metrics == 1 &&
-	      stats.dropped_metrics_err == 0);
+	ok = (stats.emitted_metrics == 1 && stats.sent_metrics == 1 &&
+		stats.dropped_metrics_err == 0);
 
 out:
 	otlp_exporter_free(exp);
@@ -312,7 +315,7 @@ static int retry_calls_log = 0;
 static int
 retry_status_log(void *ctx)
 {
-	(void)ctx;
+	(void) ctx;
 	retry_calls_log++;
 	return retry_calls_log == 1 ? 503 : 200;
 }
@@ -320,12 +323,12 @@ retry_status_log(void *ctx)
 static int
 prop_async_log_retry(uint64_t seed)
 {
-	otlp_exporter_opts_t  opts;
-	otlp_exporter_t      *exp;
-	otlp_log_record_t    *lr;
+	otlp_exporter_opts_t opts;
+	otlp_exporter_t *exp;
+	otlp_log_record_t *lr;
 	otlp_exporter_stats_t stats;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "retry";
 	opts.batch_size = 1;
@@ -337,8 +340,7 @@ prop_async_log_retry(uint64_t seed)
 		return 0;
 	otlp_exporter_set_null_transport(exp, true);
 	retry_calls_log = 0;
-	otlp_exporter_set_null_transport_status_fn(exp,
-		retry_status_log, NULL);
+	otlp_exporter_set_null_transport_status_fn(exp, retry_status_log, NULL);
 
 	lr = otlp_log_record_create(OTLP_SEVERITY_WARN, "r");
 	if (!lr)
@@ -357,8 +359,7 @@ prop_async_log_retry(uint64_t seed)
 
 	otlp_exporter_get_stats(exp, &stats);
 	otlp_exporter_free(exp);
-	return (stats.emitted_logs == 1 &&
-		stats.sent_logs == 1 &&
+	return (stats.emitted_logs == 1 && stats.sent_logs == 1 &&
 		stats.dropped_logs_err == 0);
 }
 
@@ -370,16 +371,16 @@ static int
 prop_async_span_shutdown_drop(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_tracer_t       *tracer;
-	otlp_span_t         *span;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	otlp_span_t *span;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -406,23 +407,23 @@ static int
 prop_async_metric_shutdown_drop(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_metric_t       *m;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
 
 	otlp_exporter_shutdown(exp);
 
-	m = otlp_metric_create(OTLP_METRIC_COUNTER, "post-shutdown", "1",
-			       "", NULL, 0);
+	m = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "post-shutdown", "1", "", NULL, 0);
 	if (!m)
 		goto out;
 	otlp_metric_record(m, 1.0);
@@ -439,15 +440,15 @@ static int
 prop_async_log_shutdown_drop(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_log_record_t   *lr;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_log_record_t *lr;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -476,15 +477,15 @@ static int
 prop_async_metric_clone_shutdown(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_metric_t       *m;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_metric_t *m;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -515,16 +516,16 @@ static int
 prop_async_span_clone_shutdown(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_tracer_t       *tracer;
-	otlp_span_t         *span = NULL;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_tracer_t *tracer;
+	otlp_span_t *span = NULL;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -555,15 +556,15 @@ static int
 prop_async_log_clone_shutdown(uint64_t seed)
 {
 	otlp_exporter_opts_t opts;
-	otlp_exporter_t     *exp;
-	otlp_log_record_t   *lr;
-	otlp_status_t       st;
-	int                  ok = 0;
+	otlp_exporter_t *exp;
+	otlp_log_record_t *lr;
+	otlp_status_t st;
+	int ok = 0;
 
-	(void)seed;
+	(void) seed;
 	memset(&opts, 0, sizeof(opts));
 	opts.service_name = "drop";
-	opts.batch_size   = 1;
+	opts.batch_size = 1;
 	exp = otlp_exporter_create(&opts);
 	if (!exp)
 		return 0;
@@ -589,36 +590,52 @@ main(void)
 {
 	int failures = 0;
 
-	failures += property_run(prop_async_metric_sent,
-				 "prop_async_metric_sent", 5, 1);
-	failures += property_run(prop_async_log_sent,
-				 "prop_async_log_sent", 5, 1);
-	failures += property_run(prop_async_spans_coexist,
-				 "prop_async_spans_coexist", 5, 1);
+	failures += property_run(
+		prop_async_metric_sent, "prop_async_metric_sent", 5, 1);
+	failures +=
+		property_run(prop_async_log_sent, "prop_async_log_sent", 5, 1);
+	failures += property_run(
+		prop_async_spans_coexist, "prop_async_spans_coexist", 5, 1);
 	failures += property_run(prop_async_metric_drop_full,
-				 "prop_async_metric_drop_full", 5, 1);
+		"prop_async_metric_drop_full",
+		5,
+		1);
 	failures += property_run(prop_async_metric_emit_clone,
-				 "prop_async_metric_emit_clone", 5, 1);
-	failures += property_run(prop_async_metric_retry,
-				 "prop_async_metric_retry", 3, 1);
-	failures += property_run(prop_async_log_retry,
-				 "prop_async_log_retry", 3, 1);
+		"prop_async_metric_emit_clone",
+		5,
+		1);
+	failures += property_run(
+		prop_async_metric_retry, "prop_async_metric_retry", 3, 1);
+	failures += property_run(
+		prop_async_log_retry, "prop_async_log_retry", 3, 1);
 	failures += property_run(prop_async_span_shutdown_drop,
-				 "prop_async_span_shutdown_drop", 3, 1);
+		"prop_async_span_shutdown_drop",
+		3,
+		1);
 	failures += property_run(prop_async_metric_shutdown_drop,
-				 "prop_async_metric_shutdown_drop", 3, 1);
+		"prop_async_metric_shutdown_drop",
+		3,
+		1);
 	failures += property_run(prop_async_log_shutdown_drop,
-				 "prop_async_log_shutdown_drop", 3, 1);
+		"prop_async_log_shutdown_drop",
+		3,
+		1);
 	failures += property_run(prop_async_metric_clone_shutdown,
-				 "prop_async_metric_clone_shutdown", 3, 1);
+		"prop_async_metric_clone_shutdown",
+		3,
+		1);
 	failures += property_run(prop_async_log_clone_shutdown,
-				 "prop_async_log_clone_shutdown", 3, 1);
+		"prop_async_log_clone_shutdown",
+		3,
+		1);
 	failures += property_run(prop_async_span_clone_shutdown,
-				 "prop_async_span_clone_shutdown", 3, 1);
+		"prop_async_span_clone_shutdown",
+		3,
+		1);
 
 	if (failures)
 		printf("[property] %d async-metrics property(ies) failed\n",
-		       failures);
+			failures);
 	else
 		printf("[property] all async-metrics properties passed\n");
 	return failures ? 1 : 0;

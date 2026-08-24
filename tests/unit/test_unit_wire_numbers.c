@@ -25,7 +25,9 @@
 #include "protobuf_decode.h"
 #include "protobuf_encode.h"
 
+#include <otlp-c/log.h>
 #include <otlp-c/metric.h>
+#include <otlp-c/span.h>
 
 #include <assert.h>
 #include <stdbool.h>
@@ -143,7 +145,7 @@ test_histogram_wire_numbers(void)
 	check_true(st == OTLP_OK);
 	metrics[0] = m;
 	st = otlp_encode_export_metrics_service_request(
-		&body, "wire-svc", NULL, 0, NULL, NULL, metrics, 1);
+		&body, "wire-svc", NULL, NULL, 0, NULL, NULL, metrics, 1);
 	check_true(st == OTLP_OK);
 	otlp_metric_free(m);
 
@@ -322,7 +324,7 @@ test_exp_histogram_wire_numbers(void)
 	check_true(st == OTLP_OK);
 	metrics[0] = m;
 	st = otlp_encode_export_metrics_service_request(
-		&body, "wire-svc", NULL, 0, NULL, NULL, metrics, 1);
+		&body, "wire-svc", NULL, NULL, 0, NULL, NULL, metrics, 1);
 	check_true(st == OTLP_OK);
 	otlp_metric_free(m);
 
@@ -758,6 +760,104 @@ test_schema_pins_upstream(void)
 	return 0;
 }
 
+/* v0.7.4: opts.schema_url is emitted as field 3 (upstream
+ * literal) on every signal's resource-level message. */
+static int
+test_schema_url_emitted(void)
+{
+	static const char URL[] = "https://schema.example.com/1.1.0";
+	struct otlp_pb_buf buf = { 0 };
+	const uint8_t *rs;
+	size_t rs_len;
+	struct otlp_pb_reader r;
+	const uint8_t *sub;
+	size_t sub_len;
+	const otlp_span_t *spans[1] = { NULL };
+	const otlp_metric_t *mets[1] = { NULL };
+	const otlp_log_record_t *logs[1] = { NULL };
+	otlp_span_t *sp = otlp_span_create("schema-url-probe");
+	const uint8_t *trace_body, *metrics_body, *logs_body;
+
+	check_true(sp != NULL);
+	spans[0] = sp;
+	otlp_span_mark_end(sp);
+	mets[0] = otlp_metric_create(
+		OTLP_METRIC_COUNTER, "probe", "1", NULL, NULL, 0);
+	logs[0] = otlp_log_record_create(OTLP_SEVERITY_INFO, "m");
+
+	/* Traces. */
+	check_ok(otlp_pb_buf_init(&buf, 0));
+	check_ok(otlp_encode_export_trace_service_request(&buf,
+		"svc",
+		"https://schema.example.com/1.1.0",
+		NULL,
+		0,
+		NULL,
+		NULL,
+		spans,
+		1));
+	otlp_pb_reader_init(&r, buf.data, buf.len);
+	check_true(find_submessage(&r, 1, &rs, &rs_len));
+	otlp_pb_reader_init(&r, rs, rs_len);
+	check_true(find_submessage(&r, 3, &sub, &sub_len));
+	check_true(
+		sub_len == sizeof(URL) - 1 && memcmp(sub, URL, sub_len) == 0);
+	otlp_pb_buf_free(&buf);
+
+	/* Metrics. */
+	check_ok(otlp_pb_buf_init(&buf, 0));
+	check_ok(otlp_encode_export_metrics_service_request(&buf,
+		"svc",
+		"https://schema.example.com/1.1.0",
+		NULL,
+		0,
+		NULL,
+		NULL,
+		mets,
+		1));
+	otlp_pb_reader_init(&r, buf.data, buf.len);
+	check_true(find_submessage(&r, 1, &rs, &rs_len));
+	otlp_pb_reader_init(&r, rs, rs_len);
+	check_true(find_submessage(&r, 3, &sub, &sub_len));
+	check_true(
+		sub_len == sizeof(URL) - 1 && memcmp(sub, URL, sub_len) == 0);
+	otlp_pb_buf_free(&buf);
+
+	/* Logs. */
+	check_ok(otlp_pb_buf_init(&buf, 0));
+	check_ok(otlp_encode_export_logs_service_request(&buf,
+		"svc",
+		"https://schema.example.com/1.1.0",
+		NULL,
+		0,
+		NULL,
+		NULL,
+		logs,
+		1));
+	otlp_pb_reader_init(&r, buf.data, buf.len);
+	check_true(find_submessage(&r, 1, &rs, &rs_len));
+	otlp_pb_reader_init(&r, rs, rs_len);
+	check_true(find_submessage(&r, 3, &sub, &sub_len));
+	check_true(
+		sub_len == sizeof(URL) - 1 && memcmp(sub, URL, sub_len) == 0);
+	otlp_pb_buf_free(&buf);
+
+	/* Absent when NULL: ResourceSpans must not carry field 3. */
+	check_ok(otlp_pb_buf_init(&buf, 0));
+	check_ok(otlp_encode_export_trace_service_request(
+		&buf, "svc", NULL, NULL, 0, NULL, NULL, spans, 1));
+	otlp_pb_reader_init(&r, buf.data, buf.len);
+	check_true(find_submessage(&r, 1, &rs, &rs_len));
+	otlp_pb_reader_init(&r, rs, rs_len);
+	check_true(!find_submessage(&r, 3, &sub, &sub_len));
+	otlp_pb_buf_free(&buf);
+
+	otlp_metric_free((otlp_metric_t *) mets[0]);
+	otlp_log_record_free((otlp_log_record_t *) logs[0]);
+	otlp_span_free(sp);
+	return 0;
+}
+
 int
 main(void)
 {
@@ -766,6 +866,7 @@ main(void)
 	failures += test_histogram_wire_numbers();
 	failures += test_exp_histogram_wire_numbers();
 	failures += test_schema_pins_upstream();
+	failures += test_schema_url_emitted();
 
 	if (failures)
 		printf("[unit-wire] FAIL (%d test(s))\n", failures);

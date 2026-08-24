@@ -69,7 +69,7 @@ prop_events_field_roundtrip(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	/* Descend: ResourceSpans{1} → ScopeSpans{2} → Span{2}. */
@@ -143,7 +143,7 @@ prop_links_field_roundtrip(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -207,7 +207,7 @@ prop_trace_state_field(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;
@@ -650,7 +650,7 @@ prop_event_link_typed_attrs_wire(uint64_t seed)
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
 		goto out;
 	if (otlp_encode_export_trace_service_request(
-		    &buf, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
+		    &buf, NULL, NULL, NULL, 0, NULL, NULL, arr, 1) != OTLP_OK)
 		goto out_buf;
 
 	pos = 0;

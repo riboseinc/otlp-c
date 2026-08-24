@@ -672,7 +672,7 @@ test_encode_traces_oom(void)
 
 		reset_counters(n);
 		st = otlp_encode_export_trace_service_request(
-			&body, "svc", NULL, 0, "sc", "1", arr, 1);
+			&body, "svc", NULL, NULL, 0, "sc", "1", arr, 1);
 		otlp_pb_buf_free(&body);
 		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
 			bad_rc++;
@@ -732,7 +732,7 @@ test_encode_metrics_oom(void)
 
 		reset_counters(n);
 		st = otlp_encode_export_metrics_service_request(
-			&body, "svc", NULL, 0, "sc", "1", arr, 2);
+			&body, "svc", NULL, NULL, 0, "sc", "1", arr, 2);
 		otlp_pb_buf_free(&body);
 		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
 			bad_rc++;
@@ -782,7 +782,7 @@ test_encode_logs_oom(void)
 
 		reset_counters(n);
 		st = otlp_encode_export_logs_service_request(
-			&body, "svc", NULL, 0, "sc", "1", arr, 1);
+			&body, "svc", NULL, NULL, 0, "sc", "1", arr, 1);
 		otlp_pb_buf_free(&body);
 		if (st != OTLP_OK && st != OTLP_ERR_NOMEM)
 			bad_rc++;

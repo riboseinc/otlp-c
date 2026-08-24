@@ -40,7 +40,7 @@ prop_encode_empty_request(uint64_t seed)
 	if (st != OTLP_OK)
 		return 0;
 	st = otlp_encode_export_trace_service_request(
-		&buf, NULL, NULL, 0, NULL, NULL, NULL, 0);
+		&buf, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0);
 	if (st == OTLP_OK)
 		ok = (buf.len == 0);
 	otlp_pb_buf_free(&buf);

@@ -198,8 +198,7 @@ build_request(struct otlp_http_request *r,
 		for (p = headers[i].name; *p != '\0'; p++)
 			if (*p == '\r' || *p == '\n')
 				return OTLP_ERR_INVALID_ARGUMENT;
-		for (p = headers[i].value ? headers[i].value : "";
-			*p != '\0';
+		for (p = headers[i].value ? headers[i].value : ""; *p != '\0';
 			p++)
 			if (*p == '\r' || *p == '\n')
 				return OTLP_ERR_INVALID_ARGUMENT;

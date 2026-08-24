@@ -23,7 +23,6 @@ otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 		"/v1/traces", "/v1/metrics", "/v1/logs"
 	};
 	struct otlp_http_url parsed;
-	size_t len;
 	const char *path_start;
 	size_t base_len;
 	size_t scheme_host_len;
@@ -34,7 +33,6 @@ otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 	if (!value || value[0] == '\0')
 		return OTLP_OK;
 
-	len = strlen(value);
 	path_start = strstr(value, "://");
 	if (!path_start)
 		return OTLP_ERR_INVALID_ARGUMENT;

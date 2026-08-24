@@ -91,15 +91,16 @@ mpsc_queue_push(struct mpsc_queue *q, void *item)
 	for (;;)
 	{
 		slot = &q->slots[h & q->mask];
-		seq = otlp_atomic_load_u64(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
+		seq = otlp_atomic_load_u64(
+			&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
 		const int64_t diff = (int64_t) seq - (int64_t) h;
 		if (diff == 0)
 		{
 			if (otlp_atomic_cas_u64(&q->head,
-					    &h,
-					    h + 1,
-					    OTLP_MEMORY_ORDER_RELAXED,
-					    OTLP_MEMORY_ORDER_RELAXED))
+				    &h,
+				    h + 1,
+				    OTLP_MEMORY_ORDER_RELAXED,
+				    OTLP_MEMORY_ORDER_RELAXED))
 				break;
 		}
 		else if (diff < 0)
@@ -114,8 +115,7 @@ mpsc_queue_push(struct mpsc_queue *q, void *item)
 	}
 
 	slot->data = item;
-	otlp_atomic_store_u64(
-		&slot->seq, h + 1, OTLP_MEMORY_ORDER_RELEASE);
+	otlp_atomic_store_u64(&slot->seq, h + 1, OTLP_MEMORY_ORDER_RELEASE);
 	return OTLP_OK;
 }
 
@@ -124,8 +124,9 @@ mpsc_queue_pop(struct mpsc_queue *q)
 {
 	uint64_t t = otlp_atomic_load_u64(&q->tail, OTLP_MEMORY_ORDER_RELAXED);
 	struct mpsc_slot *slot = &q->slots[t & q->mask];
-	uint64_t seq = otlp_atomic_load_u64(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
-	const int64_t diff = (int64_t) seq - (int64_t) (t + 1);
+	uint64_t seq =
+		otlp_atomic_load_u64(&slot->seq, OTLP_MEMORY_ORDER_ACQUIRE);
+	const int64_t diff = (int64_t) seq - (int64_t)(t + 1);
 
 	if (diff != 0)
 		return NULL;
@@ -147,5 +148,5 @@ mpsc_queue_size(const struct mpsc_queue *q)
 	uint64_t h = otlp_atomic_load_u64(&mq->head, OTLP_MEMORY_ORDER_RELAXED);
 	uint64_t t = otlp_atomic_load_u64(&mq->tail, OTLP_MEMORY_ORDER_RELAXED);
 
-	return h >= t ? (size_t) (h - t) : 0;
+	return h >= t ? (size_t)(h - t) : 0;
 }

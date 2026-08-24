@@ -128,6 +128,12 @@ extern "C"
 		 * different spans. */
 		const char *service_name;
 
+		/* Telemetry schema URL (v0.7.4), emitted as schema_url
+		 * (field 3) on every signal's resource-level message per
+		 * the OTLP proto. NULL/empty = omitted. UTF-8 validated
+		 * at create. */
+		const char *schema_url;
+
 		/* Additional Resource attributes emitted on every batch
 		 * alongside service.name (e.g., service.version,
 		 * deployment.environment, host.name). The library copies

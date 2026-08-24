@@ -74,7 +74,7 @@ prop_varint_size(uint64_t seed)
 			bits++;
 			v >>= 1;
 		}
-		expected = (size_t) ((bits + 6) / 7);
+		expected = (size_t)((bits + 6) / 7);
 	}
 
 	if (otlp_pb_buf_init(&buf, 0) != OTLP_OK)
