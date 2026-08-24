@@ -109,12 +109,19 @@ extern "C"
 	 * for the rest. */
 	typedef struct
 	{
-		/* OTLP/HTTP endpoint. Default:
+		/* OTLP/HTTP endpoint (the TRACES signal's). Default:
 		 * "http://localhost:4318/v1/traces". Must include scheme + host
 		 * + port + path. The library talks plain HTTP to localhost; the
 		 * otelcol sidecar terminates TLS to the real backend. See
 		 * docs/deployment.md. */
 		const char *endpoint;
+
+		/* Per-signal endpoint overrides (v0.7.3): full URLs for
+		 * the metrics / logs signals. NULL/empty = derive from
+		 * `endpoint` (same scheme+host+port, the signal's
+		 * default path /v1/metrics or /v1/logs). */
+		const char *metrics_endpoint;
+		const char *logs_endpoint;
 
 		/* Service name attached to every batch's Resource. Default: "".
 		 * Override per-tracer if you need different service names for
@@ -199,6 +206,8 @@ extern "C"
 	typedef struct
 	{
 		char endpoint[256];
+		char metrics_endpoint[256];
+		char logs_endpoint[256];
 		char attr_keys[32][128];
 		char attr_vals[32][256];
 		otlp_resource_attr_t attrs[32];
@@ -225,6 +234,14 @@ extern "C"
 	 * corresponding opt; the rest pass through untouched, so this
 	 * composes with hand-filled opts. Environment-derived strings
 	 * and the attribute array live in `storage`.
+	 *
+	 * ENDPOINT is a BASE: each signal's default path is
+	 * appended (/v1/traces, /v1/metrics, /v1/logs). The
+	 * signal-specific full forms —
+	 * OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+	 * OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+	 * OTEL_EXPORTER_OTLP_LOGS_ENDPOINT — override per signal and
+	 * must carry their own paths.
 	 *
 	 * Also applies OTEL_EXPORTER_OTLP_HEADERS ("k=v,k=v" —
 	 * comma-separated pairs, literal values, malformed segments
