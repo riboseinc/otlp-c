@@ -249,8 +249,7 @@ extern "C"
 	 *
 	 * Returns the first malformed value found
 	 * (OTLP_ERR_INVALID_ARGUMENT), or OTLP_OK. Not supported:
-	 * per-signal metric/log endpoint variables (those paths
-	 * derive from the traces endpoint).
+	 * per-signal TIMEOUT variables.
 	 */
 	OTLP_C_EXPORT
 	otlp_status_t otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,

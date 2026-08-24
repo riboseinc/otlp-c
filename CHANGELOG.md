@@ -4,6 +4,31 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] - 2026-08-24
+
+Per-signal endpoints, end to end.
+
+### Changed — one URL per signal (the model change)
+
+The exporter now holds a full URL per signal (sig[s].url) instead
+of deriving metric/log paths from the traces URL at encode time:
+create() derives each from the endpoint base + the signal's
+default path (now a SIGNAL_SPECS column — the add-a-signal table
+gains the path), or takes the new `metrics_endpoint` /
+`logs_endpoint` opts. The exporter_otel build functions receive
+their signal's URL verbatim (path rewrites deleted); the
+sync-flush path parameter is gone.
+
+### Added — OTEL_EXPORTER_OTLP_METRICS/LOGS_ENDPOINT
+
+The per-signal full-endpoint forms, completing the endpoint env
+matrix. `OTEL_EXPORTER_OTLP_ENDPOINT` is now a true base: each
+signal's default path is appended (a value carrying its own path
+is stripped to scheme+host+port — exact control comes from the
+signal-specific forms). Wire-proven: exporter-echo drives
+flush_metric through a custom metrics endpoint and asserts
+`POST /custom-metrics` on the captured request.
+
 ## [0.7.2] - 2026-08-24
 
 Extra HTTP headers + OTEL_EXPORTER_OTLP_HEADERS.

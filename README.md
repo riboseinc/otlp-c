@@ -188,16 +188,19 @@ otlp_exporter_t *exp = otlp_exporter_create(&opts);
 
 | Variable | Effect |
 |---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | base endpoint; `/v1/traces` appended when no path |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | base endpoint; each signal's default path appended (`/v1/traces`, `/v1/metrics`, `/v1/logs`) |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | full traces endpoint; wins over the base form |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | full metrics endpoint; wins over the base form |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | full logs endpoint; wins over the base form |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | request timeout (ms), applied to connect + read |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | must be `http/protobuf` if set, else error |
 | `OTEL_SERVICE_NAME` | service name |
 | `OTEL_RESOURCE_ATTRIBUTES` | `k=v,k=v` resource attributes (literal values, malformed segments skipped; `service.name` yields to `OTEL_SERVICE_NAME`) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | `k=v,k=v` extra HTTP headers on every export request (auth for the collector; literal values, malformed segments skipped) |
 
-Not supported: per-signal metric/log endpoint variables (those
-paths derive from the one traces endpoint).
+Per-signal endpoints are also opts fields
+(`metrics_endpoint`, `logs_endpoint` — NULL derives from
+`endpoint`). Not supported: per-signal TIMEOUT variables.
 
 ## Extra HTTP headers
 
