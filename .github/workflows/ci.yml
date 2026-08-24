@@ -281,7 +281,11 @@ jobs:
           project(consumer C)
           set(CMAKE_INSTALL_LIBDIR "lib/consumer-check" CACHE PATH "")
           include(FetchContent)
-          FetchContent_Declare(otlp-c SOURCE_DIR "$ENV{GITHUB_WORKSPACE}")
+          # TO_CMAKE_PATH: on Windows $ENV{GITHUB_WORKSPACE} carries
+          # backslashes, which FetchContent embeds verbatim into the
+          # subbuild CMakeLists — "\a" parses as an invalid escape.
+          file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}" OTLP_C_SOURCE_DIR)
+          FetchContent_Declare(otlp-c SOURCE_DIR "${OTLP_C_SOURCE_DIR}")
           FetchContent_MakeAvailable(otlp-c)
           if(NOT "${CMAKE_INSTALL_LIBDIR}" STREQUAL "lib/consumer-check")
               message(FATAL_ERROR
