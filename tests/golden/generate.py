@@ -36,6 +36,7 @@ import opentelemetry.proto.resource.v1.resource_pb2 as resource_pb2
 import opentelemetry.proto.trace.v1.trace_pb2 as trace_pb2
 
 SERVICE = "golden-svc"
+SCHEMA_URL = "https://otlp-c.dev/golden/v1"
 SCOPE_NAME = "golden-scope"
 SCOPE_VERSION = "1.2.3"
 T_BASE = 1700000000000000000
@@ -110,6 +111,7 @@ def traces_payload():
     return trace_service.ExportTraceServiceRequest(
         resource_spans=[trace_pb2.ResourceSpans(
             resource=resource(),
+            schema_url=SCHEMA_URL,
             scope_spans=[trace_pb2.ScopeSpans(
                 scope=common_pb2.InstrumentationScope(
                     name=SCOPE_NAME, version=SCOPE_VERSION),
@@ -127,7 +129,9 @@ def metrics_payload():
             as_double=42.5,
             attributes=[common_pb2.KeyValue(
                 key="axis",
-                value=common_pb2.AnyValue(string_value="x"))])]))
+                value=common_pb2.AnyValue(string_value="x"))],
+            exemplars=[metrics_pb2.Exemplar(
+                as_int=42)])]))
 
     # All values are exact in binary — sums match bit-for-bit in any
     # implementation. records: [1.25, 12.5, 15, 22, 25, 30, 64]
@@ -170,11 +174,17 @@ def metrics_payload():
             is_monotonic=True,
             data_points=[metrics_pb2.NumberDataPoint(
                 time_unix_nano=T_BASE + 333333333,
-                as_double=7.0)]))
+                as_double=7.0,
+                exemplars=[metrics_pb2.Exemplar(
+                    time_unix_nano=T_BASE + 444444444,
+                    as_double=7.5,
+                    trace_id=bytes(range(0x70, 0x80)),
+                    span_id=bytes(range(0x80, 0x88)))])]))
 
     return metrics_service.ExportMetricsServiceRequest(
         resource_metrics=[metrics_pb2.ResourceMetrics(
             resource=resource(),
+            schema_url=SCHEMA_URL,
             scope_metrics=[metrics_pb2.ScopeMetrics(
                 scope=common_pb2.InstrumentationScope(
                     name=SCOPE_NAME, version=SCOPE_VERSION),
@@ -185,6 +195,7 @@ def logs_payload():
     return logs_service.ExportLogsServiceRequest(
         resource_logs=[logs_pb2.ResourceLogs(
             resource=resource(),
+            schema_url=SCHEMA_URL,
             scope_logs=[logs_pb2.ScopeLogs(
                 scope=common_pb2.InstrumentationScope(
                     name=SCOPE_NAME, version=SCOPE_VERSION),

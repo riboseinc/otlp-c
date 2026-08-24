@@ -536,12 +536,14 @@ pin_table(const char *table,
 #define N_PINS(a) (sizeof(a) / sizeof((a)[0]))
 
 static const struct wire_pin PINS_EX[] = {
-	{ OTLP_EX_FI_FILTERED_ATTRIBUTES, 1, OTLP_PB_WIRE_LEN },
-	{ OTLP_EX_FI_DOUBLE_VALUE, 2, OTLP_PB_WIRE_FIXED64 },
-	{ OTLP_EX_FI_INT_VALUE, 3, OTLP_PB_WIRE_FIXED64 },
-	{ OTLP_EX_FI_TRACE_ID, 4, OTLP_PB_WIRE_LEN },
-	{ OTLP_EX_FI_SPAN_ID, 5, OTLP_PB_WIRE_LEN },
-	{ OTLP_EX_FI_TIME, 6, OTLP_PB_WIRE_FIXED64 }
+	/* Literals from the installed opentelemetry-proto descriptor
+	 * (v1.0.1: the v0.8.0 literals were hand-copied wrong). */
+	{ OTLP_EX_FI_TIME, 2, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EX_FI_DOUBLE_VALUE, 3, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EX_FI_SPAN_ID, 4, OTLP_PB_WIRE_LEN },
+	{ OTLP_EX_FI_TRACE_ID, 5, OTLP_PB_WIRE_LEN },
+	{ OTLP_EX_FI_INT_VALUE, 6, OTLP_PB_WIRE_FIXED64 },
+	{ OTLP_EX_FI_FILTERED_ATTRIBUTES, 7, OTLP_PB_WIRE_LEN }
 };
 
 static const struct wire_pin PINS_ETSR[] = {
@@ -940,16 +942,16 @@ test_exemplars_emitted(void)
 		struct otlp_pb_reader er;
 
 		otlp_pb_reader_init(&er, exb, exb_len);
-		check_true(find_field_fixed64(&er, 2, &v));
+		check_true(find_field_fixed64(&er, 3, &v));
 		check_true(bits_of(3.5) == v);
 		otlp_pb_reader_init(&er, exb, exb_len);
-		check_true(find_field_bytes(&er, 4, &b, &b_len));
+		check_true(find_field_bytes(&er, 5, &b, &b_len));
 		check_true(b_len == 16 && b[0] == 1);
 		otlp_pb_reader_init(&er, exb, exb_len);
-		check_true(find_field_bytes(&er, 5, &b, &b_len));
+		check_true(find_field_bytes(&er, 4, &b, &b_len));
 		check_true(b_len == 8 && b[0] == 2);
 		otlp_pb_reader_init(&er, exb, exb_len);
-		check_true(find_field_fixed64(&er, 6, &v));
+		check_true(find_field_fixed64(&er, 2, &v));
 		check_true(v > 0); /* stamped, not absent */
 	}
 	otlp_pb_buf_free(&buf);

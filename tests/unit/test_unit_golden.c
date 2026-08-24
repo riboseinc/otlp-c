@@ -343,8 +343,15 @@ build_traces(struct otlp_pb_buf *out)
 	check_ok(otlp_span_set_link_attribute_bool(s, "linked", true));
 
 	spans[0] = s;
-	check_ok(otlp_encode_export_trace_service_request(
-		out, "golden-svc", NULL, NULL, 0, "golden-scope", "1.2.3", spans, 1));
+	check_ok(otlp_encode_export_trace_service_request(out,
+		"golden-svc",
+		"https://otlp-c.dev/golden/v1",
+		NULL,
+		0,
+		"golden-scope",
+		"1.2.3",
+		spans,
+		1));
 	otlp_span_free(s);
 	return true;
 }
@@ -358,7 +365,14 @@ make_gauge(void)
 	check_true(m != NULL);
 	check_ok(otlp_metric_record(m, 42.5));
 	check_ok(otlp_metric_set_time(m, T_BASE + 555000000));
+	otlp_exemplar_t *ex;
+
 	check_ok(otlp_metric_set_attribute_string(m, "axis", "x"));
+	ex = otlp_exemplar_create();
+	check_true(ex != NULL);
+	check_ok(otlp_exemplar_set_int_value(ex, 42));
+	check_ok(otlp_metric_add_exemplar(m, ex));
+	otlp_exemplar_free(ex);
 	return m;
 }
 
@@ -408,11 +422,26 @@ make_counter(void)
 		OTLP_METRIC_COUNTER, "golden-counter", "1", NULL, NULL, 0);
 
 	check_true(m != NULL);
+	otlp_exemplar_t *ex;
+
 	check_ok(otlp_metric_record(m, 3.0));
 	check_ok(otlp_metric_record(m, 4.0));
 	check_ok(otlp_metric_set_time(m, T_BASE + 333333333));
 	check_ok(otlp_metric_set_aggregation_temporality(
 		m, OTLP_AGG_TEMP_CUMULATIVE));
+	ex = otlp_exemplar_create();
+	check_true(ex != NULL);
+	check_ok(otlp_exemplar_set_double_value(ex, 7.5));
+	{
+		uint8_t etid[16], esid[8];
+
+		fill_ids(etid, 0x70, 16);
+		fill_ids(esid, 0x80, 8);
+		check_ok(otlp_exemplar_set_trace_context(ex, etid, esid));
+	}
+	check_ok(otlp_exemplar_set_timestamp(ex, T_BASE + 444444444));
+	check_ok(otlp_metric_add_exemplar(m, ex));
+	otlp_exemplar_free(ex);
 	return m;
 }
 
@@ -426,7 +455,7 @@ build_metrics(struct otlp_pb_buf *out)
 	metrics[2] = make_exp_hist();
 	metrics[3] = make_counter();
 	check_ok(otlp_encode_export_metrics_service_request(out,
-		"golden-svc", NULL,
+		"golden-svc", "https://otlp-c.dev/golden/v1",
 		NULL,
 		0,
 		"golden-scope",
@@ -464,8 +493,15 @@ build_logs(struct otlp_pb_buf *out)
 
 	logs[0] = lr1;
 	logs[1] = lr2;
-	check_ok(otlp_encode_export_logs_service_request(
-		out, "golden-svc", NULL, NULL, 0, "golden-scope", "1.2.3", logs, 2));
+	check_ok(otlp_encode_export_logs_service_request(out,
+		"golden-svc",
+		"https://otlp-c.dev/golden/v1",
+		NULL,
+		0,
+		"golden-scope",
+		"1.2.3",
+		logs,
+		2));
 	otlp_log_record_free(lr1);
 	otlp_log_record_free(lr2);
 	return true;
@@ -485,6 +521,18 @@ main(void)
 
 	check_ok(otlp_pb_buf_init(&ours, 1024));
 	check_true(build_metrics(&ours));
+	/* Debug hook: GOLDEN_DUMP=1 writes our payload next to the
+	 * reference .bin for external decoding. */
+	if (getenv("GOLDEN_DUMP") && ours.len > 0)
+	{
+		FILE *f = fopen("/tmp/ours-metrics.bin", "wb");
+
+		if (f)
+		{
+			fwrite(ours.data, 1, ours.len, f);
+			fclose(f);
+		}
+	}
 	failures += !compare_vector(
 		"metrics", GOLDEN_METRICS, GOLDEN_METRICS_LEN, &ours);
 	otlp_pb_buf_free(&ours);
