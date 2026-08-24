@@ -129,7 +129,7 @@ FetchContent against a release tag (`v0.6.8` shown):
 include(FetchContent)
 FetchContent_Declare(otlp-c
     GIT_REPOSITORY https://github.com/riboseinc/otlp-c
-    GIT_TAG        v0.6.8)
+    GIT_TAG        v0.6.15)
 FetchContent_MakeAvailable(otlp-c)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
@@ -146,15 +146,23 @@ find_package(otlp-c CONFIG REQUIRED)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
 
-### vcpkg (toolchain environment)
+### vcpkg (overlay port)
 
-This repo carries a vcpkg manifest so it can be *built* under a
-vcpkg toolchain. The manifest declares no dependencies (zero
-non-libc deps is the point) and publishes no installable port:
+No `otlp-c` port is published in the public registry, but this
+repo ships a tested overlay port (`ports/otlp-c`) that builds the
+local checkout — same recipe CI runs (the "vcpkg overlay consumer"
+job):
 
 ```sh
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+cmake -S tests/consumers/vcpkg_overlay -B build \
+    -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_OVERLAY_PORTS=$PWD/ports
+cmake --build build && ctest --test-dir build
 ```
+
+The repo's own manifest (`vcpkg.json`) is for building otlp-c
+under a vcpkg toolchain; it declares no dependencies (zero
+non-libc deps is the point).
 
 ## Quick start
 

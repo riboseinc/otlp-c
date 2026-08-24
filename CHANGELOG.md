@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.15] - 2026-08-24
+
+The vcpkg overlay port becomes real, tested infrastructure.
+
+### Fixed — ports/otlp-c had never been buildable
+
+The in-repo overlay port was pinned at v0.5.17 (97 releases
+stale) with an all-zeros placeholder SHA512, and was missing the
+`vcpkg-cmake-config` host dependency — `vcpkg_cmake_config_fixup`
+was an unknown command, so the recipe failed the moment anything
+tried to build it (nothing ever had). The portfile now builds the
+LOCAL checkout (`SOURCE_PATH` = the repo containing ports/), so
+there is no REF/SHA to drift; the port manifest version, frozen at
+0.5.17 for a hundred releases, tracks the library again.
+
+### Added — vcpkg overlay consumer (CI + standalone project)
+
+`tests/consumers/vcpkg_overlay/` installs otlp-c through the
+overlay port in manifest mode and runs an emit-to-flush round
+trip; the new "vcpkg overlay consumer" CI job (ubuntu) bootstraps
+vcpkg and runs exactly that — the third consumption path is now
+pinned like find_package and FetchContent. Docs updated: README's
+vcpkg section shows the working overlay recipe, the quickstart's
+FetchContent tag moved off v0.6.8, CLAUDE.md's key-files table
+gains the v0.6.11/13 modules, and the architecture diagram shows
+http_response_parser and retry_policy.
+
 ## [0.6.14] - 2026-08-24
 
 License change: Apache-2.0 -> BSD 3-Clause.

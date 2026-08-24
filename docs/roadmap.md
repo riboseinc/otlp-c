@@ -170,12 +170,13 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.8 | Install-docs truth: consumer instructions pointed at a nonexistent vcpkg port (verified against the registry) — FetchContent/add_subdirectory/install now documented; release-notes/ marked frozen at v0.5.0 with pointers to the canonical CHANGELOG + GitHub Releases; property-http-timeout made VPN-safe (cap no longer equals the read deadline); roadmap backslash-ref literal fixed | #145 |
 | 0.6.9 | **Embedded-build hygiene**: the just-documented FetchContent path clobbered the consumer's CMAKE_INSTALL_LIBDIR (CACHE FORCE) and leaked CPack config into its build tree — both gated on top-level-only; new CI job builds a real FetchContent consumer (ubuntu+windows) with clobber/leak assertions | #146 |
 | 0.6.10 | CI hygiene: consumer fixtures move from workflow-YAML heredocs (unlintable, first-executed-by-CI) to standalone projects in tests/consumers/ — runnable locally with the exact CI commands; hygiene assertions now configure-time FATAL_ERRORs, both mutation-tested | #147 |
+| 0.6.15 | **Overlay port made real**: ports/otlp-c was never buildable (pinned v0.5.17, zero SHA, missing vcpkg-cmake-config) — now builds the local checkout (no drift), manifest consumer + CI job pin the third consumption path; docs drift swept (quickstart tag, CLAUDE.md module rows, architecture diagram) | #152 |
 | 0.6.14 | **License: Apache-2.0 → BSD 3-Clause** (maintainer decision): LICENSE, 135 SPDX headers (7 "Identifier-Identifier" typos fixed), both vcpkg manifests, README/CONTRIBUTING/CLAUDE.md; CNCF-donation path noted as closed (CNCF requires Apache-2.0); releases ≤ 0.6.13 stay Apache-2.0 | #151 |
 | 0.6.13 | **Retry timing as pure functions** (src/retry_policy): full-jitter bounds, exponent clamp, Retry-After floor+cap now property-tested directly (test #51) instead of only via exporter scenarios; the duplicated private ms clocks collapse into one otlp_platform_now_mono_ms | #150 |
 | 0.6.12 | **One signal table**: exporter's five descriptor families (drain/emit/tick/record/start-post, three instances each assembled at five call sites) collapse into one static spec table + per-signal sig[3] state; exporter.c −268 lines; add-a-signal = one table row (mutation-tested: wrong row id aborts the events suite) | #149 |
 | 0.6.11 | **Response parser as a deep module**: ~300 lines of wire-format logic (smuggling rejection, chunked decode) extracted from the socket machine into src/http_response_parser; byte-fixture suite (no sockets/threads, runs on MSVC — closes the Windows smuggling-coverage gap); fuzz property pure + portable, 300 → 20000 iterations | #148 |
 
-**Key metrics (v0.6.14):** 160 TODOs complete, 51 tests, **50+
+**Key metrics (v0.6.15):** 161 TODOs complete, 51 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:

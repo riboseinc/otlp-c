@@ -1,13 +1,17 @@
 {
-    "name": "otlp-c",
-    "version": "0.5.17",
-    "description": "Pure-C99 OTLP/HTTP client for OpenTelemetry. Zero non-libc dependencies.",
-    "homepage": "https://github.com/riboseinc/otlp-c",
-    "license": "BSD-3-Clause",
-    "dependencies": [
-        {
-            "name": "vcpkg-cmake",
-            "host": true
-        }
-    ]
+  "name": "otlp-c",
+  "version": "0.6.15",
+  "description": "Pure-C99 OTLP/HTTP client for OpenTelemetry. Zero non-libc dependencies.",
+  "homepage": "https://github.com/riboseinc/otlp-c",
+  "license": "BSD-3-Clause",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
 }

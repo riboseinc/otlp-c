@@ -14,6 +14,7 @@ independent project with its own `cmake_minimum_required` /
 |---|---|---|
 | `find_package/` | `cmake --install` + `find_package(otlp-c CONFIG)` | links, runs an emit→flush round trip |
 | `fetchcontent/` | `FetchContent` / `add_subdirectory` embedding | round trip + no side effects on the parent (install-layout cache entry survives, no CPack files in the consumer's build tree) |
+| `vcpkg_overlay/` | vcpkg manifest install via the in-repo overlay port (`ports/`) | installs through `vcpkg_cmake_config_fixup`, links, round trip |
 
 ## Run locally (mirrors CI)
 
@@ -33,3 +34,16 @@ cmake --build /tmp/fc-build && ctest --test-dir /tmp/fc-build
 The `fetchcontent/` project mirrors the quickstart's FetchContent
 instructions (`docs/quickstart.md`), with `SOURCE_DIR` instead of
 `GIT_REPOSITORY` so it runs hermetically against a checkout.
+
+## vcpkg overlay
+
+Requires a vcpkg checkout (any recent one):
+
+```sh
+git clone --depth 1 https://github.com/microsoft/vcpkg.git /tmp/vcpkg
+/tmp/vcpkg/bootstrap-vcpkg.sh
+cmake -S tests/consumers/vcpkg_overlay -B /tmp/ovc-build \
+    -DCMAKE_TOOLCHAIN_FILE=/tmp/vcpkg/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_OVERLAY_PORTS=$PWD/ports
+cmake --build /tmp/ovc-build && ctest --test-dir /tmp/ovc-build
+```

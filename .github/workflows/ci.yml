@@ -251,6 +251,34 @@ jobs:
           cmake --build consumer-build --config Release
           ctest --test-dir consumer-build --build-config Release --output-on-failure
 
+  # The in-repo vcpkg overlay port (ports/otlp-c). Until v0.6.15
+  # this recipe had never been built once - pinned at v0.5.17 with
+  # a placeholder SHA, and missing the vcpkg-cmake-config host
+  # dependency (vcpkg_cmake_config_fixup was an unknown command).
+  # This job pins it: a manifest consumer installs otlp-c through
+  # the overlay and runs an emit-to-flush round trip. The portfile
+  # builds the LOCAL checkout, so the recipe cannot drift behind
+  # the releases.
+  vcpkg-overlay-consumer:
+    name: vcpkg overlay consumer (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Test vcpkg overlay consumer
+        shell: bash
+        run: |
+          cmake -S tests/consumers/vcpkg_overlay -B consumer-build \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_OVERLAY_PORTS="$GITHUB_WORKSPACE/ports"
+          cmake --build consumer-build
+          ctest --test-dir consumer-build --output-on-failure
+
   # End-to-end integration against a real otelcol + Jaeger.
   # Validates the wire-format fixes (v0.5.48 Event/Status field
   # numbers, v0.5.49 ExpHistogram wire types, v0.5.50 LogRecord
