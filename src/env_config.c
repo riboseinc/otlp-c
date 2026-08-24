@@ -17,17 +17,20 @@
 otlp_status_t
 otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
-	char *buf,
-	size_t buf_cap)
+	otlp_env_storage_t *st)
 {
 	size_t len;
 	size_t scheme_host_len;
 	const char *path_start;
 	struct otlp_http_url parsed;
+	char *buf;
+	size_t buf_cap;
 	int n;
 
-	if (!opts || !buf)
+	if (!opts || !st)
 		return OTLP_ERR_NULL;
+	buf = st->endpoint;
+	buf_cap = sizeof(st->endpoint);
 	if (!value || value[0] == '\0')
 		return OTLP_OK;
 
@@ -72,13 +75,12 @@ otlp_env_apply_endpoint(otlp_exporter_opts_t *opts,
 otlp_status_t
 otlp_env_apply_traces_endpoint(otlp_exporter_opts_t *opts,
 	const char *value,
-	char *buf,
-	size_t buf_cap)
+	otlp_env_storage_t *st)
 {
 	struct otlp_http_url parsed;
 	int n;
 
-	if (!opts || !buf)
+	if (!opts || !st)
 		return OTLP_ERR_NULL;
 	if (!value || value[0] == '\0')
 		return OTLP_OK;
@@ -86,10 +88,10 @@ otlp_env_apply_traces_endpoint(otlp_exporter_opts_t *opts,
 	n = otlp_http_parse_url(value, &parsed);
 	if (n != OTLP_OK)
 		return n;
-	if (strlen(value) + 1 > buf_cap)
+	if (strlen(value) + 1 > sizeof(st->endpoint))
 		return OTLP_ERR_OVERFLOW;
-	memcpy(buf, value, strlen(value) + 1);
-	opts->endpoint = buf;
+	memcpy(st->endpoint, value, strlen(value) + 1);
+	opts->endpoint = st->endpoint;
 	return OTLP_OK;
 }
 
@@ -154,31 +156,87 @@ otlp_env_apply_service_name(otlp_exporter_opts_t *opts, const char *value)
 }
 
 otlp_status_t
+otlp_env_apply_resource_attrs(otlp_exporter_opts_t *opts,
+	const char *value,
+	otlp_env_storage_t *st)
+{
+	const char *seg;
+
+	if (!opts || !st)
+		return OTLP_ERR_NULL;
+	if (!value || value[0] == '\0')
+		return OTLP_OK;
+
+	st->n_attrs = 0;
+	seg = value;
+	while (*seg != '\0')
+	{
+		const char *comma = strchr(seg, ',');
+		size_t seg_len = comma ? (size_t)(comma - seg) : strlen(seg);
+		const char *eq = memchr(seg, '=', seg_len);
+
+		/* Skip empty segments and segments without '=' (empty
+		 * key included): OTel's log-and-continue posture. */
+		if (eq != NULL && eq != seg)
+		{
+			size_t key_len = (size_t)(eq - seg);
+			size_t val_len = seg_len - key_len - 1;
+
+			if (st->n_attrs >=
+				sizeof(st->attrs) / sizeof(st->attrs[0]))
+				return OTLP_ERR_OVERFLOW;
+			if (key_len >= sizeof(st->attr_keys[0]) ||
+				val_len >= sizeof(st->attr_vals[0]))
+				return OTLP_ERR_OVERFLOW;
+			memcpy(st->attr_keys[st->n_attrs], seg, key_len);
+			st->attr_keys[st->n_attrs][key_len] = '\0';
+			memcpy(st->attr_vals[st->n_attrs], eq + 1, val_len);
+			st->attr_vals[st->n_attrs][val_len] = '\0';
+			st->attrs[st->n_attrs].key = st->attr_keys[st->n_attrs];
+			st->attrs[st->n_attrs].value.type = OTLP_VALUE_STRING;
+			st->attrs[st->n_attrs].value.v.string_val =
+				st->attr_vals[st->n_attrs];
+			st->n_attrs++;
+		}
+		seg = comma ? comma + 1 : seg + seg_len;
+	}
+
+	opts->resource_attributes = st->attrs;
+	opts->n_resource_attributes = st->n_attrs;
+	return OTLP_OK;
+}
+
+otlp_status_t
 otlp_exporter_opts_apply_env(otlp_exporter_opts_t *opts,
-	char *buf,
-	size_t buf_cap)
+	otlp_env_storage_t *storage)
 {
 	otlp_status_t st;
 
-	if (!opts || !buf)
+	if (!opts || !storage)
 		return OTLP_ERR_NULL;
+	st = otlp_env_apply_protocol(
+		opts, getenv("OTEL_EXPORTER_OTLP_PROTOCOL"));
+	if (st != OTLP_OK)
+		return st;
+	st = otlp_env_apply_service_name(opts, getenv("OTEL_SERVICE_NAME"));
+	if (st != OTLP_OK)
+		return st;
 
 	st = otlp_env_apply_protocol(
 		opts, getenv("OTEL_EXPORTER_OTLP_PROTOCOL"));
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_env_apply_endpoint(
-		opts, getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), buf, buf_cap);
+		opts, getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), storage);
 	if (st != OTLP_OK)
 		return st;
-	st = otlp_env_apply_traces_endpoint(opts,
-		getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"),
-		buf,
-		buf_cap);
+	st = otlp_env_apply_traces_endpoint(
+		opts, getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"), storage);
 	if (st != OTLP_OK)
 		return st;
 	st = otlp_env_apply_timeout(opts, getenv("OTEL_EXPORTER_OTLP_TIMEOUT"));
 	if (st != OTLP_OK)
 		return st;
-	return otlp_env_apply_service_name(opts, getenv("OTEL_SERVICE_NAME"));
+	return otlp_env_apply_resource_attrs(
+		opts, getenv("OTEL_RESOURCE_ATTRIBUTES"), storage);
 }
