@@ -232,6 +232,74 @@ jobs:
           cmake --build build --config Release
           ctest --test-dir build --build-config Release --output-on-failure
 
+  # The FetchContent path documented in README/quickstart. Pins two
+  # things: (1) an embedded otlp-c builds, links, and runs from a
+  # consumer project; (2) it is side-effect-free — the consumer's
+  # CMAKE_INSTALL_LIBDIR cache entry must survive MakeAvailable
+  # (the CACHE ... FORCE pin clobbered it before v0.6.9) and no
+  # CPack config may appear in the consumer's build tree.
+  fetchcontent-consumer:
+    name: CMake FetchContent consumer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          vsversion: 2022
+      - name: Test FetchContent consumer
+        shell: bash
+        run: |
+          mkdir -p consumer-test && cd consumer-test
+          cat > main.c << 'EOF'
+          #include <otlp-c/otlp.h>
+          #include <stdio.h>
+          int main(void) {
+              otlp_exporter_opts_t opts = { .service_name = "consumer" };
+              otlp_exporter_t *exp = otlp_exporter_create(&opts);
+              otlp_exporter_set_null_transport(exp, 1);
+              otlp_tracer_t *tr = otlp_tracer_create("c", "c", "0");
+              otlp_span_t *s = otlp_tracer_start_span(tr, "fc");
+              otlp_span_mark_end(s);
+              otlp_exporter_emit(exp, s);
+              otlp_exporter_flush(exp);
+              otlp_span_free(s);
+              otlp_tracer_free(tr);
+              otlp_exporter_free(exp);
+              printf("otlp-c %s round-trip ok\n", otlp_version());
+              return 0;
+          }
+          EOF
+          cat > CMakeLists.txt << 'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(consumer C)
+          set(CMAKE_INSTALL_LIBDIR "lib/consumer-check" CACHE PATH "")
+          include(FetchContent)
+          FetchContent_Declare(otlp-c SOURCE_DIR "$ENV{GITHUB_WORKSPACE}")
+          FetchContent_MakeAvailable(otlp-c)
+          if(NOT "${CMAKE_INSTALL_LIBDIR}" STREQUAL "lib/consumer-check")
+              message(FATAL_ERROR
+                  "otlp-c clobbered CMAKE_INSTALL_LIBDIR: ${CMAKE_INSTALL_LIBDIR}")
+          endif()
+          add_executable(consumer main.c)
+          target_link_libraries(consumer PRIVATE otlp-c::otlp_c)
+          enable_testing()
+          add_test(NAME consumer_test COMMAND consumer)
+          EOF
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          if ls build/CPackConfig.cmake >/dev/null 2>&1; then
+              echo "FAIL: CPack config leaked into consumer build tree"
+              exit 1
+          fi
+          ctest --test-dir build --build-config Release --output-on-failure
+
   # End-to-end integration against a real otelcol + Jaeger.
   # Validates the wire-format fixes (v0.5.48 Event/Status field
   # numbers, v0.5.49 ExpHistogram wire types, v0.5.50 LogRecord
