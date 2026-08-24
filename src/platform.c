@@ -11,18 +11,19 @@
  * Define before any system header.
  */
 #if !defined(_POSIX_C_SOURCE)
-#  define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200809L
 #endif
 
 #include "platform.h"
 
 #if defined(_WIN32)
-#  include <windows.h>
+#include <windows.h>
 #else
-#  include <time.h>
+#include <time.h>
 #endif
 
-otlp_status_t otlp_platform_now_unix_nano(uint64_t *out)
+otlp_status_t
+otlp_platform_now_unix_nano(uint64_t *out)
 {
 	if (!out)
 		return OTLP_ERR_NULL;
@@ -43,12 +44,22 @@ otlp_status_t otlp_platform_now_unix_nano(uint64_t *out)
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
 		return OTLP_ERR_NETWORK;
-	*out = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+	*out = (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 	return OTLP_OK;
 #endif
 }
 
-otlp_status_t otlp_platform_now_mono_nano(uint64_t *out)
+uint64_t
+otlp_platform_now_mono_ms(void)
+{
+	uint64_t n;
+
+	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
+							    : 0;
+}
+
+otlp_status_t
+otlp_platform_now_mono_nano(uint64_t *out)
 {
 	if (!out)
 		return OTLP_ERR_NULL;
@@ -68,7 +79,7 @@ otlp_status_t otlp_platform_now_mono_nano(uint64_t *out)
 
 	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
 		return OTLP_ERR_NETWORK;
-	*out = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+	*out = (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 	return OTLP_OK;
 #endif
 }

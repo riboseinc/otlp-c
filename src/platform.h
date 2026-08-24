@@ -25,6 +25,12 @@ otlp_platform_now_unix_nano(uint64_t *out);
 otlp_status_t
 otlp_platform_now_mono_nano(uint64_t *out);
 
+/* Monotonic milliseconds (nano / 1e6, 0 on clock failure). The one
+ * shared ms clock — the exporter's tick deadlines and the HTTP
+ * client's I/O deadlines both use it (was two private copies). */
+uint64_t
+otlp_platform_now_mono_ms(void);
+
 /* ── Sockets (always non-blocking; in platform_unix.c / _win.c) ─ */
 
 /* Opaque socket handle. */

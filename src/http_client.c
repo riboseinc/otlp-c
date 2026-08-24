@@ -33,16 +33,6 @@
 
 /* ── URL parser ───────────────────────────────────────────────── */
 
-/* Monotonic clock in milliseconds. Used for deadline enforcement. */
-static uint64_t
-mono_ms(void)
-{
-	uint64_t n;
-
-	return (otlp_platform_now_mono_nano(&n) == OTLP_OK) ? n / 1000000ULL
-							    : 0;
-}
-
 static int
 parse_uint16(const char *s, size_t len, uint16_t *out)
 {
@@ -261,7 +251,7 @@ otlp_http_request_start_with_socket(otlp_http_request_t **out,
 	 * step. 0 means no timeout (infinite). */
 	r->connect_timeout_ms = connect_timeout_ms;
 	r->read_timeout_ms = read_timeout_ms;
-	r->start_ms = mono_ms();
+	r->start_ms = otlp_platform_now_mono_ms();
 	r->last_io_ms = r->start_ms;
 
 	st = build_request(r, url, user_agent, body, body_len);
@@ -317,7 +307,7 @@ otlp_http_request_start(otlp_http_request_t **out,
 	/* Start the deadline clock AFTER getaddrinfo + connect initiation.
 	 * The blocking DNS lookup can take seconds; measuring the connect
 	 * timeout from before it would make the deadline fire prematurely. */
-	r->start_ms = mono_ms();
+	r->start_ms = otlp_platform_now_mono_ms();
 	r->last_io_ms = r->start_ms;
 
 	/* If connect() completed synchronously (rare for non-blocking
@@ -362,8 +352,7 @@ static int
 try_parse_response(struct otlp_http_request *r, bool at_eof)
 {
 	struct otlp_http_resp resp;
-	int rc = otlp_http_resp_parse(
-		r->resp_buf, r->resp_len, at_eof, &resp);
+	int rc = otlp_http_resp_parse(r->resp_buf, r->resp_len, at_eof, &resp);
 
 	if (rc == 1)
 	{
@@ -386,14 +375,15 @@ step_connecting(struct otlp_http_request *r)
 	if (st == OTLP_OK)
 	{
 		r->state = OTLP_HTTP_REQ_SENDING;
-		r->last_io_ms = mono_ms();
+		r->last_io_ms = otlp_platform_now_mono_ms();
 		return OTLP_OK;
 	}
 	/* Deadline check: if the caller set a connect timeout and it
 	 * has elapsed since start, fail the request rather than waiting
 	 * forever for an unreachable collector. */
 	if (st == OTLP_ERR_WOULDBLOCK && r->connect_timeout_ms != 0 &&
-		mono_ms() - r->start_ms >= r->connect_timeout_ms)
+		otlp_platform_now_mono_ms() - r->start_ms >=
+			r->connect_timeout_ms)
 	{
 		r->state = OTLP_HTTP_REQ_FAILED;
 		return OTLP_ERR_TIMEOUT;
@@ -417,7 +407,8 @@ step_sending(struct otlp_http_request *r)
 		 * slowloris) would block SENDING forever: the same
 		 * read_timeout_ms inactivity deadline applies. */
 		if (r->read_timeout_ms != 0 &&
-			mono_ms() - r->last_io_ms >= r->read_timeout_ms)
+			otlp_platform_now_mono_ms() - r->last_io_ms >=
+				r->read_timeout_ms)
 		{
 			r->state = OTLP_HTTP_REQ_FAILED;
 			return OTLP_ERR_TIMEOUT;
@@ -427,7 +418,7 @@ step_sending(struct otlp_http_request *r)
 	if (st != OTLP_OK)
 		return st;
 	if (n_written > 0)
-		r->last_io_ms = mono_ms();
+		r->last_io_ms = otlp_platform_now_mono_ms();
 	r->req_sent += n_written;
 	if (r->req_sent == r->req_len)
 	{
@@ -457,7 +448,8 @@ step_reading(struct otlp_http_request *r)
 		 * has elapsed since the last successful recv (or start),
 		 * fail the request. */
 		if (r->read_timeout_ms != 0 &&
-			mono_ms() - r->last_io_ms >= r->read_timeout_ms)
+			otlp_platform_now_mono_ms() - r->last_io_ms >=
+				r->read_timeout_ms)
 		{
 			r->state = OTLP_HTTP_REQ_FAILED;
 			return OTLP_ERR_TIMEOUT;
@@ -491,7 +483,7 @@ step_reading(struct otlp_http_request *r)
 		r->resp_len += n_read;
 		/* Reset the inter-recv timer: a slow-but-steady stream
 		 * should not time out as long as bytes keep arriving. */
-		r->last_io_ms = mono_ms();
+		r->last_io_ms = otlp_platform_now_mono_ms();
 	}
 
 	parsed = try_parse_response(r, false);
