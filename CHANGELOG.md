@@ -21,10 +21,13 @@ bugs the "green" runs had been hiding:
   FreeBSD too (fatal compile error)
 - FreeBSD's `netinet/in.h` hides `INADDR_LOOPBACK` whenever
   `_POSIX_C_SOURCE` is defined — and the build defines it
-  globally for CLOCK_MONOTONIC
+  globally for CLOCK_MONOTONIC (four sites across three test
+  trees)
 - one test called `memmem` with no declaration on FreeBSD
+- `usleep` is gone from POSIX 2008; FreeBSD headers hide it
+  under strict `_POSIX_C_SOURCE` (nanosleep now)
 
-All three are fixed by `tests/test_portable.h`: one always-local
+All fixed by `tests/test_portable.h`: one always-local
 byte-search and a spelled-out loopback constant, so the tests run
 one deterministic code path on every platform. FreeBSD 14.2 now
 gates like every other platform.
