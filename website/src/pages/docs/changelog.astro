@@ -1,0 +1,88 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import "../../styles/global.css";
+
+const releases = [
+  {
+    v: "1.1.2", d: "2026-08-25",
+    t: "Third architecture review",
+    points: [
+      "The sync-flush pipeline extracted to exporter_sync.c — exporter.c 1865 → 1471 lines; the exporter struct lives in exporter_internal.h, the one internal seam, now explicit",
+      "Site docs: context propagation (W3C Trace Context + Baggage) and performance pages",
+      "The coverage gate caught the split at 80.8% and forced real contract tests (test #53) rather than a lowered bar",
+    ],
+  },
+  {
+    v: "1.1.0–1.1.1", d: "2026-08-25",
+    t: "The designed website",
+    points: [
+      "Astro 7 + Vite 8 + Tailwind 4 + Vue islands — home, about, audiences, use cases, docs (5 pages), examples, 404",
+      "The Doxygen reference nested at /api/ — generated and marketing pages deploy as one artifact",
+      "Three Vue islands: code switcher, audience filter, env-var explorer",
+    ],
+  },
+  {
+    v: "1.0.0", d: "2026-08-24",
+    t: "The API freeze",
+    points: [
+      "133 exported symbols audited; five Path-to-1.0 criteria re-verified",
+      "Source API frozen for 1.x — additions only; the C ABI is explicitly not guaranteed across builds",
+      "Two freeze hazards fixed en route (the 26 KiB env-storage stack cost; apply_env's getenv thread contract)",
+    ],
+  },
+  {
+    v: "0.8.0", d: "2026-08-24",
+    t: "Exemplars + schema_url",
+    points: [
+      "Trace-correlated exemplar data points (value + trace/span + time) on counter, gauge, histogram",
+      "schema_url emitted as field 3 on every signal's resource message",
+      "Extended golden vectors later exposed a v0.8.0 exemplar wire bug (hand-copied field numbers) — fixed in 1.0.1 with descriptor-sourced tables",
+    ],
+  },
+  {
+    v: "0.7.x", d: "2026-08-24",
+    t: "OTel-native configuration",
+    points: [
+      "The full OTEL_EXPORTER_OTLP_* env-var matrix, incl. per-signal endpoints and headers",
+      "Extra HTTP headers on every export request (collector auth), CWE-93-hardened",
+      "CMake presets; the vcpkg overlay port made real and CI-pinned",
+    ],
+  },
+  {
+    v: "0.6.x", d: "2026-08-23–24",
+    t: "Stabilization + deepening",
+    points: [
+      "One signal table (was five descriptor families); the response parser and retry policy as pure, property-tested modules",
+      "Embedded-build hygiene (FetchContent CI consumer); license → BSD 3-Clause",
+      "The stabilization window: additive-only from 0.6.0 to 1.0",
+    ],
+  },
+];
+---
+<Docs title="Changelog — otlp-c">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">Changelog</h1>
+  <p class="mt-3 text-slate-400">
+    The highlights arc; the complete log is
+    <a href="https://github.com/riboseinc/otlp-c/blob/main/CHANGELOG.md" class="text-teal-300 underline decoration-ink-700">CHANGELOG.md</a>
+    in the repo.
+  </p>
+  <div class="mt-8 space-y-0 border-l border-ink-700 pl-8">
+    {releases.map((r) => (
+      <div class="relative pb-10">
+        <span class="absolute -left-[37px] top-1.5 h-3 w-3 rounded-full border-2 border-teal-400 bg-ink-950"></span>
+        <div class="flex flex-wrap items-baseline gap-3">
+          <span class="font-mono text-sm font-semibold text-teal-300">v{r.v}</span>
+          <span class="font-mono text-xs text-slate-500">{r.d}</span>
+        </div>
+        <h2 class="mt-1 font-semibold text-slate-100">{r.t}</h2>
+        <ul class="mt-2 max-w-2xl space-y-1.5">
+          {r.points.map((p) => (
+            <li class="flex gap-2 text-sm leading-relaxed text-slate-400">
+              <span class="text-teal-400">·</span> {p}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </div>
+</Docs>
