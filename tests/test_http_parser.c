@@ -46,36 +46,7 @@ main(void)
 }
 #else
 
-#if !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif
-#include <string.h>
-
-#if defined(__APPLE__) || defined(__FreeBSD__)
-#include <Availability.h>
-#endif
-
-/* memmem is POSIX 2008 but missing from MSVC and some libcs the
- * POSIX path never compiles for; tiny local fallback. */
-#ifndef memmem
-static void *
-local_memmem(const void *hay, size_t hay_len, const void *ndl,
-	size_t ndl_len)
-{
-	if (ndl_len == 0 || hay_len < ndl_len)
-		return NULL;
-	{
-		const uint8_t *h = hay;
-		size_t i;
-
-		for (i = 0; i <= hay_len - ndl_len; i++)
-			if (memcmp(h + i, ndl, ndl_len) == 0)
-				return (void *) (h + i);
-	}
-	return NULL;
-}
-#define memmem local_memmem
-#endif
+#include "test_portable.h"
 
 /* The canned raw response, set per test. */
 static const char *g_raw;
@@ -548,7 +519,7 @@ test_send_stall_times_out(void)
 		return 1;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_addr.s_addr = htonl(OTLP_TEST_INADDR_LOOPBACK);
 	addr.sin_port = 0;
 	/* Explicit rc checks: side-effecting calls must NEVER sit in
 	 * assert() — Release/NDEBUG compiles the expression out and
@@ -707,20 +678,20 @@ test_extra_headers_on_wire(void)
 	wire = echo_server_last_request(&wire_len);
 	check_true(wire != NULL);
 	check_true(wire_len > 0);
-	check_true(memmem(wire,
+	check_true(otlp_test_memmem(wire,
 			  wire_len,
 			  "authorization: Bearer xyz\r\n",
 			  strlen("authorization: Bearer xyz\r\n")) != NULL);
-	check_true(memmem(wire,
+	check_true(otlp_test_memmem(wire,
 			  wire_len,
 			  "x-tenant: acme\r\n",
 			  strlen("x-tenant: acme\r\n")) != NULL);
 	/* Extra headers sit between User-Agent and Content-Type. */
 	{
-		const uint8_t *ua = memmem(wire, wire_len, "User-Agent:", 11);
-		const uint8_t *au = memmem(
+		const uint8_t *ua = otlp_test_memmem(wire, wire_len, "User-Agent:", 11);
+		const uint8_t *au = otlp_test_memmem(
 			wire, wire_len, "authorization:", 14);
-		const uint8_t *ct = memmem(
+		const uint8_t *ct = otlp_test_memmem(
 			wire, wire_len, "Content-Type:", 13);
 
 		check_true(ua != NULL && au != NULL && ct != NULL);

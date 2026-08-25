@@ -4,6 +4,7 @@
  * tick(), and verifies the echo server received them.
  */
 #include "test_helper_echo.h"
+#include "test_portable.h"
 #include "test_util.h"
 
 #include <otlp-c/exporter.h>
@@ -225,7 +226,7 @@ main(void)
 		check_ok(echo_server_join(&srv2, 1 * 1000 * 1000));
 		wire = echo_server_last_request(&wire_len);
 		check_true(wire != NULL && wire_len > 0);
-		check_true(memmem(wire,
+		check_true(otlp_test_memmem(wire,
 				  wire_len,
 				  "POST /custom-metrics HTTP/1.1",
 				  strlen("POST /custom-metrics HTTP/1.1")) !=
