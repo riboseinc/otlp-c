@@ -368,7 +368,9 @@ The version is defined in `include/otlp-c/version.h` and bumped in lockstep with
 
 ## See also
 
+- [CONTEXT.md](CONTEXT.md) — the domain glossary (term → home module).
 - [README.md](README.md) — the pitch.
+- **API reference (website):** <https://riboseinc.github.io/otlp-c/> — the Doxygen build, CI-published.
 - [docs/otlp-spec.md](docs/otlp-spec.md) — the protocol reference.
 - [docs/architecture.md](docs/architecture.md) — the design.
 - [docs/roadmap.md](docs/roadmap.md) — the plan.

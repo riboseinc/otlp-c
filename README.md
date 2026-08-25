@@ -18,6 +18,8 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 `otlp-c` fills that gap. Pure C99. Zero non-libc dependencies. BSD 3-Clause.
 
+**API reference (website):** <https://riboseinc.github.io/otlp-c/> — the Doxygen build, published on every merge.
+
 ## Status
 
 **1.0.x — API frozen.** Full OTLP/HTTP client for all three
@@ -137,13 +139,13 @@ ctest --test-dir build --output-on-failure
 ### Consuming from another project
 
 `otlp-c` is not (yet) in the public vcpkg registry. Use CMake
-FetchContent against a release tag (`v0.6.8` shown):
+FetchContent against a release tag (`v1.0.5` shown):
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(otlp-c
     GIT_REPOSITORY https://github.com/riboseinc/otlp-c
-    GIT_TAG        v1.0.0)
+    GIT_TAG        v1.0.5)
 FetchContent_MakeAvailable(otlp-c)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
