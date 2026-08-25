@@ -111,3 +111,13 @@ target_include_directories(otlp_unit_env_config PRIVATE
 add_test(NAME unit-env-config
     COMMAND otlp_unit_env_config)
 set_tests_properties(unit-env-config PROPERTIES LABELS "unit")
+
+# Sync-flush engine (exporter_sync.c, v1.1.2): guards, null
+# transport, transport-error accounting - public surface only.
+add_executable(otlp_unit_exporter_sync test_unit_exporter_sync.c)
+target_link_libraries(otlp_unit_exporter_sync PRIVATE otlp_c)
+target_include_directories(otlp_unit_exporter_sync PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME unit-exporter-sync
+    COMMAND otlp_unit_exporter_sync)
+set_tests_properties(unit-exporter-sync PROPERTIES LABELS "unit")
