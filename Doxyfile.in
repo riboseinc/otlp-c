@@ -15,7 +15,7 @@ INPUT                  = include/otlp-c/ README.md CONTEXT.md SECURITY.md CLAUDE
                          docs/integration-test.md
 RECURSIVE              = YES
 
-OUTPUT_DIRECTORY       = build/docs
+OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/docs
 
 EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
