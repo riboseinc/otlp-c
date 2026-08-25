@@ -1,0 +1,119 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import CodeTabs from "../../components/CodeTabs.vue";
+import "../../styles/global.css";
+
+const tabs = [
+  {
+    label: "span lifecycle",
+    code: `otlp_span_t *s = otlp_tracer_start_span(tr, "db.query");
+
+/* Attributes — all seven AnyValue types; re-setting a key
+   replaces its value (map semantics). */
+otlp_span_set_attribute_string(s, "db.system", "postgres");
+otlp_span_set_attribute_int(s, "db.params", 2);
+
+/* An event with its own attributes */
+otlp_span_add_event(s, "cache-miss", 0);
+otlp_span_set_event_attribute_string(s, "key", "user_42");
+
+/* A link to another trace (trace_id + span_id + attrs) */
+otlp_span_add_link(s, other_trace, other_span);
+
+otlp_span_set_status(s, OTLP_STATUS_CODE_ERROR, "timeout");
+otlp_span_mark_end(s);
+
+otlp_exporter_emit_move(exp, s);   /* ownership moves here */`,
+  },
+  {
+    label: "metric kinds",
+    code: `/* Counter — monotonically increasing */
+otlp_metric_t *c = otlp_metric_create(
+    OTLP_METRIC_COUNTER, "hits_total", "1", NULL, NULL, 0);
+otlp_metric_record(c, 1.0);
+
+/* Gauge — point-in-time */
+otlp_metric_t *g = otlp_metric_create(
+    OTLP_METRIC_GAUGE, "heap_bytes", "By", NULL, NULL, 0);
+otlp_metric_record(g, 4096.0);
+
+/* Histogram — explicit bucket bounds */
+otlp_metric_t *h = otlp_metric_create(
+    OTLP_METRIC_HISTOGRAM, "latency", "ms", NULL, NULL, 0);
+double bounds[] = { 10, 50, 100 };
+otlp_metric_set_exp_histogram_bounds(h, bounds, 3);
+otlp_metric_record(h, 42.0);
+
+/* ExponentialHistogram — scale-based buckets */
+otlp_metric_t *e = otlp_metric_create(
+    OTLP_METRIC_EXP_HISTOGRAM, "io_bytes", "By", NULL, NULL, 0);
+
+/* Cumulative (default) or delta temporality; counters can be
+   declared non-monotonic. */
+otlp_metric_set_aggregation_temporality(h, OTLP_AGG_TEMP_DELTA);`,
+  },
+  {
+    label: "logs + correlation",
+    code: `otlp_log_record_t *lr = otlp_log_record_create(
+    OTLP_SEVERITY_WARN, "retrying upstream");
+
+otlp_log_record_mark_timestamp(lr);
+otlp_log_record_set_severity_text(lr, "WARN");
+
+/* Correlate with the trace that was running */
+otlp_log_record_set_trace_id(lr, trace_id);
+otlp_log_record_set_span_id(lr, span_id);
+
+otlp_log_record_set_attribute_string(lr, "upstream.host", "b-2");
+
+otlp_exporter_emit_log_move(exp, lr);`,
+  },
+  {
+    label: "exemplars",
+    code: `/* Tie a metric value to the trace that produced it */
+otlp_exemplar_t *ex = otlp_exemplar_create();
+otlp_exemplar_set_double_value(ex, 42.5);   /* or set_int_value */
+otlp_exemplar_set_trace_context(ex, trace_id, span_id);
+otlp_exemplar_set_timestamp(ex, now_unix_nano);
+otlp_metric_add_exemplar(m, ex);            /* cloned into m */
+otlp_exemplar_free(ex);`,
+  },
+];
+---
+<Docs title="The three signals — otlp-c docs">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">The three signals</h1>
+  <p class="mt-3 max-w-2xl text-slate-400">
+    Traces, metrics, and logs share one pipeline — per-signal MPSC
+    queues, one batching policy, one HTTP client — but each keeps its
+    own data model, endpoint, and stats. Everything below is available
+    from both the async (emit + tick) and synchronous (flush) paths.
+  </p>
+
+  <div class="mt-8">
+    <CodeTabs client:load tabs={tabs} />
+  </div>
+
+  <h2 class="mt-10 text-xl font-semibold text-slate-100">Emit paths, precisely</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2">
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-mono text-sm font-semibold text-teal-300">emit() — clone</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Deep-copies the item; you keep ownership and may free it
+        immediately after the call. One allocation per emit.
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-mono text-sm font-semibold text-teal-300">emit_move() — zero-copy</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Ownership transfers at call entry. On any drop (queue full,
+        shutdown) the library frees the item — the contract is
+        documented per function.
+      </p>
+    </div>
+  </div>
+  <p class="mt-4 text-sm text-slate-500">
+    Both are safe from any thread. Queues are lock-free; full queues
+    return an error rather than blocking — backpressure is yours to
+    apply, with a QUEUE_FULL event telling you when.
+  </p>
+</Docs>

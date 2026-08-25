@@ -1,0 +1,75 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import "../../styles/global.css";
+
+const events = [
+  ["QUEUE_FULL", "WARN", "An emit was dropped: the signal's queue reached capacity. count = items dropped."],
+  ["RETRY_ARMED", "WARN", "A transient failure scheduled a retry. attempt / max_retries / delay_ms; server_driven when Retry-After set the floor."],
+  ["BATCH_SENT", "DEBUG", "A batch was accepted (2xx). http_status and count included."],
+  ["ITEMS_DROPPED", "ERROR", "Permanent loss — max retries exhausted (drop_reason MAX_RETRIES) or a permanent 4xx (HTTP_STATUS)."],
+  ["PARTIAL_SUCCESS", "WARN", "The collector accepted the batch but rejected some items (200 + PartialSuccess body): rejected count and the server's message."],
+  ["SYNC_FLUSH_FAILED", "ERROR", "The synchronous metric/log flush path could not deliver."],
+];
+---
+<Docs title="Diagnostics & delivery — otlp-c docs">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">Diagnostics &amp; delivery</h1>
+  <p class="mt-3 max-w-2xl text-slate-400">
+    The library never prints. Every diagnostic is a struct —
+    <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-sm text-teal-300">otlp_event_t</code> —
+    delivered to your callback with the signal id, counts, HTTP
+    status, retry timing, and drop reason. A second optional callback
+    receives the same event rendered as a human string; the two views
+    derive from one model and cannot diverge.
+  </p>
+
+  <h2 class="mt-10 text-xl font-semibold text-slate-100">The event codes</h2>
+  <div class="mt-4 space-y-2">
+    {events.map(([code, level, desc]) => (
+      <div class="rounded-lg border border-ink-700 bg-ink-900/60 p-4">
+        <div class="flex flex-wrap items-baseline gap-3">
+          <code class="font-mono text-sm font-semibold text-teal-300">{code}</code>
+          <span class="rounded-full border border-ink-700 px-2 py-0.5 font-mono text-[10px] text-slate-400">{level}</span>
+        </div>
+        <p class="mt-1.5 text-sm text-slate-400">{desc}</p>
+      </div>
+    ))}
+  </div>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">Delivery semantics</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-3">
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Retry</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Full-jitter exponential backoff on 429/5xx/network errors.
+        Retry-After is honored as a floor, clamped by your
+        backoff_max_ms — a hostile server cannot stall exports.
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">PartialSuccess</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        A 200 can still report server-side loss. The response body is
+        decoded (reference-validated) and surfaced as an event plus
+        per-signal <code class="font-mono text-xs text-teal-300">rejected_*</code> stats.
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Stats</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        <code class="font-mono text-xs text-teal-300">otlp_exporter_get_stats()</code> —
+        thread-safe — reports emitted/sent/dropped per signal and
+        2xx/4xx/5xx/network counters. The invariant
+        <em>emitted = sent + dropped</em> holds even under OOM.
+      </p>
+    </div>
+  </div>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">One event, two callbacks</h2>
+  <pre class="mt-4 overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[12.5px] leading-relaxed text-slate-300"><code>{`/* Structured — no string parsing */
+otlp_exporter_set_event_logger(exp, on_event, ctx);
+
+/* Human line — derived from the same otlp_event_t */
+otlp_exporter_set_logger(exp, on_line, ctx);
+
+/* Both NULL by default: zero overhead when uninstalled */`}</code></pre>
+</Docs>

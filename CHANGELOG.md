@@ -4,6 +4,29 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-08-25
+
+The site gains a real docs section.
+
+### Added — docs IA (five pages, sidebar layout)
+
+- /docs/ — Getting started (consume four ways, first span, core
+  concepts, presets)
+- /docs/signals/ — the three signals deep dive (span lifecycle,
+  metric kinds, logs + correlation, exemplars; emit vs emit_move)
+- /docs/configuration/ — every opts field documented + a
+  filterable env-var explorer (new Vue island, scope filter and
+  text search)
+- /docs/diagnostics/ — the event model (all six codes, levels,
+  semantics), delivery guarantees, retry/partial-success/stats
+- /docs/deployment/ — the sidecar topology as a hand-drawn SVG
+  diagram, Kubernetes DaemonSet/sidecar patterns, why no TLS
+  (ADR-0004)
+- 404 page (in voice), OG/twitter meta on every page, sitemap.xml
+
+Three Vue islands now (CodeTabs, AudienceExplorer,
+EnvVarExplorer); all other pages remain zero-JS static HTML.
+
 ## [1.1.0] - 2026-08-25
 
 The real website: Astro 7 + Vite 8 + Tailwind 4 + Vue islands.

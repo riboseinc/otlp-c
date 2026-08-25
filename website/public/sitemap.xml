@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://riboseinc.github.io/otlp-c/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/about/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/audiences/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/use-cases/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/docs/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/docs/signals/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/docs/configuration/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/docs/diagnostics/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/docs/deployment/</loc></url>
+  <url><loc>https://riboseinc.github.io/otlp-c/examples/</loc></url>
+</urlset>
