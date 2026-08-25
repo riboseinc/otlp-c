@@ -1,0 +1,115 @@
+---
+import Base from "../layouts/Base.astro";
+import CodeTabs from "../components/CodeTabs.vue";
+import "../styles/global.css";
+
+const tabs = [
+  {
+    label: "FetchContent",
+    code: `# CMakeLists.txt
+include(FetchContent)
+FetchContent_Declare(otlp-c
+    GIT_REPOSITORY https://github.com/riboseinc/otlp-c
+    GIT_TAG        v1.0.5)
+FetchContent_MakeAvailable(otlp-c)
+
+target_link_libraries(my-app PRIVATE otlp-c::otlp_c)`,
+  },
+  {
+    label: "add_subdirectory",
+    code: `# After cloning / adding as a git submodule
+add_subdirectory(otlp-c)
+
+target_link_libraries(my-app PRIVATE otlp-c::otlp_c)`,
+  },
+  {
+    label: "install + find_package",
+    code: `# Once, from the otlp-c checkout:
+cmake -B build && cmake --build build && cmake --install build
+
+# CMakeLists.txt:
+find_package(otlp-c CONFIG REQUIRED)
+target_link_libraries(my-app PRIVATE otlp-c::otlp_c)`,
+  },
+  {
+    label: "vcpkg overlay",
+    code: `# The in-repo overlay port builds your checkout:
+cmake -S my-app -B build \\
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \\
+  -DVCPKG_OVERLAY_PORTS=/path/to/otlp-c/ports`,
+  },
+];
+
+const concepts = [
+  { term: "signal", def: "One of traces / metrics / logs. All three flow through one queue→batch→POST pipeline with per-signal stats and endpoints." },
+  { term: "tick", def: "Your thread calls otlp_exporter_tick(exp, max_wait_ms); it drains queues, batches, advances HTTP, and applies backoff. No library threads, ever." },
+  { term: "emit vs emit_move", def: "emit() deep-copies the item; emit_move() takes ownership (faster). Move variants free the item on drop paths — the docstrings specify exactly when." },
+  { term: "events", def: "Every diagnostic is a struct: queue-full, retry-armed, batch-sent, partial-success. Install set_event_logger for structured, set_logger for the derived string." },
+  { term: "exemplar", def: "A metric value tied to the trace that produced it: double/int value + trace_id/span_id + timestamp." },
+  { term: "freeze", def: "Since 1.0.0 the source API is additive-only. The C ABI is not guaranteed across builds." },
+];
+---
+<Base title="Docs — otlp-c">
+  <section class="py-16">
+    <h1 class="text-4xl font-bold tracking-tight text-slate-50">Documentation</h1>
+    <p class="mt-4 max-w-2xl text-lg text-slate-400">
+      Five minutes to the first span; the concepts below carry the rest.
+      The full API reference — every function, every docstring — is the
+      <a href="/api/" class="text-teal-300 underline decoration-ink-700">Doxygen build</a>.
+    </p>
+  </section>
+
+  <section class="pb-16">
+    <h2 class="mb-6 text-2xl font-semibold text-slate-100">1 · Consume the library</h2>
+    <div class="mx-auto max-w-3xl">
+      <CodeTabs client:load tabs={tabs} />
+    </div>
+  </section>
+
+  <section class="pb-16">
+    <h2 class="mb-6 text-2xl font-semibold text-slate-100">2 · First span</h2>
+    <pre class="overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[13px] leading-relaxed text-slate-300"><code>{`#include <otlp-c/otlp.h>
+
+int main(void) {
+    otlp_exporter_opts_t opts = { .service_name = "demo" };
+    otlp_exporter_t *exp = otlp_exporter_create(&opts);
+    otlp_tracer_t   *tr  = otlp_tracer_create("demo", "demo", "0.1.0");
+
+    otlp_span_t *s = otlp_tracer_start_span(tr, "hello");
+    otlp_span_mark_end(s);
+    otlp_exporter_emit(exp, s);
+    otlp_span_free(s);
+
+    otlp_exporter_flush(exp);      /* synchronous drain */
+    otlp_tracer_free(tr);
+    otlp_exporter_free(exp);
+}`}</code></pre>
+    <p class="mt-4 text-sm text-slate-500">
+      Point it at a local collector
+      (<code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-xs">docker compose up -d</code>
+      in <code class="font-mono text-xs">tests/integration/</code>) and watch the span appear in Jaeger.
+    </p>
+  </section>
+
+  <section class="pb-16">
+    <h2 class="mb-6 text-2xl font-semibold text-slate-100">3 · The model</h2>
+    <div class="grid gap-4 sm:grid-cols-2">
+      {concepts.map((c) => (
+        <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+          <h3 class="font-mono text-sm font-semibold text-teal-300">{c.term}</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-400">{c.def}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="pb-20">
+    <h2 class="mb-6 text-2xl font-semibold text-slate-100">4 · Build &amp; test</h2>
+    <pre class="overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[13px] leading-relaxed text-slate-300"><code>{`cmake --preset default && cmake --build --preset default && ctest --preset default
+# also: release · asan · ubsan · tsan · bench · coverage`}</code></pre>
+    <p class="mt-4 text-sm text-slate-500">
+      Zero non-libc dependencies — the default build needs only CMake 3.20+
+      and a C11 compiler (GCC, Clang, Apple Clang, MSVC).
+    </p>
+  </section>
+</Base>
