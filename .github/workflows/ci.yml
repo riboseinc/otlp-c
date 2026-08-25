@@ -261,8 +261,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
-      - name: Build instrumented
+      - name: Build instrumented (clang — the coverage flags are clang-only)
         run: |
+          export CC=clang
           cmake --preset coverage
           cmake --build --preset coverage
       - name: Run tests + gather
