@@ -5,6 +5,7 @@
 // failure, connection refused.
 
 #include "../../src/platform.h"
+#include "../test_portable.h"
 #include "../test_util.h"
 #include "../../src/span_internal.h"
 
@@ -27,6 +28,7 @@ main(void)
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 static int
@@ -73,7 +75,7 @@ test_connect_refused(void)
 		return 1;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_addr.s_addr = htonl(OTLP_TEST_INADDR_LOOPBACK);
 	addr.sin_port = 0;
 	check_true(bind(fd, (struct sockaddr *) &addr, sizeof(addr)) == 0);
 	check_true(getsockname(fd, (struct sockaddr *) &addr, &alen) == 0);
@@ -85,6 +87,7 @@ test_connect_refused(void)
 		return 0; /* synchronous refusal — also fine */
 	/* Non-blocking: drive finish_connect to the refusal. */
 	{
+		struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000 };
 		int i;
 
 		for (i = 0; i < 10000; i++)
@@ -92,7 +95,7 @@ test_connect_refused(void)
 			st = otlp_socket_finish_connect(s);
 			if (st != OTLP_ERR_WOULDBLOCK)
 				break;
-			usleep(100);
+			nanosleep(&ts, NULL);
 		}
 	}
 	check_true(st == OTLP_ERR_CONNECT);

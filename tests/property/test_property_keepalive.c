@@ -20,6 +20,7 @@
  */
 #include "prng.h"
 #include "property_harness.h"
+#include "../test_portable.h"
 #include "../src/atomic_compat.h"
 #include "../src/http_client.h"
 #include "../src/platform.h"
@@ -65,7 +66,7 @@ mini_start(struct mini_srv *s, bool send_connection_close)
 	}
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_addr.s_addr = htonl(OTLP_TEST_INADDR_LOOPBACK);
 	addr.sin_port = 0;
 	if (bind(s->listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
 	{
