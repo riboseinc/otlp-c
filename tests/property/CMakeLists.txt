@@ -115,10 +115,13 @@ set_tests_properties(property-w3c PROPERTIES
 # Checks for crashes only (no semantic invariant).
 if(NOT WIN32)
     add_executable(otlp_property_fuzz test_property_fuzz.c ../../tests/test_helper_echo.c)
+    # The echo helper calls pthread_create: link Threads everywhere
+    # it is compiled in (FreeBSD keeps pthreads out of libc).
+    target_link_libraries(otlp_property_fuzz PRIVATE otlp_c Threads::Threads)
 else()
     add_executable(otlp_property_fuzz test_property_fuzz.c)
+    target_link_libraries(otlp_property_fuzz PRIVATE otlp_c)
 endif()
-target_link_libraries(otlp_property_fuzz PRIVATE otlp_c)
 target_include_directories(otlp_property_fuzz PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..)
