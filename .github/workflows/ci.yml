@@ -251,6 +251,34 @@ jobs:
           cmake --build consumer-build --config Release
           ctest --test-dir consumer-build --build-config Release --output-on-failure
 
+  # The website (v1.0.5): the Doxygen API reference — 84 pages,
+  # zero warnings, versioned from CMake — published to GitHub
+  # Pages on every merge to main. The site is GENERATED, never
+  # hand-maintained, so it cannot go stale.
+  pages:
+    name: Website (Doxygen -> GitHub Pages)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Build the reference
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q doxygen graphviz
+          cmake -B build-docs
+          cmake --build build-docs --target docs
+          mkdir -p site
+          cp -r build-docs/docs/html site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+
   # Coverage floor (v1.0.4): every library file must hold >= 82%
   # region coverage. The bar was a repo convention that drifted
   # unnoticed once (v0.6.2 re-measurement) - now it gates.

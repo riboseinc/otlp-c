@@ -4,6 +4,43 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.5] - 2026-08-25
+
+Second architecture review, fully implemented; the website exists.
+
+### Changed — one retry engine (review C1)
+
+The sync metric/log flush path had its own hand-rolled backoff
+(fixed backoff_initial_ms clamped to 100ms) while the async path
+used the jittered retry policy — two timing engines in one
+exporter. flush_sync now draws through otlp_retry_delay_ms with
+a sync-shaped config ({initial, min(max, 100)}): the 100ms sync
+latency cap is expressed as config, and the sync path gains full
+jitter for free. One engine, three callers.
+
+### Added — the website (review C2): Doxygen → GitHub Pages
+
+No website existed (no Pages config, no branch). Now: a CI job
+builds the Doxygen reference (84 pages, zero warnings, versioned
+from CMake, CONTEXT.md included) and deploys it to
+https://riboseinc.github.io/otlp-c/ on every push to main. The
+site is generated, never hand-maintained — it cannot go stale.
+README, quickstart, and CLAUDE.md link it.
+
+### Added — the domain glossary (review C3): CONTEXT.md
+
+One line per domain term with a pointer to its home module —
+signal, exporter, tick, exemplar, spec table, golden vector,
+freeze, and 15 more. The shared vocabulary for reviews and
+agents; CLAUDE.md carries the rules, CONTEXT.md the language.
+
+### Not implemented (review C4, recorded)
+
+Splitting internal_util's mem/str kernel from the attribute
+engine: re-examined and declined again — stable, well-tested,
+zero friction incidents across two review cycles; the split is
+churn without a change it would ease.
+
 ## [1.0.4] - 2026-08-25
 
 Coverage re-measured and CI-enforced; soak protocol established.

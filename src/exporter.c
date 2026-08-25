@@ -1642,19 +1642,27 @@ flush_sync(struct otlp_exporter *e,
 			return st;
 		if (attempt < e->max_retries)
 		{
-			uint32_t delay = e->backoff_initial_ms;
+			/* v1.0.5: one retry engine. The sync path draws its
+			 * delay through the same jittered policy as the
+			 * async path, with the sync-latency cap expressed
+			 * as the config's max (was: a hand-rolled fixed
+			 * backoff_initial_ms clamp). */
+			struct otlp_retry_cfg cfg = {
+				e->backoff_initial_ms,
+				e->backoff_max_ms < 100 ? e->backoff_max_ms
+							: 100,
+			};
+			uint32_t delay = otlp_retry_delay_ms(
+				&e->jitter_prng, attempt + 1, 0, &cfg, NULL);
 			otlp_event_t ev = {
 				.code = OTLP_EVT_RETRY_ARMED,
 				.level = OTLP_LOG_WARN,
 				.signal = signal,
 				.attempt = attempt + 1,
 				.max_retries = e->max_retries,
-				.delay_ms = delay > 100 ? 100 : delay,
+				.delay_ms = delay,
 			};
 
-			if (delay > 100)
-				delay = 100; /* sync path: short backoff */
-			ev.delay_ms = delay;
 			event_log(e, &ev);
 #if defined(_WIN32)
 			Sleep(delay);
