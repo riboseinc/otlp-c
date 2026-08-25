@@ -20,20 +20,25 @@ The official OpenTelemetry C++ SDK ([opentelemetry-cpp](https://github.com/open-
 
 ## Status
 
-**0.5.35.** Full OTLP/HTTP client for all three signals (traces,
-metrics, logs). Features: hand-rolled protobuf encoder with
-schema-driven field tables, lock-free MPSC queue + caller-tick
-exporter, non-blocking HTTP/1.1 client with keep-alive, W3C Trace
-Context propagation, sampler interface (always_on / always_off /
-trace_id_ratio_based), slab allocator, span events/links/trace_state,
-context propagation with tracestate, and more.
+**1.0.x — API frozen.** Full OTLP/HTTP client for all three
+signals (traces, metrics, logs). Features: hand-rolled protobuf
+encoder with schema-driven field tables (every table
+descriptor-audited and every payload reference-validated against
+opentelemetry-proto), lock-free MPSC queue + caller-tick
+exporter, non-blocking HTTP/1.1 client with keep-alive and
+request-smuggling rejection, W3C Trace Context + Baggage
+propagation, samplers, exemplars, `schema_url`, extra HTTP
+headers, the full `OTEL_EXPORTER_OTLP_*` environment-variable
+matrix with per-signal endpoints, structured diagnostics events,
+slab allocator, span events/links/trace_state, and more.
 
 CI'd platforms: Linux x86_64/ARM64, macOS Intel/ARM64, Windows
 x64/ARM64, FreeBSD 14.2 (best-effort). Expected to work on any
 POSIX platform with a C11 compiler and a socket stack.
 
-The API surface is unstable until 1.0.0. Within the 0.x line, minor
-versions may break the API (documented in CHANGELOG).
+**Since 1.0.0 the source API is frozen for the 1.x line** —
+additions only, no breaking changes (the C ABI is not guaranteed
+across builds). See CHANGELOG for the 1.0 audit.
 
 ## Why
 

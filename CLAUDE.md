@@ -271,6 +271,15 @@ When extending the library:
 Run `ctest --test-dir build -L property` after every change; the
 property tests catch regressions in the encoder immediately.
 
+Soak protocol (v1.0.4): CPU-side properties scale to
+`OTLP_C_PROPERTY_ITERS=100000` — run the BINARIES directly
+(ctest's 60s per-test TIMEOUT caps predate the soak flow and
+`--timeout` does not override a set TIMEOUT property on this
+cmake); 21/25 pass at 100k. The socket/timing properties
+(keepalive, flush-timeout, http-timeout, async-metrics) sleep
+through real waits per iteration — their default 1000 IS the
+practical soak; more is hours of wall clock, not coverage.
+
 Test-writing rules (paid-for lessons):
 - **Never put side effects in `assert()`** — CI's plain jobs build
   Release/NDEBUG, which elides the expression entirely

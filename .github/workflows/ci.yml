@@ -251,6 +251,51 @@ jobs:
           cmake --build consumer-build --config Release
           ctest --test-dir consumer-build --build-config Release --output-on-failure
 
+  # Coverage floor (v1.0.4): every library file must hold >= 82%
+  # region coverage. The bar was a repo convention that drifted
+  # unnoticed once (v0.6.2 re-measurement) - now it gates.
+  coverage:
+    name: Coverage (82% per-file floor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Build instrumented
+        run: |
+          cmake --preset coverage
+          cmake --build --preset coverage
+      - name: Run tests + gather
+        working-directory: build-cov
+        run: |
+          find . -name '*.profraw' -delete
+          LLVM_PROFILE_FILE="%h-%p.profraw" ctest --output-on-failure
+          llvm-profdata merge -sparse $(find . -name '*.profraw') -o coverage.profdata
+          llvm-cov report libotlp_c.a -instr-profile=coverage.profdata | tee report.txt
+      - name: Enforce the floor
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          bad = []
+          for line in open("build-cov/report.txt"):
+              m = re.match(r"(src/\S+|include/\S+)\s+", line)
+              if not m:
+                  continue
+              cols = line.split()
+              # regions: cols[1]=total cols[2]=missed cols[3]=pct
+              try:
+                  pct = float(cols[3].rstrip("%"))
+              except (ValueError, IndexError):
+                  continue
+              if pct < 82.0:
+                  bad.append((cols[0], pct))
+          if bad:
+              for f, p in bad:
+                  print(f"BELOW FLOOR: {f} {p:.2f}% < 82%")
+              sys.exit(1)
+          print("coverage floor held: every file >= 82%")
+          EOF
+
   # Conformance gates (v1.0.2): every schema table diffed against
   # the INSTALLED opentelemetry-proto descriptors, and the
   # checked-in golden vectors regenerated and byte-compared - so
