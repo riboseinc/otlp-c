@@ -261,6 +261,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
+      - name: Install clang/llvm tooling
+        run: sudo apt-get update -q && sudo apt-get install -y -q clang llvm
       - name: Build instrumented (clang — the coverage flags are clang-only)
         run: |
           export CC=clang
