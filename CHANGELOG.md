@@ -4,6 +4,39 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] - 2026-08-25
+
+Coverage re-measured and CI-enforced; soak protocol established.
+
+### Added — coverage CI gate (82% per-file floor)
+
+The 82% region floor was a convention that drifted unnoticed
+once (the v0.6.2 re-measurement); now an ubuntu CI job builds
+instrumented (clang coverage preset), runs the suite, and fails
+any library file below 82%. Current numbers, re-measured for the
+first time since v0.6.2: every file clears the bar — the 1.x-era
+modules hold it comfortably (http_response_parser 98.2%,
+env_config 89.1%, retry_policy 84.2%, exporter 89.1%, exemplar
+paths inside metric.c 83.4%).
+
+### Verified — 100k-iteration property soak
+
+21 of 25 property binaries ran at 100000 iterations (10×-100×
+their CI count): zero assertion failures — the CPU-side
+invariants hold at scale. The remaining four (keepalive,
+flush-timeout, http-timeout, async-metrics) sleep through real
+socket/time waits per iteration; their default count IS the
+practical soak (more is wall clock, not coverage). The tiered
+protocol is documented in CLAUDE.md, including the ctest
+TIMEOUT caveat that motivated running binaries directly.
+
+### Fixed — README status banner contradicted the API freeze
+
+The banner said "0.5.35" and "the API surface is unstable until
+1.0.0" — stale since v1.0.0, on the front page. Now: 1.0.x, API
+frozen, and the feature list gains exemplars, schema_url, HTTP
+headers, and the env-var matrix.
+
 ## [1.0.3] - 2026-08-24
 
 Conformance gates CI-enforced; the 1.x surface validated live.

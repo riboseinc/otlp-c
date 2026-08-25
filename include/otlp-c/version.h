@@ -27,7 +27,7 @@ extern "C"
 
 #define OTLP_C_VERSION_MAJOR 1
 #define OTLP_C_VERSION_MINOR 0
-#define OTLP_C_VERSION_PATCH 3
+#define OTLP_C_VERSION_PATCH 4
 
 /* Derived from the numeric macros so the string can never drift
  * (it was a hand-maintained literal until v0.5.88 — stuck at
