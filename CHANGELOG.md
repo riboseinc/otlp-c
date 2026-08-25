@@ -11,10 +11,23 @@ FreeBSD becomes a gating check; the changelog gets a home.
 ### Changed — FreeBSD CI is a real gate
 
 The FreeBSD job ran `continue-on-error` since inception for an
-INADDR_LOOPBACK visibility quirk that — checking the record —
-never once reproduced: 15/15 green runs on main. The flag is
-gone; FreeBSD 14.2 is now a gating check like every other
-platform.
+INADDR_LOOPBACK visibility quirk. The jobs API showed 15/15 green
+runs on main — but that was the mask, not the truth: under
+`continue-on-error` a step's `conclusion` reads "success" even
+when it failed. Removing the flag exposed three real portability
+bugs the "green" runs had been hiding:
+
+- the memmem fallback included Apple-only `Availability.h` on
+  FreeBSD too (fatal compile error)
+- FreeBSD's `netinet/in.h` hides `INADDR_LOOPBACK` whenever
+  `_POSIX_C_SOURCE` is defined — and the build defines it
+  globally for CLOCK_MONOTONIC
+- one test called `memmem` with no declaration on FreeBSD
+
+All three are fixed by `tests/test_portable.h`: one always-local
+byte-search and a spelled-out loopback constant, so the tests run
+one deterministic code path on every platform. FreeBSD 14.2 now
+gates like every other platform.
 
 ### Added — /docs/changelog/ on the site
 

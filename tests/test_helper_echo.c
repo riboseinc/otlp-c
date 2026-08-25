@@ -3,13 +3,17 @@
  * In-process HTTP echo server implementation. POSIX only (test
  * code; the library is portable, the test helper is not).
  */
-/* _DEFAULT_SOURCE for CLOCK_MONOTONIC + INADDR_LOOPBACK under glibc
- * with -std=c11. _DEFAULT_SOURCE implies _POSIX_C_SOURCE on glibc;
- * declaring _POSIX_C_SOURCE explicitly here hides INADDR_LOOPBACK
- * on macOS, so we keep just _DEFAULT_SOURCE. */
-#define _DEFAULT_SOURCE
+/* _DEFAULT_SOURCE for CLOCK_MONOTONIC under glibc with -std=c11.
+ * The build defines it globally; guard against redefinition (the
+ * FreeBSD compiler warns on the bare #define). INADDR_LOOPBACK
+ * is spelled via test_portable.h - FreeBSD hides the libc macro
+ * under the globally-defined _POSIX_C_SOURCE. */
+#if !defined(_DEFAULT_SOURCE)
+#define _DEFAULT_SOURCE 1
+#endif
 
 #include "test_helper_echo.h"
+#include "test_portable.h"
 
 #if defined(_WIN32)
 #error "test_helper_echo.c is POSIX-only; the Windows CI job runs unit tests via WSL."
@@ -67,7 +71,7 @@ echo_server_start(struct echo_server *s,
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_addr.s_addr = htonl(OTLP_TEST_INADDR_LOOPBACK);
 	addr.sin_port = 0; /* kernel-chosen */
 	if (bind(listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
 		goto fail;
@@ -158,7 +162,7 @@ echo_server_stop(struct echo_server *s)
 		return;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_addr.s_addr = htonl(OTLP_TEST_INADDR_LOOPBACK);
 	addr.sin_port = htons((uint16_t) s->port);
 	(void) connect(wake_fd, (struct sockaddr *) &addr, sizeof(addr));
 	close(wake_fd);

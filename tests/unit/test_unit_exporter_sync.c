@@ -138,6 +138,7 @@ int
 main(void)
 {
 	test_null_guards();
+	test_null_transport_shortcut();
 	test_platform_and_http_guards();
 	test_http_url_error_branches();
 	printf("unit-exporter-sync: all checks passed\n");
