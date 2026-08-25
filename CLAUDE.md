@@ -41,7 +41,7 @@ vcpkg manifest mode is supported; the manifest currently declares no required de
 
 ## Running tests
 
-CTest drives the test pyramid. Labels: `unit`, `property`, `integration`, `smoke`.
+CTest drives the test pyramid (53 tests). Labels: `unit`, `property`, `integration`, `smoke`.
 
 ```sh
 ctest --test-dir build                 # all
@@ -118,7 +118,9 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `src/otlp_messages.c` | Traces encoder + shared helpers (any_value, resource) |
 | `src/otlp_metrics_encoder.c` | Metrics encoder (table-driven dispatch) |
 | `src/otlp_logs_encoder.c` | Logs encoder |
-| `src/exporter.c` | Exporter lifecycle — 3 MPSC queues, batch, retry, flush, diagnostics |
+| `src/exporter.c` | Exporter lifecycle + async tick pipeline — 3 MPSC queues, batch, retry, diagnostics |
+| `src/exporter_sync.c` | Synchronous flush delivery (flush_metric/flush_log): one-shot encode → POST → retry → events |
+| `src/exporter_internal.h` | THE internal seam: struct otlp_exporter, signal_state, signal table types — shared by exporter.c and exporter_sync.c |
 | `src/http_client.c` | HTTP/1.1 non-blocking state machine + keep-alive + timeouts |
 | `src/http_response_parser.{h,c}` | HTTP response wire format: header scan, chunked decode, smuggling rejection (pure — byte fixtures, runs on MSVC) |
 | `src/retry_policy.{h,c}` | Retry timing as pure functions: full jitter, exponent clamp, Retry-After floor/cap |

@@ -4,6 +4,29 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] - 2026-08-25
+
+FreeBSD becomes a gating check; the changelog gets a home.
+
+### Changed — FreeBSD CI is a real gate
+
+The FreeBSD job ran `continue-on-error` since inception for an
+INADDR_LOOPBACK visibility quirk that — checking the record —
+never once reproduced: 15/15 green runs on main. The flag is
+gone; FreeBSD 14.2 is now a gating check like every other
+platform.
+
+### Added — /docs/changelog/ on the site
+
+The release arc rendered as the site's changelog page: the
+freeze, exemplars, OTel-native config, the deepening window —
+with links to the authoritative CHANGELOG.md. 14 pages now.
+
+### Fixed — docs truth
+
+CLAUDE.md key-files gains exporter_sync.c and exporter_internal.h
+(the one internal seam); test count corrected to 53.
+
 ## [1.1.2] - 2026-08-25
 
 Third architecture review, fully implemented.
