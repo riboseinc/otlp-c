@@ -1,0 +1,86 @@
+---
+import Base from "../layouts/Base.astro";
+import CodeTabs from "../components/CodeTabs.vue";
+import "../styles/global.css";
+
+const tabs = [
+  {
+    label: "examples/minimal.c",
+    code: `/* Emit one span + one metric + one log, flush, exit. */
+#include <otlp-c/otlp.h>
+
+int main(void) {
+    otlp_exporter_opts_t opts = { .service_name = "demo" };
+    otlp_exporter_t *exp = otlp_exporter_create(&opts);
+    otlp_tracer_t *tr = otlp_tracer_create("demo", "demo", "0");
+
+    otlp_span_t *s = otlp_tracer_start_span(tr, "op");
+    otlp_span_mark_end(s);
+    otlp_exporter_emit_move(exp, s);
+
+    otlp_metric_t *m = otlp_metric_create(
+        OTLP_METRIC_COUNTER, "demo_total", "1", NULL, NULL, 0);
+    otlp_metric_record(m, 1.0);
+    otlp_exporter_flush_metric(exp, m);
+
+    otlp_log_record_t *lr =
+        otlp_log_record_create(OTLP_SEVERITY_INFO, "done");
+    otlp_exporter_flush_log(exp, lr);
+
+    otlp_exporter_flush(exp);
+    /* free everything... */
+}`,
+  },
+  {
+    label: "event loop (poll)",
+    code: `/* Drive the exporter from poll()/epoll — the library exposes
+   its fd + interest so you never block a dedicated thread. */
+struct pollfd pfd;
+size_t n;
+
+while (running) {
+    otlp_exporter_tick(exp, 0);
+
+    if (otlp_exporter_poll_fds(exp, &pfd.fd, 1, &n) == OTLP_OK && n) {
+        pfd.events = otlp_exporter_poll_events(exp);
+        pfd.revents = 0;
+        poll(&pfd, 1, batch_ms);
+        if (pfd.revents)
+            otlp_exporter_tick(exp, 0);
+    }
+    /* ... your own I/O here ... */
+}`,
+  },
+  {
+    label: "multithreaded emit",
+    code: `/* emit*() is safe from ANY thread; one thread ticks. */
+static void *worker(void *arg) {
+    for (int i = 0; i < N; i++) {
+        otlp_span_t *s = otlp_tracer_start_span(tr, "work");
+        otlp_span_mark_end(s);
+        if (otlp_exporter_emit_move(exp, s) != OTLP_OK)
+            break;                      /* queue full: backpressure */
+    }
+    return NULL;
+}
+/* main: start workers, tick in a loop, flush at shutdown */`,
+  },
+];
+---
+<Base title="Examples — otlp-c">
+  <section class="py-16">
+    <h1 class="text-4xl font-bold tracking-tight text-slate-50">Examples</h1>
+    <p class="mt-4 max-w-2xl text-lg text-slate-400">
+      Runnable sources live in
+      <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-sm text-teal-300">examples/</code>
+      in the repo — build them with
+      <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-sm text-teal-300">-DOTLP_C_BUILD_EXAMPLES=ON</code>.
+      The patterns below cover the three shapes of embed.
+    </p>
+  </section>
+  <section class="pb-20">
+    <div class="mx-auto max-w-3xl">
+      <CodeTabs client:load tabs={tabs} />
+    </div>
+  </section>
+</Base>

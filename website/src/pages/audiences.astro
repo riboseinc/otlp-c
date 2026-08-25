@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro";
+import AudienceExplorer from "../components/AudienceExplorer.vue";
+import "../styles/global.css";
+---
+<Base title="Audiences — otlp-c">
+  <section class="py-16">
+    <h1 class="text-4xl font-bold tracking-tight text-slate-50">Who it's for</h1>
+    <p class="mt-4 max-w-2xl text-lg text-slate-400">
+      OpenTelemetry's C-callable SDK is a C++ library — which closes the
+      door for every project that must stay buildable with a C compiler
+      alone. otlp-c exists for those projects. Filter by what binds you;
+      if nothing below applies, the
+      <a href="https://github.com/open-telemetry/opentelemetry-cpp" class="text-teal-300 underline decoration-ink-700">opentelemetry-cpp</a>
+      SDK is the mainstream choice.
+    </p>
+  </section>
+  <section class="pb-20">
+    <AudienceExplorer client:load />
+  </section>
+</Base>

@@ -1,0 +1,81 @@
+---
+import Base from "../layouts/Base.astro";
+import "../styles/global.css";
+
+const timeline = [
+  { v: "v0.1–v0.5", t: "Build-out", d: "Wire encoder, three signals, hardening arcs — 50+ distinct bugs found and fixed by property tests, fuzzing, sanitizers, and live-collector integration." },
+  { v: "v0.6", t: "Stabilization window", d: "Additive-only line. Architecture deepening: the response parser and retry policy became pure modules; five signal-descriptor families collapsed into one table." },
+  { v: "v0.7", t: "OTel-native config", d: "The standard env-var matrix, extra HTTP headers, per-signal endpoints — the deployment surface matched the OpenTelemetry specification." },
+  { v: "v0.8", t: "Feature completion", d: "Exemplars with trace correlation; schema_url on every signal. The OTLP surface this library's model can express became complete." },
+  { v: "v1.0", t: "API freeze", d: "133 symbols audited; five Path-to-1.0 criteria re-verified; the source API froze for 1.x — additions only, ever." },
+  { v: "v1.0.1–v1.0.5", t: "Verification hardening", d: "Reference-validated golden vectors in both directions caught two released wire bugs; descriptor audits, the coverage floor, and the 100k-iteration soak became CI gates." },
+];
+---
+<Base title="About — otlp-c">
+  <section class="py-16">
+    <h1 class="text-4xl font-bold tracking-tight text-slate-50">About otlp-c</h1>
+    <div class="mt-6 max-w-3xl space-y-5 text-lg leading-relaxed text-slate-400">
+      <p>
+        OpenTelemetry ships SDKs in eleven languages. Exactly one of them is
+        both C-callable and implemented in C — this one. Everything else that
+        speaks OTLP from C wraps a C++ runtime, which quietly rules out
+        kernel modules, firmware, language runtimes, and preloaded tracers.
+      </p>
+      <p>
+        The defining constraint is <strong class="text-slate-200">zero
+        non-libc dependencies</strong>: no protobuf-c, no libcurl, no
+        OpenSSL, no zlib. The protobuf encoder and the HTTP/1.1 client are
+        hand-rolled — roughly six message types, every field number pinned
+        against the upstream opentelemetry-proto descriptors and every
+        payload byte-compared against its reference serialization.
+      </p>
+      <p>
+        TLS is deliberately out of scope: the production topology puts a
+        local <a href="/use-cases/" class="text-teal-300 underline decoration-ink-700">otelcol sidecar</a>
+        in front of the library, terminating TLS to real backends.
+      </p>
+    </div>
+  </section>
+
+  <section class="pb-16">
+    <h2 class="mb-8 text-2xl font-semibold text-slate-100">The arc</h2>
+    <div class="space-y-0 border-l border-ink-700 pl-8">
+      {timeline.map((e) => (
+        <div class="relative pb-8">
+          <span class="absolute -left-[37px] top-1.5 h-3 w-3 rounded-full border-2 border-teal-400 bg-ink-950"></span>
+          <div class="font-mono text-xs text-teal-400">{e.v}</div>
+          <h3 class="mt-1 font-semibold text-slate-100">{e.t}</h3>
+          <p class="mt-1 max-w-2xl text-sm leading-relaxed text-slate-400">{e.d}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="pb-20">
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-6">
+        <h3 class="font-semibold text-slate-100">License</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          BSD 3-Clause (relicensed from Apache-2.0 in v0.6.14 at the
+          maintainer's direction). Suitable for embedding in proprietary and
+          open products alike.
+        </p>
+      </div>
+      <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-6">
+        <h3 class="font-semibold text-slate-100">Governance</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          A <a href="https://www.ribose.com" class="text-teal-300 underline decoration-ink-700">Ribose</a> project.
+          Contributions via PR; every merge passes 28 CI gates including
+          sanitizers, conformance audits, and a live-collector integration.
+        </p>
+      </div>
+      <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-6">
+        <h3 class="font-semibold text-slate-100">Stability</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          Source API frozen since 1.0.0 — additions only. The C ABI is not
+          guaranteed across builds; compile against the headers.
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>

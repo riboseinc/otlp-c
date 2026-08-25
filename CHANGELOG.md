@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-08-25
+
+The real website: Astro 7 + Vite 8 + Tailwind 4 + Vue islands.
+
+### Added — a designed site with a full information architecture
+
+website/ is an Astro 7 (Vite 8) project styled with Tailwind 4
+(via @tailwindcss/vite, CSS-first theme) with two Vue island
+components: a code-sample switcher (signals, consumption modes,
+examples) and a filterable audience explorer. Pages:
+
+- **/** — the pitch, stats, feature grid, tabbed three-signal
+  quick code, env-config showcase
+- **/about** — what/why, the zero-deps constraint, the version
+  arc, license/governance/stability cards
+- **/audiences** — who it's for (kernel, firmware, VMs, preloaded
+  tracers, static binaries, security-critical), filterable by
+  constraint
+- **/use-cases** — four deployment patterns (sidecar edge, VM FFI
+  binding, library instrumentation, collector auth) with code
+- **/docs** — consume (4 modes), first span, the six core
+  concepts, build presets
+- **/examples** — minimal, event-loop (poll), multithreaded emit
+- **/api/** — the generated Doxygen reference, nested; the two
+  halves deploy together so they cannot drift
+
+The Pages job rebuilds: npm ci + astro build + Doxygen into
+dist/api, deployed on every push to main. Local:
+cd website && npm run dev.
+
 ## [1.0.5] - 2026-08-25
 
 Second architecture review, fully implemented; the website exists.

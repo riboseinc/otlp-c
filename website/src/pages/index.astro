@@ -1,0 +1,156 @@
+---
+import Base from "../layouts/Base.astro";
+import CodeTabs from "../components/CodeTabs.vue";
+import "../styles/global.css";
+
+const tabs = [
+  {
+    label: "traces",
+    code: `#include <otlp-c/otlp.h>
+
+otlp_exporter_t *exp = otlp_exporter_create(&(otlp_exporter_opts_t){
+    .service_name = "my-service",
+});
+otlp_tracer_t *tr = otlp_tracer_create("scope", "lib", "1.0");
+
+otlp_span_t *s = otlp_tracer_start_span(tr, "GET /users");
+otlp_span_set_status(s, OTLP_STATUS_CODE_OK, NULL);
+otlp_span_mark_end(s);
+
+otlp_exporter_emit_move(exp, s);   /* queue it, batch + POST on tick */`,
+  },
+  {
+    label: "metrics",
+    code: `otlp_metric_t *m = otlp_metric_create(
+    OTLP_METRIC_COUNTER, "requests_total", "1",
+    "Total requests", NULL, 0);
+
+otlp_metric_record(m, 1.0);
+otlp_metric_set_attribute_string(m, "method", "GET");
+
+otlp_exemplar_t *ex = otlp_exemplar_create();
+otlp_exemplar_set_double_value(ex, 1.0);
+otlp_exemplar_set_trace_context(ex, trace_id, span_id);
+otlp_metric_add_exemplar(m, ex);
+otlp_exemplar_free(ex);
+
+otlp_exporter_emit_metric_move(exp, m);`,
+  },
+  {
+    label: "logs",
+    code: `otlp_log_record_t *lr = otlp_log_record_create(
+    OTLP_SEVERITY_ERROR, "db connection failed");
+
+otlp_log_record_mark_timestamp(lr);
+otlp_log_record_set_trace_id(lr, trace_id);   /* correlate */
+otlp_log_record_set_attribute_string(lr, "db.host", "prod-1");
+
+otlp_exporter_emit_log_move(exp, lr);`,
+  },
+  {
+    label: "env config",
+    code: `/* Zero-config deployments: the OTel standard variables */
+otlp_exporter_opts_t opts = { .service_name = "svc" };
+otlp_env_storage_t env;
+
+otlp_exporter_opts_apply_env(&opts, &env);
+otlp_exporter_t *exp = otlp_exporter_create(&opts);
+
+/* OTEL_EXPORTER_OTLP_ENDPOINT     base, per-signal paths appended
+   OTEL_EXPORTER_OTLP_TIMEOUT      request budget
+   OTEL_EXPORTER_OTLP_HEADERS      auth toward the collector
+   OTEL_RESOURCE_ATTRIBUTES        resource metadata
+   OTEL_SERVICE_NAME               service identity */`,
+  },
+];
+
+const features = [
+  { t: "All three signals", d: "Traces, metrics, logs — including exemplars with trace correlation and schema_url." },
+  { t: "Zero non-libc deps", d: "Hand-rolled protobuf encoder + HTTP/1.1 client. No protobuf-c, no libcurl, no OpenSSL." },
+  { t: "No library threads", d: "Caller-driven tick(). Never calls pthread_create, never takes a mutex. Lock-free MPSC." },
+  { t: "Hardened by construction", d: "CWE-93 header-injection and CWE-190 overflow checks at every boundary — mutation-tested." },
+  { t: "Wire-verified", d: "Every schema table descriptor-audited; every payload byte-compared against the reference serialization." },
+  { t: "89 ns/span emit", d: "~11M spans/s through the emit pipeline (Release, null transport). Linear in attributes." },
+];
+
+const stats = [
+  { n: "133", l: "public symbols" },
+  { n: "52", l: "test binaries" },
+  { n: "28", l: "CI gates" },
+  { n: "0", l: "non-libc deps" },
+];
+---
+<Base>
+  <section class="py-20 sm:py-28">
+    <div class="mx-auto max-w-3xl text-center">
+      <p class="mb-4 font-mono text-sm text-teal-300">pure-C99 · OTLP/HTTP · BSD-3</p>
+      <h1 class="text-4xl font-bold tracking-tight text-slate-50 sm:text-6xl">
+        OpenTelemetry,
+        <span class="text-teal-400">without the C++ runtime</span>
+      </h1>
+      <p class="mt-6 text-lg leading-relaxed text-slate-400">
+        otlp-c emits traces, metrics, and logs over OTLP/HTTP from any C
+        application — kernel modules, firmware, language VMs, preloaded
+        tracers. One static archive. Zero non-libc dependencies. API frozen
+        since 1.0.
+      </p>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <a href="/docs/" class="rounded-lg bg-teal-500 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-teal-400">
+          Get started
+        </a>
+        <a href="/audiences/" class="rounded-lg border border-ink-700 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-teal-500/50 hover:text-teal-300">
+          Is it for me?
+        </a>
+      </div>
+    </div>
+    <div class="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-4 sm:grid-cols-4">
+      {stats.map((s) => (
+        <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5 text-center">
+          <div class="font-mono text-3xl font-bold text-teal-300">{s.n}</div>
+          <div class="mt-1 text-xs text-slate-500">{s.l}</div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="pb-20">
+    <h2 class="mb-6 text-center text-2xl font-semibold text-slate-100">
+      One library, three signals
+    </h2>
+    <div class="mx-auto max-w-3xl">
+      <CodeTabs client:load tabs={tabs} />
+    </div>
+    <p class="mt-4 text-center text-sm text-slate-500">
+      The library never spawns a thread — you drive I/O with
+      <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-xs text-teal-300">otlp_exporter_tick()</code>
+      from a thread you control.
+    </p>
+  </section>
+
+  <section class="pb-20">
+    <h2 class="mb-8 text-center text-2xl font-semibold text-slate-100">
+      Built for the places C++ can't go
+    </h2>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {features.map((f) => (
+        <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-6 transition hover:border-teal-500/40">
+          <h3 class="font-semibold text-slate-100">{f.t}</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-400">{f.d}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="pb-20">
+    <div class="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/10 via-ink-900 to-ink-900 p-10 text-center">
+      <h2 class="text-2xl font-semibold text-slate-50">From zero to first span in minutes</h2>
+      <p class="mx-auto mt-3 max-w-xl text-slate-400">
+        CMake presets, three CI-pinned consumption paths, and a live otelcol
+        integration suite — or your money back (it's BSD, it's free).
+      </p>
+      <a href="/docs/" class="mt-6 inline-block rounded-lg bg-teal-500 px-6 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-teal-400">
+        Read the docs
+      </a>
+    </div>
+  </section>
+</Base>

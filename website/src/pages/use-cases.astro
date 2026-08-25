@@ -1,0 +1,100 @@
+---
+import Base from "../layouts/Base.astro";
+import "../styles/global.css";
+
+const cases = [
+  {
+    name: "Sidecar edge deployment",
+    blurb:
+      "Ship a small C service at the edge; a local otelcol sidecar handles TLS, batching, and fan-out to multiple backends.",
+    steps: [
+      "App + otlp-c → http://localhost:4318 (plain HTTP)",
+      "otelcol sidecar terminates TLS, retries, exports",
+      "Tempo / Honeycomb / Datadog / Jaeger behind the sidecar",
+    ],
+    code: `/* App side — plain HTTP to the sidecar, TLS is its job */
+otlp_exporter_opts_t opts = {
+    .service_name = "edge-gateway",
+    .endpoint     = "http://127.0.0.1:4318/v1/traces",
+};
+/* Env-driven instead:
+   OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 */`,
+  },
+  {
+    name: "Instrumenting a language VM",
+    blurb:
+      "Expose a tiny C API to your host language. The library's opaque handles and deep-copied opts map cleanly onto FFI.",
+    steps: [
+      "Bind ~10 functions: create, start_span, set_attr*, end, emit, tick, flush",
+      "Call tick() from the VM's event loop (uv_prepare, GVL-safe timers)",
+      "Structured events surface as exceptions/logs in the host language",
+    ],
+    code: `/* The FFI surface is small and stable (frozen 1.x API) */
+exp   = otlp_exporter_create(&opts);
+span  = otlp_tracer_start_span(tr, "http.request");
+otlp_span_set_attribute_string(span, "http.route", route);
+otlp_span_mark_end(span);
+otlp_exporter_emit_move(exp, span);
+otlp_exporter_tick(exp, 0);   /* drive from the VM loop */`,
+  },
+  {
+    name: "Library instrumentation",
+    blurb:
+      "A C library that wants to emit telemetry about itself without dictating the host's SDK: link otlp-c, expose a tick hook, stay dependency-free.",
+    steps: [
+      "Your -lfoo links otlp-c's static archive — adds zero transitive deps",
+      "Offer libfoo_telemetry_tick() so the host drives I/O on its schedule",
+      "Respect the host's collector via standard env vars",
+    ],
+    code: `/* Host calls this from its event loop — you never spawn threads */
+void libfoo_telemetry_tick(void) {
+    if (g_exp) otlp_exporter_tick(g_exp, 0);
+}`,
+  },
+  {
+    name: "Collector auth at the perimeter",
+    blurb:
+      "The collector in front of your telemetry platform requires auth headers. Attach them to every export request — or let the standard env var do it.",
+    steps: [
+      "opts.http_headers (deep-copied at create; CR/LF rejected)",
+      "OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer …",
+      "Per-signal endpoints when signals go to different collectors",
+    ],
+    code: `otlp_http_header_t hdrs[] = {
+    { "authorization", "Bearer " TOKEN },
+};
+opts.http_headers    = hdrs;
+opts.n_http_headers  = 1;
+/* or: OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer x"
+   OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://metrics.local/v1/metrics */`,
+  },
+];
+---
+<Base title="Use cases — otlp-c">
+  <section class="py-16">
+    <h1 class="text-4xl font-bold tracking-tight text-slate-50">Where it runs</h1>
+    <p class="mt-4 max-w-2xl text-lg text-slate-400">
+      Four patterns cover most deployments. The common thread: the library
+      stays small and synchronous-by-contract, and the heavy lifting
+      (TLS, queueing, fan-out) belongs to a collector.
+    </p>
+  </section>
+  <section class="space-y-6 pb-20">
+    {cases.map((c) => (
+      <div class="grid gap-6 rounded-2xl border border-ink-700 bg-ink-900/60 p-8 lg:grid-cols-2">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-100">{c.name}</h2>
+          <p class="mt-2 text-sm leading-relaxed text-slate-400">{c.blurb}</p>
+          <ol class="mt-4 space-y-2">
+            {c.steps.map((s, i) => (
+              <li class="flex gap-3 text-sm text-slate-300">
+                <span class="font-mono text-teal-400">{i + 1}.</span> {s}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <pre class="overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[12.5px] leading-relaxed text-slate-300"><code>{c.code}</code></pre>
+      </div>
+    ))}
+  </section>
+</Base>

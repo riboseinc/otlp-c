@@ -129,6 +129,7 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `tests/consumers/` | Standalone consumer projects (find_package / FetchContent / vcpkg overlay) — packaging tests driven by CI, runnable locally; NOT in the build tree |
 | `tests/integration/` | End-to-end against a local otelcol |
 | `bench/bench_emit.c` | Emit pipeline throughput benchmark |
+| `website/` | The Astro 7 + Tailwind 4 + Vue-islands site (deployed at riboseinc.github.io/otlp-c); Doxygen nests at /api/ at deploy time |
 | `docs/architecture.md` | Layered design (21+ modules) |
 | `docs/roadmap.md` | Status and version plan |
 | `.github/workflows/ci.yml` | Multi-platform CI + sanitizers (ASAN/UBSAN/TSAN) |

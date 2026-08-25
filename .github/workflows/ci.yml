@@ -251,32 +251,41 @@ jobs:
           cmake --build consumer-build --config Release
           ctest --test-dir consumer-build --build-config Release --output-on-failure
 
-  # The website (v1.0.5): the Doxygen API reference — 84 pages,
-  # zero warnings, versioned from CMake — published to GitHub
-  # Pages on every merge to main. The site is GENERATED, never
-  # hand-maintained, so it cannot go stale.
+  # The website (v1.1.0): an Astro 7 + Vite 8 + Tailwind 4 +
+  # Vue-islands site (home / about / audiences / use cases / docs /
+  # examples) with the generated Doxygen reference nested at /api/.
+  # The marketing pages are hand-written; the API reference is
+  # generated — the two halves cannot drift apart because they
+  # deploy together.
   pages:
-    name: Website (Doxygen -> GitHub Pages)
+    name: Website (Astro + Doxygen -> GitHub Pages)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       pages: write
       id-token: write
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - name: Build the reference
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Build the site + reference
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q doxygen graphviz
           cmake -B build-docs
           cmake --build build-docs --target docs
-          mkdir -p site
-          cp -r build-docs/docs/html/. site/
+          cd website
+          npm ci
+          npm run build
+          cp -r ../build-docs/docs/html dist/api
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: website/dist
       - uses: actions/deploy-pages@v4
 
   # Coverage floor (v1.0.4): every library file must hold >= 82%
