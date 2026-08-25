@@ -106,11 +106,40 @@ test_platform_and_http_guards(void)
 	}
 }
 
+
+static void
+test_http_url_error_branches(void)
+{
+	/* Each malformed input hits a distinct parse_url guard region. */
+	struct otlp_http_url u;
+
+	check_true(otlp_http_parse_url(NULL, &u) == OTLP_ERR_NULL);
+	check_true(otlp_http_parse_url("http://h:1/x", NULL) ==
+		OTLP_ERR_NULL);
+	check_true(otlp_http_parse_url("", &u) == OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("http", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("http:", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("http://", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("https://h:1/x", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("ftp://h/x", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("http://h:x/x", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_true(otlp_http_parse_url("http://h:99999/x", &u) ==
+		OTLP_ERR_INVALID_ARGUMENT);
+	check_ok(otlp_http_parse_url("http://h:1/", &u));
+}
+
 int
 main(void)
 {
 	test_null_guards();
 	test_platform_and_http_guards();
+	test_http_url_error_branches();
 	printf("unit-exporter-sync: all checks passed\n");
 	return 0;
 }
