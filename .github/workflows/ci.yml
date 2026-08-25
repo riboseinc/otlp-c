@@ -273,7 +273,7 @@ jobs:
           cmake -B build-docs
           cmake --build build-docs --target docs
           mkdir -p site
-          cp -r build-docs/docs/html site/
+          cp -r build-docs/docs/html/. site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
