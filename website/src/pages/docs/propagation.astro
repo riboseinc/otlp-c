@@ -1,0 +1,92 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import CodeTabs from "../../components/CodeTabs.vue";
+import "../../styles/global.css";
+
+const tabs = [
+  {
+    label: "inject (client)",
+    code: `/* Push the current span's context into outgoing headers.
+   The carrier is yours: two callbacks, no HTTP struct imposed. */
+otlp_context_t ctx = otlp_context_from_span(span);
+
+otlp_context_inject(ctx, my_set_header, &request_headers);
+/* → traceparent: 00-<32 hex trace>-<16 hex span>-01
+   → tracestate:  vendor1=1,vendor2=2   (if set)
+   → baggage:     env=prod,tenant=acme  (if set) */`,
+  },
+  {
+    label: "extract (server)",
+    code: `/* Reconstruct the parent context on the receiving side.
+   Returns has_context=false for an empty/invalid carrier —
+   never a garbage context. */
+otlp_context_t parent = otlp_context_extract(
+    my_get_header, &incoming_headers);
+
+if (parent.has_context) {
+    /* start the child span under the caller's trace */
+    otlp_span_set_trace_id(child, parent.trace_id);
+    otlp_span_set_parent_span_id(child, parent.span_id);
+    otlp_span_set_trace_state(child, parent.trace_state);
+}`,
+  },
+  {
+    label: "the carrier callbacks",
+    code: `/* One setter, one getter — any header store works:
+   curl_slist, h2 headers, raw bufs, your RPC metadata. */
+static void my_set_header(const char *name, const char *value, void *ud) {
+    headers_add(ud, name, value);
+}
+static const char *my_get_header(const char *name, void *ud) {
+    return headers_get(ud, name);   /* NULL when absent */
+}`,
+  },
+];
+---
+<Docs title="Context propagation — otlp-c docs">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">Context propagation</h1>
+  <p class="mt-3 max-w-2xl text-slate-400">
+    Distributed tracing needs the trace to survive the hop. otlp-c
+    implements W3C Trace Context (traceparent + tracestate) and W3C
+    Baggage, spec-exact — including the rules most implementations
+    get wrong: version <code class="font-mono text-xs text-teal-300">0xff</code>
+    rejection, future-version forward compatibility, printable-only
+    tracestate/baggage, and big-endian ratio-sampler prefixes.
+  </p>
+
+  <div class="mt-8">
+    <CodeTabs client:load tabs={tabs} />
+  </div>
+
+  <h2 class="mt-10 text-xl font-semibold text-slate-100">The guarantees</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2">
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Spec-exact traceparent</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Exactly four fields for version 00; all-zero IDs rejected on
+        both inject and extract; CR/LF never propagated (the same
+        CWE-93 posture as the HTTP layer — injection attempts fail
+        closed, they don't launder).
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Baggage, not a side channel</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Only printable ASCII propagates; malformed entries are
+        dropped, not forwarded. Extract returns
+        <code class="font-mono text-xs text-teal-300">has_context=false</code>
+        rather than a zero-filled context that would silently break
+        correlation.
+      </p>
+    </div>
+  </div>
+
+  <h2 class="mt-10 text-xl font-semibold text-slate-100">Sampling interacts here</h2>
+  <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+    The built-in samplers — always_on, always_off,
+    trace_id_ratio_based — decide at span creation from the trace
+    id's big-endian prefix, so decisions are consistent across
+    processes regardless of endianness. The sampled flag rides the
+    last traceparent byte.
+  </p>
+</Docs>

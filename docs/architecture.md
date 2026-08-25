@@ -92,11 +92,11 @@ transport-agnostic via callback-based carriers.
 │   │ SBO buffer.      │  │machine + keep- │  │Pure tim- │ │
 │   │                  │  │alive + timeouts│  │ing fns.  │ │
 │   └──────────────────┘  └───────┬────────┘  └──────────┘ │
-│   ┌──────────────────┐  ┌──────┴─────────┐               │
-│   │ otlp_schema.h    │  │http_response_  │               │
-│   │ Model-driven     │  │parser.c (pure  │               │
-│   │ field tables.    │  │wire format)    │               │
-│   └──────────────────┘  └────────────────┘               │
+│   ┌──────────────────┐  ┌──────┴─────────┐  ┌─────────┐ │
+│   │ otlp_schema.h    │  │http_response_  │  │env_     │ │
+│   │ Model-driven     │  │parser.c (pure  │  │config.c │ │
+│   │ field tables.    │  │wire format)    │  │OTel env │ │
+│   └──────────────────┘  └────────────────┘  └─────────┘ │
 │          │                                  │              │
 │   ┌──────────────────┐              ┌──────────────────┐   │
 │   │ otlp_schema.h    │              │ platform.c       │   │

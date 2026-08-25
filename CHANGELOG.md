@@ -4,6 +4,41 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-08-25
+
+Third architecture review, fully implemented.
+
+### Changed — the sync-flush pipeline is its own module (review C1)
+
+exporter.c held both delivery engines — the async tick pipeline
+and the synchronous flush — plus the exporter struct: 1865 lines
+where understanding flush_metric meant scrolling past the whole
+tick machine. The struct, signal_state, and the signal-kind enum
+moved to exporter_internal.h (the one internal seam, now
+explicit); the sync engine (flush_post_once, flush_sync,
+flush_metric, flush_log) lives in src/exporter_sync.c — 330
+lines, one-shot encode → POST → retry → events in one readable
+file. exporter.c is down to 1471 lines: lifecycle + async
+pipeline. event_log and report_partial_success became shared
+internal symbols. Public surface unchanged; all 52 tests pass
+unmodified.
+
+### Added — the site's last feature blind spots (review C2)
+
+- /docs/propagation/ — W3C Trace Context + Baggage: inject and
+  extract with carrier callbacks, the spec-exact guarantees
+  (0xff rejection, printable-only values, has_context=false over
+  garbage), and sampler interaction.
+- /docs/performance/ — the real numbers (89 ns/span emit, 360 ns
+  encode, 176-byte span), reproduction via the bench preset, why
+  it's fast, and the measurement discipline.
+
+### Fixed — architecture.md diagram drift (review C3)
+
+env_config.c sat in the module table since 0.7.1 but never joined
+the layer diagram; a reader crossing from table to diagram saw
+two different architectures.
+
 ## [1.1.1] - 2026-08-25
 
 The site gains a real docs section.

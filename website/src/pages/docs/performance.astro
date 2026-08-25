@@ -1,0 +1,78 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import "../../styles/global.css";
+
+const numbers = [
+  { v: "89 ns", l: "per span, emit pipeline (Release, null transport, 0 attrs)" },
+  { v: "~150 ns", l: "per span at 5 attributes" },
+  { v: "360 ns", l: "encode, per span (4 attrs)" },
+  { v: "~60 ns", l: "per additional attribute at encode" },
+  { v: "176 B", l: "sizeof(otlp_span) — 789× smaller than v0.5.67" },
+];
+---
+<Docs title="Performance — otlp-c docs">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">Performance</h1>
+  <p class="mt-3 max-w-2xl text-slate-400">
+    Measured, not guessed — every number below is reproducible with
+    the bench preset on your own hardware, and the cost model is
+    simple enough to reason about: cost is linear in attributes,
+    and allocation happens at clone boundaries only.
+  </p>
+
+  <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    {numbers.map((n) => (
+      <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-4">
+        <div class="font-mono text-xl font-bold text-teal-300">{n.v}</div>
+        <div class="mt-1 text-[11px] leading-snug text-slate-500">{n.l}</div>
+      </div>
+    ))}
+  </div>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">Reproduce</h2>
+  <pre class="mt-3 overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[12.5px] leading-relaxed text-slate-300"><code>cmake --preset bench
+cmake --build --preset bench
+./build-bench/bench/otlp_bench_emit
+./build-bench/bench/otlp_bench_encode</code></pre>
+  <p class="mt-3 text-sm text-slate-500">
+    The numbers above are Release-build figures on Apple silicon;
+    Debug is roughly 2× slower.
+  </p>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">Why it's fast</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-3">
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Small-binary object model</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        Attributes, events, and links are grow-on-demand vectors —
+        empty objects pay for pointers, not capacity arrays. The span
+        struct itself shrank 789× in the v0.5 arc.
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Move semantics</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        <code class="font-mono text-xs text-teal-300">emit_move()</code>
+        transfers ownership into the lock-free queue — zero copies
+        between your thread and the batch. The clone variant exists
+        for callers who can't give up the object.
+      </p>
+    </div>
+    <div class="rounded-xl border border-ink-700 bg-ink-900/60 p-5">
+      <h3 class="font-semibold text-slate-100">Hand-rolled encoder</h3>
+      <p class="mt-2 text-sm leading-relaxed text-slate-400">
+        A schema-table-driven protobuf writer with small-buffer
+        optimization — typical payloads encode without touching the
+        heap. No reflection, no runtime schema.
+      </p>
+    </div>
+  </div>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">The discipline</h2>
+  <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+    Every release re-verifies the pipeline numbers before merging,
+    and the A/B methodology (same host, same build type) caught the
+    two regressions the v0.5 event and UTF-8 layers initially
+    introduced — both were optimized away before shipping. Changes
+    that cost noise-level get recorded as such, not as wins.
+  </p>
+</Docs>

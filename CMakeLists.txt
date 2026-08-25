@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(otlp-c
-    VERSION 1.1.1
+    VERSION 1.1.2
     DESCRIPTION "Pure-C OTLP/HTTP client for OpenTelemetry"
     HOMEPAGE_URL "https://github.com/riboseinc/otlp-c"
     LANGUAGES C
@@ -110,6 +110,7 @@ add_library(otlp_c
     src/tracer.c
     src/w3c.c
     src/exporter.c
+    src/exporter_sync.c
     src/exporter_otel.c
     src/http_client.c
     src/http_response_parser.c
