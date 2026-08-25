@@ -1,7 +1,7 @@
 ---
-import Base from "../layouts/Base.astro";
-import CodeTabs from "../components/CodeTabs.vue";
-import "../styles/global.css";
+import Docs from "../../layouts/Docs.astro";
+import CodeTabs from "../../components/CodeTabs.vue";
+import "../../styles/global.css";
 
 const tabs = [
   {
@@ -49,8 +49,8 @@ const concepts = [
   { term: "freeze", def: "Since 1.0.0 the source API is additive-only. The C ABI is not guaranteed across builds." },
 ];
 ---
-<Base title="Docs — otlp-c">
-  <section class="py-16">
+<Docs title="Getting started — otlp-c docs">
+  <section class="pb-12">
     <h1 class="text-4xl font-bold tracking-tight text-slate-50">Documentation</h1>
     <p class="mt-4 max-w-2xl text-lg text-slate-400">
       Five minutes to the first span; the concepts below carry the rest.
@@ -59,14 +59,14 @@ const concepts = [
     </p>
   </section>
 
-  <section class="pb-16">
+  <section class="pb-12">
     <h2 class="mb-6 text-2xl font-semibold text-slate-100">1 · Consume the library</h2>
     <div class="mx-auto max-w-3xl">
       <CodeTabs client:load tabs={tabs} />
     </div>
   </section>
 
-  <section class="pb-16">
+  <section class="pb-12">
     <h2 class="mb-6 text-2xl font-semibold text-slate-100">2 · First span</h2>
     <pre class="overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[13px] leading-relaxed text-slate-300"><code>{`#include <otlp-c/otlp.h>
 
@@ -91,7 +91,7 @@ int main(void) {
     </p>
   </section>
 
-  <section class="pb-16">
+  <section class="pb-12">
     <h2 class="mb-6 text-2xl font-semibold text-slate-100">3 · The model</h2>
     <div class="grid gap-4 sm:grid-cols-2">
       {concepts.map((c) => (
@@ -103,7 +103,7 @@ int main(void) {
     </div>
   </section>
 
-  <section class="pb-20">
+  <section class="pb-12">
     <h2 class="mb-6 text-2xl font-semibold text-slate-100">4 · Build &amp; test</h2>
     <pre class="overflow-x-auto rounded-xl border border-ink-700 bg-ink-950 p-5 font-mono text-[13px] leading-relaxed text-slate-300"><code>{`cmake --preset default && cmake --build --preset default && ctest --preset default
 # also: release · asan · ubsan · tsan · bench · coverage`}</code></pre>
@@ -112,4 +112,4 @@ int main(void) {
       and a C11 compiler (GCC, Clang, Apple Clang, MSVC).
     </p>
   </section>
-</Base>
+</Docs>

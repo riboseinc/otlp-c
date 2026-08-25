@@ -1,0 +1,61 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import EnvVarExplorer from "../../components/EnvVarExplorer.vue";
+import "../../styles/global.css";
+
+const opts = [
+  ["service_name", "const char *", "Service identity → resource attribute service.name."],
+  ["schema_url", "const char *", "Emitted as schema_url (field 3) on every signal's resource message. UTF-8 validated."],
+  ["http_headers / n_http_headers", "otlp_http_header_t * / size_t", "Extra HTTP headers on every export — collector auth. Deep-copied at create; CR/LF rejected."],
+  ["metrics_endpoint / logs_endpoint", "const char *", "Per-signal endpoints; NULL derives from `endpoint` (base + the signal's default path)."],
+  ["batch_size / batch_ms", "size_t / uint32_t", "Batch trigger: count reached or oldest item aged. Defaults 512 / 100 ms."],
+  ["max_retries / backoff_initial_ms / backoff_max_ms", "uint32_t", "Retry budget and full-jitter exponential backoff; Retry-After floors never exceed the cap."],
+  ["connect_timeout_ms / read_timeout_ms / flush_timeout_ms", "uint32_t", "Deadline enforcement per phase; the sync flush paths get their own budget."],
+  ["queue_capacity", "size_t", "Per-signal MPSC queue depth (power of two, rounded). Default 4096."],
+  ["user_agent", "const char *", "Header value; CR/LF rejected (CWE-93)."],
+];
+---
+<Docs title="Configuration — otlp-c docs">
+  <h1 class="text-3xl font-bold tracking-tight text-slate-50">Configuration</h1>
+  <p class="mt-3 text-slate-400">
+    One <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-sm text-teal-300">otlp_exporter_opts_t</code>
+    struct carries everything. Zero-initialize, fill what you care about,
+    pass to <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-sm text-teal-300">otlp_exporter_create()</code> —
+    the library supplies defaults for the rest and deep-copies
+    everything it borrows.
+  </p>
+
+  <h2 class="mt-10 text-xl font-semibold text-slate-100">Environment variables</h2>
+  <p class="mt-2 mb-6 max-w-2xl text-sm text-slate-400">
+    The standard OTel variables, applied by one call. Unset variables
+    pass through, so env config composes with hand-filled opts.
+    <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-xs text-teal-300">otlp_env_storage_t</code>
+    (~26 KiB — prefer static/heap placement) keeps every env-derived
+    string alive through create.
+  </p>
+  <EnvVarExplorer client:load />
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">The opts, field by field</h2>
+  <div class="mt-4 space-y-2">
+    {opts.map(([name, type, desc]) => (
+      <div class="rounded-lg border border-ink-700 bg-ink-900/60 p-4">
+        <div class="flex flex-wrap items-baseline gap-x-3">
+          <code class="font-mono text-sm font-semibold text-teal-300">{name}</code>
+          <span class="font-mono text-xs text-slate-500">{type}</span>
+        </div>
+        <p class="mt-1.5 text-sm text-slate-400">{desc}</p>
+      </div>
+    ))}
+  </div>
+
+  <h2 class="mt-12 text-xl font-semibold text-slate-100">Ownership in one breath</h2>
+  <p class="mt-2 text-sm leading-relaxed text-slate-400">
+    Everything caller-owned is deep-copied at create: endpoint strings,
+    resource attributes, HTTP headers, schema_url, user_agent. After
+    <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-xs text-teal-300">otlp_exporter_create()</code>
+    returns, you may free every input. The exporter handle itself is
+    yours between create and free; items passed to the
+    <code class="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-xs text-teal-300">*_move</code>
+    emits become the library's at call entry.
+  </p>
+</Docs>

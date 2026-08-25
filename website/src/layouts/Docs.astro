@@ -1,0 +1,47 @@
+---
+import Base from "./Base.astro";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+const { title = "Docs — otlp-c", description } = Astro.props;
+
+const nav = [
+  { href: "/docs/", label: "Getting started" },
+  { href: "/docs/signals/", label: "The three signals" },
+  { href: "/docs/configuration/", label: "Configuration" },
+  { href: "/docs/diagnostics/", label: "Diagnostics & delivery" },
+  { href: "/docs/deployment/", label: "Deployment" },
+  { href: "/examples/", label: "Examples" },
+  { href: "/api/", label: "API reference" },
+];
+const current = Astro.url.pathname;
+---
+<Base title={title} description={description}>
+  <div class="grid gap-10 py-12 lg:grid-cols-[210px_1fr]">
+    <aside class="h-max lg:sticky lg:top-20">
+      <nav class="space-y-1 border-l border-ink-700">
+        {nav.map((item) => {
+          const active = current === item.href.replace(/\/$/, "") + "/" || (item.href === "/docs/" && current === "/docs/");
+          return (
+            <a
+              href={item.href}
+              class:list={[
+                "-ml-px block border-l-2 py-1.5 pl-4 text-sm transition",
+                active
+                  ? "border-teal-400 font-medium text-teal-300"
+                  : "border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200",
+              ]}
+            >
+              {item.label}
+            </a>
+          );
+        })}
+      </nav>
+    </aside>
+    <article class="min-w-0">
+      <slot />
+    </article>
+  </div>
+</Base>
