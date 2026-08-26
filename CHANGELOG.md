@@ -4,6 +4,23 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.6] - 2026-08-26
+
+Roadmap truth, status edition — docs only.
+
+### Fixed — the roadmap's status layer contradicted reality
+
+- Phase 20 ("Windows MSVC fix") still read "Deferred (MSVC
+  team)" — MSVC x64/ARM64 jobs have been green across the
+  matrix for 100+ releases. Now Done.
+- The v0.4 section was headed "(current)" — 1.1.5 is current.
+- The Out-of-scope table still listed FreeBSD CI as
+  "Best-effort … continue-on-error" — false since v1.1.3 made
+  it a gating check; row dropped (the v1.1.3 release row and
+  TODO 178 keep the history).
+- README's platform line said FreeBSD 14.2 "(best-effort)" —
+  now states it gates with the full test suite.
+
 ## [1.1.5] - 2026-08-26
 
 The adoption path, kept true — docs only.
