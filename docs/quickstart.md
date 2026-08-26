@@ -28,19 +28,43 @@ the latest is shown):
 include(FetchContent)
 FetchContent_Declare(otlp-c
     GIT_REPOSITORY https://github.com/riboseinc/otlp-c
-    GIT_TAG        v1.0.5)
+    GIT_TAG        v1.1.4)
 FetchContent_MakeAvailable(otlp-c)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
 
-Or `add_subdirectory()` a clone/submodule of this repo, or use
-the in-repo vcpkg overlay port (see README), or `cmake --install`
-it into a prefix and then, in your `CMakeLists.txt`:
+Or `add_subdirectory()` a clone/submodule of this repo, or
+`cmake --install` it into a prefix and then, in your
+`CMakeLists.txt`:
 
 ```cmake
 find_package(otlp-c CONFIG REQUIRED)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```
+
+### vcpkg, end-to-end (overlay port)
+
+`otlp-c` is not (yet) in the public vcpkg registry, but this
+repo ships a tested overlay port. Your project declares the
+dependency normally; the overlay resolves it. Two files:
+
+```sh
+# CMakeLists.txt
+#   find_package(otlp-c CONFIG REQUIRED)
+#   target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
+# vcpkg.json
+#   { "name": "my-app", "version": "0.0.1",
+#     "dependencies": [ "otlp-c" ] }
+
+git clone https://github.com/riboseinc/otlp-c ../otlp-c
+cmake -B build     -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake     -DVCPKG_OVERLAY_PORTS=$PWD/../otlp-c/ports
+cmake --build build
+```
+
+This is exactly the recipe the `vcpkg overlay consumer` CI job
+runs (`tests/consumers/vcpkg_overlay/`); when otlp-c is accepted
+into the registry, the `-DVCPKG_OVERLAY_PORTS` line is the only
+thing you delete.
 
 ## 2. Build a minimal program
 

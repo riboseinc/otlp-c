@@ -4,6 +4,24 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.5] - 2026-08-26
+
+The adoption path, kept true — docs only.
+
+### Fixed — the vcpkg path was a hand-off, and the tag examples rotted
+
+- docs/quickstart.md now shows the vcpkg overlay port
+  end-to-end: the two consumer files, the clone, and the exact
+  cmake invocation — the same recipe the `vcpkg overlay
+  consumer` CI job pins. Before, it said "see README".
+- README and quickstart both showed `v1.0.5` as the "latest"
+  release tag in their FetchContent examples (four releases
+  stale); both bumped to v1.1.4.
+- The site /docs/changelog/ page gains the 1.1.4 and 1.1.5
+  entries (the page shipped in 1.1.3 and immediately lagged).
+- TODO phase-21's two in-repo acceptance criteria are ticked;
+  the microsoft/vcpkg registry PR itself remains user-owned.
+
 ## [1.1.4] - 2026-08-26
 
 Docs truth, architecture edition — no code changes.

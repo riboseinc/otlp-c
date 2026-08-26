@@ -4,6 +4,23 @@ import "../../styles/global.css";
 
 const releases = [
   {
+    v: "1.1.5", d: "2026-08-26",
+    t: "The adoption path, kept true",
+    points: [
+      "Quickstart shows the vcpkg overlay port end-to-end (the exact recipe CI pins) instead of pointing at the README",
+      "Stale v1.0.5 “latest tag” examples in README and quickstart bumped to v1.1.4",
+      "The site changelog page catches up with 1.1.4",
+    ],
+  },
+  {
+    v: "1.1.4", d: "2026-08-26",
+    t: "Architecture docs truth",
+    points: [
+      "The layer diagram stops describing metrics/logs as sync-flush-only — all three signals are async since v0.5.28",
+      "exporter_sync.c joins the diagram and the module table; the FreeBSD test-portability lesson lands in the testing strategy",
+    ],
+  },
+  {
     v: "1.1.3", d: "2026-08-25",
     t: "FreeBSD gates for real",
     points: [

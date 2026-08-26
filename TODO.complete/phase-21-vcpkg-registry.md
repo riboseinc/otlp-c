@@ -12,11 +12,11 @@ Publish otlp-c to the vcpkg registry so consumers can
 
 ## Acceptance criteria
 
-- [ ] PR opened against `microsoft/vcpkg` adding `ports/otlp-c/`.
-- [ ] SHA pinned to a release tag (v0.2.0+).
-- [ ] vcpkg CI passes (the registry's port-CI).
-- [ ] README updated to mention `vcpkg install otlp-c`.
-- [ ] Quickstart shows the vcpkg path end-to-end.
+- [ ] PR opened against `microsoft/vcpkg` adding `ports/otlp-c/`.  ← user-owned (external, public)
+- [ ] SHA pinned to a release tag (v0.2.0+).  ← done in the overlay port; registry PR is user-owned
+- [ ] vcpkg CI passes (the registry's port-CI).  ← follows the registry PR
+- [x] README updated to mention `vcpkg install otlp-c`.  ← overlay path documented (v1.1.5); plain install lands with registry acceptance
+- [x] Quickstart shows the vcpkg path end-to-end.  ← v1.1.5 (overlay, the CI-pinned recipe)
 
 ## Why
 
