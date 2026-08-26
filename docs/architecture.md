@@ -68,10 +68,10 @@ transport-agnostic via callback-based carriers.
 │   └────────────────┘    └────────────────┘                    │
 │                                                               │
 │   ┌────────────────────────────────────────────────┐          │
-│   │ exporter.c                                     │          │
-│   │ Lock-free MPSC, batch, retry, null-transport.  │          │
-│   │ Traces: async emit + tick.                     │          │
-│   │ Metrics/Logs: sync flush.                      │          │
+│   │ exporter.c + exporter_sync.c                   │          │
+│   │ Async pipeline: 3 MPSC queues (one per         │          │
+│   │ signal), batch, retry, diagnostics;            │          │
+│   │ sync flush: flush_metric/flush_log.            │          │
 │   └────────────────────────────────────────────────┘          │
 │                            │                                  │
 │                            │ encode + send                    │
@@ -135,6 +135,7 @@ transport-agnostic via callback-based carriers.
 | `sampler.c` | Built-in samplers (always_on/off/ratio) | Tracer integration |
 | `context.c` | Context inject/extract via carriers | HTTP headers |
 | `exporter.c` | 3 MPSC queues (span/metric/log), batch, retry, null-transport, diagnostics | Encoding details |
+| `exporter_sync.c` | Synchronous flush delivery (flush_metric/flush_log): one-shot encode → POST → retry → events | Queue draining, batch policy |
 | `protobuf_decode.c` | Bounds-checked wire reader (PartialSuccess decode, fixed32/64) | Encoding, response policy |
 | `exporter_otel.c` | Span batch → HTTP request builder | Queue, retry |
 | `otlp_messages.c` | Traces encoder + shared helpers (any_value, resource, scope, attributes) | Metric/log encoding |
@@ -153,7 +154,8 @@ transport-agnostic via callback-based carriers.
 | `w3c.c` | Traceparent header format/parse | Context propagation |
 | `internal_util.c` | Malloc wrappers, string/bytes duplication, attribute free, UTF-8 validator, the one set-attribute engine | Domain logic |
 
-The diagnostics model (v0.5.100) spans `exporter.c`: every
+The diagnostics model (v0.5.100) spans `exporter.c` (and
+`exporter_sync.c`, SYNC_FLUSH_FAILED): every
 diagnostic is an `otlp_event_t` (the model); the string messages
 are DERIVED from it by one formatter, so the structured
 (`set_event_logger`) and string (`set_logger`) views cannot
@@ -224,14 +226,29 @@ safe; single-consumer (the tick caller).
 
 ## Testing strategy
 
-- **27 property tests** (`tests/property/`): QuickCheck-style, deterministic
-  (null_transport mode). Covers varint, encoder, messages, URL parser,
-  span lifecycle, attribute round-trip, W3C, metrics, logs,
-  events/links/context, sampler, slab, keepalive, exporter batching,
-  flush.
-- **Unit tests** (`tests/`): smoke, HTTP echo, exporter echo, retry.
-- **Integration test** (`tests/integration/`): end-to-end against otelcol + Jaeger.
-- **Concurrency stress** (`tests/test_concurrency_stress.c`): 8 threads × 200 spans.
+53 tests total, driven by CTest (labels: `unit`, `property`,
+`integration`, `smoke`).
+
+- **25 property tests** (`tests/property/`): QuickCheck-style,
+  deterministic (null_transport mode). Covers varint, encoder,
+  messages, URL parser, span lifecycle, attribute round-trip,
+  W3C, metrics, logs, events/links/context, sampler, slab,
+  keepalive, exporter batching, flush. CPU-side properties soak
+  at 100k iterations (`OTLP_C_PROPERTY_ITERS`); the socket and
+  timing properties' default 1000 is the practical soak.
+- **Unit tests** (`tests/`, `tests/unit/`): wire-number pins
+  against upstream literals, golden vectors, HTTP parser/echo,
+  exporter echo + retry, env config, the exporter-sync contract.
+- **Integration test** (`tests/integration/`): end-to-end
+  against otelcol + Jaeger (Docker-gated).
+- **Concurrency stress** (`tests/test_concurrency_stress.c`):
+  8 threads × 200 spans.
+
+Test portability shims live in `tests/test_portable.h` — one
+deterministic code path for the byte-search and the loopback
+address on every POSIX platform, FreeBSD included (the v1.1.3
+lesson: per-platform fallbacks drifted for months behind a
+continue-on-error mask).
 
 ## See also
 
