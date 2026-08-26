@@ -35,8 +35,9 @@ matrix with per-signal endpoints, structured diagnostics events,
 slab allocator, span events/links/trace_state, and more.
 
 CI'd platforms: Linux x86_64/ARM64, macOS Intel/ARM64, Windows
-x64/ARM64, FreeBSD 14.2 (best-effort). Expected to work on any
-POSIX platform with a C11 compiler and a socket stack.
+x64/ARM64, FreeBSD 14.2 (a gating check — the full test suite
+builds and runs there). Expected to work on any POSIX platform
+with a C11 compiler and a socket stack.
 
 **Since 1.0.0 the source API is frozen for the 1.x line** —
 additions only, no breaking changes (the C ABI is not guaranteed

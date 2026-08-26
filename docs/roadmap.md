@@ -36,11 +36,11 @@ being solid.
 | 17 | Benchmark suite | Done | 5 |
 | 18 | Code coverage | Done | — |
 | 19 | Security hardening | Done | — |
-| 20 | Windows MSVC fix | Deferred (MSVC team) | — |
+| 20 | Windows MSVC fix | Done | — |
 | 21 | vcpkg registry | Done | 16 |
 | 22 | SBOM + signing | Done | 21 |
 
-## v0.4 (current) — Multi-signal
+## v0.4 — Multi-signal
 
 | # | Item | Status | PR |
 |---|---|---|---|
@@ -170,6 +170,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.8 | Install-docs truth: consumer instructions pointed at a nonexistent vcpkg port (verified against the registry) — FetchContent/add_subdirectory/install now documented; release-notes/ marked frozen at v0.5.0 with pointers to the canonical CHANGELOG + GitHub Releases; property-http-timeout made VPN-safe (cap no longer equals the read deadline); roadmap backslash-ref literal fixed | #145 |
 | 0.6.9 | **Embedded-build hygiene**: the just-documented FetchContent path clobbered the consumer's CMAKE_INSTALL_LIBDIR (CACHE FORCE) and leaked CPack config into its build tree — both gated on top-level-only; new CI job builds a real FetchContent consumer (ubuntu+windows) with clobber/leak assertions | #146 |
 | 0.6.10 | CI hygiene: consumer fixtures move from workflow-YAML heredocs (unlintable, first-executed-by-CI) to standalone projects in tests/consumers/ — runnable locally with the exact CI commands; hygiene assertions now configure-time FATAL_ERRORs, both mutation-tested | #147 |
+| 1.1.6 | Roadmap truth, status edition: phase 20 (Windows MSVC) Done (green across the matrix for 100+ releases), the v0.4 "(current)" marker (1.1.5 is current), FreeBSD's stale out-of-scope row dropped (gating since 1.1.3), README platform line stops saying best-effort | #173 |
 | 1.1.5 | The adoption path: quickstart shows the vcpkg overlay port end-to-end (the CI-pinned recipe), README/quickstart latest-tag examples bumped off v1.0.5, site changelog catches up with 1.1.4+1.1.5; phase-21's in-repo criteria ticked (registry PR remains user-owned) | #172 |
 | 1.1.4 | Docs truth, architecture edition: the layer diagram and module table gain exporter_sync.c (the v1.1.2 sync-flush engine), the pipeline box stops saying "Metrics/Logs: sync flush" (all three signals are async since v0.5.28), testing strategy gets the real counts (53 total, 25 property) and the test_portable.h lesson; CLAUDE.md key-files gains the shim | #171 |
 | 1.1.3 | FreeBSD promoted to a gating CI check — removing continue-on-error exposed real portability bugs the jobs API had been masking (Apple-only Availability.h, feature-hidden INADDR_LOOPBACK ×4 sites, undeclared memmem, POSIX-removed usleep), all fixed via tests/test_portable.h + nanosleep; CLAUDE.md key-files gains exporter_sync; site /changelog | #170 |
@@ -194,7 +195,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.12 | **One signal table**: exporter's five descriptor families (drain/emit/tick/record/start-post, three instances each assembled at five call sites) collapse into one static spec table + per-signal sig[3] state; exporter.c −268 lines; add-a-signal = one table row (mutation-tested: wrong row id aborts the events suite) | #149 |
 | 0.6.11 | **Response parser as a deep module**: ~300 lines of wire-format logic (smuggling rejection, chunked decode) extracted from the socket machine into src/http_response_parser; byte-fixture suite (no sockets/threads, runs on MSVC — closes the Windows smuggling-coverage gap); fuzz property pure + portable, 300 → 20000 iterations | #148 |
 
-**Key metrics (v1.1.5):** 180 TODOs complete, 53 tests, **50+
+**Key metrics (v1.1.6):** 181 TODOs complete, 53 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:
@@ -298,7 +299,6 @@ the v1.0 critical path. Reasons vary (see each file).
 
 | # | Item | Reason |
 |---|---|---|
-| 11 | FreeBSD CI | Best-effort: in CI matrix via vmactions/freebsd-vm (continue-on-error). |
 | 29 | Retrace otel sink | Separate project. |
 | 30 | Language bindings | Each binding is its own repo. |
 | 31 | Distro packaging | Linux distros are slow; separate effort. |
