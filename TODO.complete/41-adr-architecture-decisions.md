@@ -13,14 +13,14 @@ be able to understand WHY the code is the way it is.
 
 ## Acceptance criteria
 
-- [ ] `docs/adr/` directory created.
-- [ ] `docs/adr/0001-zero-non-libc-deps.md` — why we don't vendor protobuf-c, libcurl, or OpenSSL.
-- [ ] `docs/adr/0002-caller-tick-no-threads.md` — why the library never spawns threads.
-- [ ] `docs/adr/0003-mpsc-via-vyukov.md` — why Vyukov bounded MPSC over simpler alternatives.
-- [ ] `docs/adr/0004-otlpcol-sidecar-tls.md` — why HTTPS terminates outside the library.
-- [ ] `docs/adr/0005-c11-atomics-only-for-mpsc.md` — why C11 is needed despite CLAUDE.md's C99 baseline.
-- [ ] `docs/adr/README.md` — index + template (`Status`, `Context`, `Decision`, `Consequences`).
-- [ ] `docs/architecture.md` cross-references the ADRs.
+- [x] `docs/adr/` directory created.
+- [x] `docs/adr/0001-zero-non-libc-deps.md` — why we don't vendor protobuf-c, libcurl, or OpenSSL.
+- [x] `docs/adr/0002-caller-tick-no-threads.md` — why the library never spawns threads.
+- [x] `docs/adr/0003-mpsc-via-vyukov.md` — why Vyukov bounded MPSC over simpler alternatives.
+- [x] `docs/adr/0004-otlpcol-sidecar-tls.md` — why HTTPS terminates outside the library.
+- [x] `docs/adr/0005-c11-atomics-only-for-mpsc.md` — why C11 is needed despite CLAUDE.md's C99 baseline.
+- [x] `docs/adr/README.md` — index + template (`Status`, `Context`, `Decision`, `Consequences`).
+- [x] `docs/architecture.md` cross-references the ADRs.
 
 ## Why
 

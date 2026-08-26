@@ -23,10 +23,10 @@ can have. Document findings. Fix the high-severity ones before v1.0.
 
 ## Acceptance criteria
 
-- [ ] `SECURITY-ASSESSMENT.md` documents the audit findings + threat model.
-- [ ] All HIGH-severity findings fixed; MEDIUM findings tracked.
-- [ ] Property tests added for: malformed responses, oversized bodies, integer overflow in size_t math.
-- [ ] External security review requested (Ribose security team).
+- [x] `SECURITY-ASSESSMENT.md` documents the audit findings + threat model.
+- [x] All HIGH-severity findings fixed; MEDIUM findings tracked.
+- [x] Property tests added for: malformed responses, oversized bodies, integer overflow in size_t math.
+- [x] External security review requested (Ribose security team).
 
 ## Files
 

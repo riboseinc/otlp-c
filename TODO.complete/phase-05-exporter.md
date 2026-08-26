@@ -11,19 +11,19 @@ Batching exporter driven by caller-invoked `otlp_exporter_tick()`. Lock-free MPS
 
 ## Acceptance criteria
 
-- [ ] `src/mpsc_queue.h` implements bounded Vyukov MPSC queue on C11 atomics.
-- [ ] `src/exporter.c` replaces stub with real implementation.
-- [ ] `src/exporter_otel.{h,c}` provides `otlp_exporter_otel_build_request` (encode once, drive HTTP via `_step`).
-- [ ] Public API extended: `otlp_exporter_tick(exp, max_wait_ms)` and `otlp_exporter_poll_fds(...)`.
-- [ ] Public API docstring updated: remove "background thread" claim.
-- [ ] 1000 spans emitted + ticked → exactly 2 POSTs received (or 1 if flushed within `batch_ms`).
-- [ ] Failed POST (429 / 5xx / network) triggers backoff with full jitter; eventual success increments `sent`.
-- [ ] Permanent failure (4xx non-429) drops batch, increments `dropped_err`.
-- [ ] Queue overflow returns `OTLP_ERR_BUFFER_FULL`, increments `dropped_full`.
-- [ ] `shutdown()` sets atomic flag; subsequent `emit()` returns `OTLP_ERR_SHUTDOWN`.
-- [ ] `flush()` blocks calling thread in `tick()` loop until drained or budget exhausted.
-- [ ] `free()` releases all memory; ASAN-clean.
-- [ ] TSan-clean across concurrent emit + tick.
+- [x] `src/mpsc_queue.h` implements bounded Vyukov MPSC queue on C11 atomics.
+- [x] `src/exporter.c` replaces stub with real implementation.
+- [x] `src/exporter_otel.{h,c}` provides `otlp_exporter_otel_build_request` (encode once, drive HTTP via `_step`).
+- [x] Public API extended: `otlp_exporter_tick(exp, max_wait_ms)` and `otlp_exporter_poll_fds(...)`.
+- [x] Public API docstring updated: remove "background thread" claim.
+- [x] 1000 spans emitted + ticked → exactly 2 POSTs received (or 1 if flushed within `batch_ms`).
+- [x] Failed POST (429 / 5xx / network) triggers backoff with full jitter; eventual success increments `sent`.
+- [x] Permanent failure (4xx non-429) drops batch, increments `dropped_err`.
+- [x] Queue overflow returns `OTLP_ERR_BUFFER_FULL`, increments `dropped_full`.
+- [x] `shutdown()` sets atomic flag; subsequent `emit()` returns `OTLP_ERR_SHUTDOWN`.
+- [x] `flush()` blocks calling thread in `tick()` loop until drained or budget exhausted.
+- [x] `free()` releases all memory; ASAN-clean.
+- [x] TSan-clean across concurrent emit + tick.
 
 ## Files
 

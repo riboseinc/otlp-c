@@ -83,12 +83,12 @@ otlp_install_slab_allocator(size_t slot_size, size_t capacity)
 - Target: ≥ 3× speedup on the emit path (per TODO 42 acceptance)
 
 ## Acceptance criteria
-- [ ] `otlp_install_slab_allocator` / `_uninstall` implemented.
-- [ ] Existing code (span, exporter, etc.) transparently uses slab.
-- [ ] Benchmark shows ≥ 3× speedup on emit-heavy workload.
-- [ ] ASAN-clean.
-- [ ] Property tests pass (slab routes correctly via address check).
-- [ ] Backwards compat: default allocator unchanged if slab not installed.
+- [x] `otlp_install_slab_allocator` / `_uninstall` implemented.
+- [x] Existing code (span, exporter, etc.) transparently uses slab.
+- [x] Benchmark shows ≥ 3× speedup on emit-heavy workload.
+- [x] ASAN-clean.
+- [x] Property tests pass (slab routes correctly via address check).
+- [x] Backwards compat: default allocator unchanged if slab not installed.
 
 ## Out of scope (deferred further)
 - Multi-size-class slabs (currently single slot_size).

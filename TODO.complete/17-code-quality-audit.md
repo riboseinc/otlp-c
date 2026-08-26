@@ -12,11 +12,11 @@ Check for: (1) switch statements that should be registries, (2) module boundary 
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

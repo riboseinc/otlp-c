@@ -13,14 +13,14 @@ explicit about what's missing and gives callers a migration path.
 
 ## Acceptance criteria
 
-- [ ] `include/otlp-c/span.h` adds:
+- [x] `include/otlp-c/span.h` adds:
   - `otlp_span_add_event(span, name, time_unix_nano)` → NOT_IMPLEMENTED
   - `otlp_span_add_link(span, trace_id, span_id)` → NOT_IMPLEMENTED
   - `otlp_span_set_trace_state(span, tracestate)` → NOT_IMPLEMENTED
-- [ ] All three documented as "deferred to v0.2+" with the OTLP spec section reference.
-- [ ] `docs/otlp-spec.md` updated with a "Deferred features" section listing each + the version target.
-- [ ] CHANGELOG entry under v0.2 noting the stubs.
-- [ ] Property test asserts the stubs return `OTLP_ERR_NOT_IMPLEMENTED`.
+- [x] All three documented as "deferred to v0.2+" with the OTLP spec section reference.
+- [x] `docs/otlp-spec.md` updated with a "Deferred features" section listing each + the version target.
+- [x] CHANGELOG entry under v0.2 noting the stubs.
+- [x] Property test asserts the stubs return `OTLP_ERR_NOT_IMPLEMENTED`.
 
 ## Files
 

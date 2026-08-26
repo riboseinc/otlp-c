@@ -26,10 +26,10 @@ Making the schema explicit (as a table) gives us:
 
 ## Acceptance criteria
 
-- [ ] `src/otlp_schema.h` declares `struct otlp_field_spec { const char *name; uint32_t number; int wire_type; bool repeated; }` and per-message `static const struct otlp_field_spec OTLP_SPAN_FIELDS[]` etc.
-- [ ] Per-message encoders in `src/otlp_messages.c` reference the table for documentation; the actual emission stays hand-rolled for clarity but the field numbers come from the table.
-- [ ] Add a property test that asserts every field number used in the encoder matches the table.
-- [ ] Property tests still pass; ASAN-clean.
+- [x] `src/otlp_schema.h` declares `struct otlp_field_spec { const char *name; uint32_t number; int wire_type; bool repeated; }` and per-message `static const struct otlp_field_spec OTLP_SPAN_FIELDS[]` etc.
+- [x] Per-message encoders in `src/otlp_messages.c` reference the table for documentation; the actual emission stays hand-rolled for clarity but the field numbers come from the table.
+- [x] Add a property test that asserts every field number used in the encoder matches the table.
+- [x] Property tests still pass; ASAN-clean.
 
 ## Files
 

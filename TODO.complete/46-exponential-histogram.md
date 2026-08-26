@@ -72,13 +72,13 @@ typedef enum {
 ```
 
 ## Acceptance criteria
-- [ ] Schema entries added.
-- [ ] `emit_exp_histogram_data_point` encoder implemented.
-- [ ] Dispatch table entry populated.
-- [ ] `struct otlp_metric` extended with scale, zero_count, positive/negative buckets.
-- [ ] `otlp_metric_record` updates the right bucket via scale.
-- [ ] Property test for field numbers + value round-trip.
-- [ ] CI green on all 7 platforms.
+- [x] Schema entries added.
+- [x] `emit_exp_histogram_data_point` encoder implemented.
+- [x] Dispatch table entry populated.
+- [x] `struct otlp_metric` extended with scale, zero_count, positive/negative buckets.
+- [x] `otlp_metric_record` updates the right bucket via scale.
+- [x] Property test for field numbers + value round-trip.
+- [x] CI green on all 7 platforms.
 
 ## Out of scope (deferred further)
 - `record()` API for high-cardinality use cases (current API takes a value).

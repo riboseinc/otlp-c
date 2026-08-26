@@ -12,11 +12,11 @@ Track regressions across versions.
 
 ## Acceptance criteria
 
-- [ ] `bench/bench_encode.c` — encode 1 / 100 / 1000 spans; report ns/op.
-- [ ] `bench/bench_emit.c` — emit + tick; report spans/sec.
-- [ ] `bench/bench_mpsc.c` — queue throughput under N producers.
-- [ ] `bench/README.md` — how to run + interpret results.
-- [ ] CI job (nightly) reports benchmark deltas vs main.
+- [x] `bench/bench_encode.c` — encode 1 / 100 / 1000 spans; report ns/op.
+- [x] `bench/bench_emit.c` — emit + tick; report spans/sec.
+- [x] `bench/bench_mpsc.c` — queue throughput under N producers.
+- [x] `bench/README.md` — how to run + interpret results.
+- [x] CI job (nightly) reports benchmark deltas vs main.
 
 ## Why
 

@@ -11,12 +11,12 @@ that exist in 3+ files each. Extract to a single shared location.
 
 ## Acceptance criteria
 
-- [ ] `src/internal_utils.h` declares `otlp_dup_str()` and `otlp_dup_bytes()`.
-- [ ] `src/internal_util.c` implements them.
-- [ ] span.c, tracer.c, exporter.c use the shared helpers; their static `dup_str` removed.
-- [ ] `tests/property/decoder.h` declares `decode_varint()`, `decode_tag()`, `skip_value()`.
-- [ ] test_property_varint.c, test_property_encoder.c, test_property_messages.c use the shared decoder.
-- [ ] All existing tests still pass.
+- [x] `src/internal_utils.h` declares `otlp_dup_str()` and `otlp_dup_bytes()`.
+- [x] `src/internal_util.c` implements them.
+- [x] span.c, tracer.c, exporter.c use the shared helpers; their static `dup_str` removed.
+- [x] `tests/property/decoder.h` declares `decode_varint()`, `decode_tag()`, `skip_value()`.
+- [x] test_property_varint.c, test_property_encoder.c, test_property_messages.c use the shared decoder.
+- [x] All existing tests still pass.
 
 ## Files
 

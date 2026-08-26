@@ -12,11 +12,11 @@ Two fuzz targets: (1) otlp_url_parse with arbitrary bytes, (2) http response par
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

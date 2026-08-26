@@ -12,11 +12,11 @@ Python C extension, game loop, firmware main loop).
 
 ## Acceptance criteria
 
-- [ ] `Doxyfile` configured for the project.
-- [ ] All public headers have `/** */` doccomments on every declaration.
-- [ ] `cmake --build build --target docs` produces `build/docs/html/`.
-- [ ] `docs/cookbook.md` with at least 5 working patterns.
-- [ ] GitHub Pages action publishes docs on push to main (under `gh-pages` branch).
+- [x] `Doxyfile` configured for the project.
+- [x] All public headers have `/** */` doccomments on every declaration.
+- [x] `cmake --build build --target docs` produces `build/docs/html/`.
+- [x] `docs/cookbook.md` with at least 5 working patterns.
+- [x] GitHub Pages action publishes docs on push to main (under `gh-pages` branch).
 
 ## Files
 

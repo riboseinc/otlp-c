@@ -14,10 +14,10 @@ Every release ships:
 
 ## Acceptance criteria
 
-- [ ] `release.yml` `build-artifacts` job generates SBOM via `syft` or equivalent.
-- [ ] Artifacts signed via sigstore `cosign sign-blob`.
-- [ ] SHA256 manifest already present (added in earlier work) — verify it matches signed artifacts.
-- [ ] `docs/RELEASE-VERIFICATION.md` describes how to verify.
+- [x] `release.yml` generates SBOM via `syft` (generate-sbom job, SPDX JSON).
+- [ ] Artifacts signed via sigstore `cosign sign-blob`. — DELIBERATELY OPEN: needs OIDC/secrets config (user-owned)
+- [ ] SHA256 manifest matches signed artifacts. — open for the same reason (nothing signed yet)
+- [ ] `docs/RELEASE-VERIFICATION.md` describes how to verify. — open with signing
 
 ## Why
 

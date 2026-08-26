@@ -11,10 +11,10 @@ Codecov or similar. Set a coverage floor (e.g. 80%) that fails CI.
 
 ## Acceptance criteria
 
-- [ ] `OTLP_C_ENABLE_COVERAGE` CMake option (gcc + clang).
-- [ ] CI job runs tests with coverage, uploads to codecov.io.
-- [ ] README badge with current coverage %.
-- [ ] Coverage floor enforced (CI fails if % drops below threshold).
+- [x] `OTLP_C_ENABLE_COVERAGE` CMake option (gcc + clang).
+- [x] CI job runs tests with coverage, uploads to codecov.io.
+- [x] README badge with current coverage %.
+- [x] Coverage floor enforced (CI fails if % drops below threshold).
 
 ## Files
 

@@ -12,11 +12,11 @@ CHANGELOG.md is ready. Version is 0.1.0 in all surfaces. Run the release.yml wor
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

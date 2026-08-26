@@ -11,15 +11,15 @@ URL parsing, non-blocking socket primitives (POSIX + Win32), and a non-blocking 
 
 ## Acceptance criteria
 
-- [ ] `src/platform.h` extended with non-blocking socket surface. **No thread/mutex declarations.**
-- [ ] `src/platform_unix.c` (POSIX) and `src/platform_win.c` (Win32) implement the surface; `platform.c` retains shared clock code.
-- [ ] `src/http_client.{h,c}` exposes `otlp_http_request_t` as a non-blocking state machine: `start` → `step` → terminal state.
-- [ ] URL parse: accept only `http://`; reject `https://`, missing host, port > 65535, etc. with `OTLP_ERR_INVALID_ARGUMENT`, never crash.
-- [ ] `otlp_http_request_step` returns `OTLP_OK` on DONE, `OTLP_ERR_WOULDBLOCK` when caller should poll, terminal errors otherwise.
-- [ ] Status line parsed correctly (200/4xx/5xx/malformed → correct `http_status`).
-- [ ] Property tests for URL parsing (valid + invalid).
-- [ ] Unit test against in-process echo server (test-only thread, not in the library).
-- [ ] CI green on Linux x86_64, macOS arm64, macOS x86_64, Windows x64.
+- [x] `src/platform.h` extended with non-blocking socket surface. **No thread/mutex declarations.**
+- [x] `src/platform_unix.c` (POSIX) and `src/platform_win.c` (Win32) implement the surface; `platform.c` retains shared clock code.
+- [x] `src/http_client.{h,c}` exposes `otlp_http_request_t` as a non-blocking state machine: `start` → `step` → terminal state.
+- [x] URL parse: accept only `http://`; reject `https://`, missing host, port > 65535, etc. with `OTLP_ERR_INVALID_ARGUMENT`, never crash.
+- [x] `otlp_http_request_step` returns `OTLP_OK` on DONE, `OTLP_ERR_WOULDBLOCK` when caller should poll, terminal errors otherwise.
+- [x] Status line parsed correctly (200/4xx/5xx/malformed → correct `http_status`).
+- [x] Property tests for URL parsing (valid + invalid).
+- [x] Unit test against in-process echo server (test-only thread, not in the library).
+- [x] CI green on Linux x86_64, macOS arm64, macOS x86_64, Windows x64.
 
 ## Files
 
