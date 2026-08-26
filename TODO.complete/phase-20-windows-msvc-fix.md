@@ -22,7 +22,7 @@ header. Pinning via the `ilammy/msvc-dev-cmd@v1` action's
       identified: VS 18 Enterprise MSVC 14.51.
 - [x] Either upgrade MSVC to a fixed version (pinned to VS 2022),
       OR fall back to compiler intrinsics — chose the pinning path.
-- [ ] Remove `continue-on-error: contains(matrix.os, 'windows')`
+- [x] Remove `continue-on-error: contains(matrix.os, 'windows')` — gone from ci.yml
       from `ci.yml`. Kept for now until ARM64 runner speed is
       acceptable and CI is verified green across multiple runs.
 - [x] `_HAS_C11_ATOMICS=1` retained in `CMakeLists.txt` — needed

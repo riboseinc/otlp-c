@@ -52,12 +52,12 @@ else           otlp_pb_bytes(buf, attr->v.bytes_val.data, attr->v.bytes_val.len)
 
 ## Acceptance criteria
 
-- [ ] `src/otlp_attributes.h` defines the descriptor table.
-- [ ] `otlp_encode_any_value` becomes a generic loop over the descriptor.
-- [ ] Adding a new attribute type (e.g. ArrayValue) is a one-line table
+- [x] `src/otlp_attributes.h` defines the descriptor table.
+- [x] `otlp_encode_any_value` becomes a generic loop over the descriptor.
+- [x] Adding a new attribute type (e.g. ArrayValue) is a one-line table
   entry plus a per-type encode function. No `switch` change.
-- [ ] All existing property tests still pass.
-- [ ] ASAN-clean.
+- [x] All existing property tests still pass.
+- [x] ASAN-clean.
 
 ## Why
 

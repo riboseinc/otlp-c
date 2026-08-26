@@ -11,13 +11,13 @@ Just-in-time encoders that take `otlp_span_t*` (and the surrounding ResourceSpan
 
 ## Acceptance criteria
 
-- [ ] `src/otlp_messages.{h,c}` declares encoder functions per OTLP message type.
-- [ ] Field numbers match `docs/otlp-spec.md` exactly.
-- [ ] `otlp_encode_export_trace_service_request` produces a complete `ExportTraceServiceRequest` body.
-- [ ] Empty request (zero spans, no service/scope name) → zero bytes output.
-- [ ] Golden-vector cross-validation: a fixed span encodes to byte-identical output as `opentelemetry-proto` reference encoding.
-- [ ] All attribute types (string/int64/double/bool/bytes) round-trip through encode + manual decode.
-- [ ] Property tests pass at default iter count; ASAN-clean.
+- [x] `src/otlp_messages.{h,c}` declares encoder functions per OTLP message type.
+- [x] Field numbers match `docs/otlp-spec.md` exactly.
+- [x] `otlp_encode_export_trace_service_request` produces a complete `ExportTraceServiceRequest` body.
+- [x] Empty request (zero spans, no service/scope name) → zero bytes output.
+- [x] Golden-vector cross-validation: a fixed span encodes to byte-identical output as `opentelemetry-proto` reference encoding.
+- [x] All attribute types (string/int64/double/bool/bytes) round-trip through encode + manual decode.
+- [x] Property tests pass at default iter count; ASAN-clean.
 
 ## Files
 

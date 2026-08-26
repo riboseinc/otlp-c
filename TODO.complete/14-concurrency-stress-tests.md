@@ -12,11 +12,11 @@ Spawn N threads, each emitting M spans concurrently. Verify: (1) no crash, (2) a
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

@@ -1,7 +1,10 @@
 # TODO 11 — FreeBSD CI job fails
 
-**Status:** WONTFIX (for v0.x)
-*Closed because:* FreeBSD is continue-on-error in CI; INADDR_LOOPBACK visibility quirk is a feature-test-macro dance not worth resolving for a Tier-3 platform.
+**Status:** Complete (v1.1.3; WONTFIX stood only for v0.x)
+*Closed because:* the quirk WAS worth resolving — tests/test_portable.h
+(one deterministic code path per platform) + nanosleep + one Threads link
+fixed every masked failure; FreeBSD 14.2 has gated the full suite since
+v1.1.3 (PR #170, TODO 178 records the continue-on-error mask lesson).
 **Priority:** P1
 **Depends on:** nothing
 
@@ -12,11 +15,11 @@ Investigate and fix. Likely a package version mismatch or POSIX define issue spe
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

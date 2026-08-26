@@ -11,16 +11,16 @@ Real `struct otlp_span` definition with all 14 setters, fixed-cap attribute arra
 
 ## Acceptance criteria
 
-- [ ] `src/span.c` defines `struct otlp_span` with inline trace/span/parent IDs, name, times, kind, fixed-cap attribute array, status. No locks (span is single-threaded by API contract).
-- [ ] All 14 setters work; correct error codes on NULL / overflow.
-- [ ] `src/span_internal.h` exposes `struct otlp_attribute` + accessors for use by Phase 2's encoder.
-- [ ] `src/tracer.c` defines `struct otlp_tracer` with xorshift128+ state, lock-free via C11 `<stdatomic.h>` CAS.
-- [ ] Trace IDs: 16 random bytes, version nibble = 1 (W3C Trace Context).
-- [ ] Span IDs: 8 random bytes, reject all-zero (regenerate).
-- [ ] `start_child_span` correctly links parent: `has_parent = true`, `parent_span_id` copied.
-- [ ] `mark_start` / `mark_end` use monotonic clock, convert to wall-clock for storage.
-- [ ] Property tests: attribute round-trip, ID lengths, ID uniqueness, parent linking, monotonic times.
-- [ ] ASAN-clean across all property tests.
+- [x] `src/span.c` defines `struct otlp_span` with inline trace/span/parent IDs, name, times, kind, fixed-cap attribute array, status. No locks (span is single-threaded by API contract).
+- [x] All 14 setters work; correct error codes on NULL / overflow.
+- [x] `src/span_internal.h` exposes `struct otlp_attribute` + accessors for use by Phase 2's encoder.
+- [x] `src/tracer.c` defines `struct otlp_tracer` with xorshift128+ state, lock-free via C11 `<stdatomic.h>` CAS.
+- [x] Trace IDs: 16 random bytes, version nibble = 1 (W3C Trace Context).
+- [x] Span IDs: 8 random bytes, reject all-zero (regenerate).
+- [x] `start_child_span` correctly links parent: `has_parent = true`, `parent_span_id` copied.
+- [x] `mark_start` / `mark_end` use monotonic clock, convert to wall-clock for storage.
+- [x] Property tests: attribute round-trip, ID lengths, ID uniqueness, parent linking, monotonic times.
+- [x] ASAN-clean across all property tests.
 
 ## Files
 

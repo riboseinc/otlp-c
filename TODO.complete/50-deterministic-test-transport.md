@@ -82,12 +82,12 @@ interface instead of calling `otlp_socket_*` directly. That's
 testability AND future transports (UDP, shared memory, custom).
 
 ## Acceptance criteria
-- [ ] Transport interface added.
-- [ ] Default real-socket transport preserves current behavior.
-- [ ] Mock transport implemented.
-- [ ] property-exporter test rewritten to use mock.
-- [ ] Test passes 1000/1000 iterations deterministically.
-- [ ] `continue-on-error` removed from CI for property-exporter.
+- [x] Transport interface added.
+- [x] Default real-socket transport preserves current behavior.
+- [x] Mock transport implemented.
+- [x] property-exporter test rewritten to use mock.
+- [x] Test passes 1000/1000 iterations deterministically.
+- [x] `continue-on-error` removed from CI for property-exporter.
 
 ## Out of scope (deferred further)
 - UDP transport (real feature, not test infra).

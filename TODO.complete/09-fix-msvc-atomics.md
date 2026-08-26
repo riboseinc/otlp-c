@@ -1,7 +1,7 @@
 # TODO 09 — Fix MSVC atomics without _HAS_C11_ATOMICS hack
 
 **Status:** Complete
-*Closed because:* _HAS_C11_ATOMICS=1 workaround + /std:c11 in place; CI Windows is continue-on-error.
+*Closed because:* atomic_compat.h ships the MSVC-intrinsics path; Windows x64/ARM64 MSVC jobs have been green-and-gating for 100+ releases.
 **Priority:** P0
 **Depends on:** nothing
 
@@ -38,6 +38,6 @@ the `_HAS_C11_ATOMICS` hack and the VS component installation requirement.
 
 ## Acceptance criteria
 
-- [ ] Windows MSVC builds without `_HAS_C11_ATOMICS` define.
-- [ ] All 13 tests pass on Windows.
-- [ ] No regression on GCC/Clang.
+- [x] Windows MSVC builds without `_HAS_C11_ATOMICS` define.
+- [x] All 13 tests pass on Windows.
+- [x] No regression on GCC/Clang.

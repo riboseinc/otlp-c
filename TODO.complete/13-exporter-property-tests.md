@@ -12,11 +12,11 @@ P-EXPORT-NEVER-CORRUPT: any sequence of spans produces valid OTLP protobuf when 
 ## Tasks
 
 ### P0
-- [ ] Implement
+- [x] Implement
 
 ### P1
-- [ ] Test
+- [x] Test
 
 ## Acceptance criteria
-- [ ] CI green on all platforms
-- [ ] No regression in existing tests
+- [x] CI green on all platforms
+- [x] No regression in existing tests

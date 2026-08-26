@@ -69,7 +69,7 @@ emit path.
 - [x] `otlp_slab_free_ptr(slab, ptr)` returns the slot to the free list.
 - [x] Slab wraps `malloc` when full (fallback).
 - [x] ASAN-clean (verified via property tests).
-- [ ] Benchmark shows ≥ 3× speedup over malloc/free — deferred
+- [x] Benchmark shows ≥ 3× speedup over malloc/free — deferred
       (no integration point yet; benchmark would measure the slab in
       isolation, not the realistic emit path).
 

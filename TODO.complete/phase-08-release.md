@@ -11,15 +11,15 @@ Version constants aligned across all sources; CHANGELOG populated; release workf
 
 ## Acceptance criteria
 
-- [ ] `include/otlp-c/version.h` reports `0.1.0`.
-- [ ] `CMakeLists.txt` `project(otlp-c VERSION 0.1.0)`.
-- [ ] `vcpkg.json` `"version-string": "0.1.0"`.
-- [ ] `otlp_version()` runtime returns `"0.1.0"`.
-- [ ] `CHANGELOG.md` summarizes everything shipped.
-- [ ] `.github/workflows/release.yml` builds artifacts on tag push.
-- [ ] All phases 1-7 merged.
-- [ ] Full CI matrix green.
-- [ ] `ctest --test-dir build` 100% pass (unit + property + integration).
+- [x] `include/otlp-c/version.h` reports `0.1.0`.
+- [x] `CMakeLists.txt` `project(otlp-c VERSION 0.1.0)`.
+- [x] `vcpkg.json` `"version-string": "0.1.0"`.
+- [x] `otlp_version()` runtime returns `"0.1.0"`.
+- [x] `CHANGELOG.md` summarizes everything shipped.
+- [x] `.github/workflows/release.yml` builds artifacts on tag push.
+- [x] All phases 1-7 merged.
+- [x] Full CI matrix green.
+- [x] `ctest --test-dir build` 100% pass (unit + property + integration).
 
 ## Files
 

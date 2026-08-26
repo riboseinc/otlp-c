@@ -4,6 +4,35 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.7] - 2026-08-26
+
+The TODO ledger catches up with itself — docs only.
+
+### Fixed — 42 files said Complete but never ticked their boxes
+
+The TODO.complete/ ledger is the project's memory; 43 files
+carried **Status: Complete** with 212 unticked acceptance boxes —
+the work shipped (every file maps to a merged release), the
+paperwork didn't. All ticked.
+
+Narrative corrections where the prose had drifted:
+
+- **TODO 11 (FreeBSD CI)** — read "WONTFIX (for v0.x) … not
+  worth resolving for a Tier-3 platform." v1.1.3 proved the
+  quirk WAS fixable (test_portable.h); the file now says so.
+- **TODO 09** — closed-because still claimed "CI Windows is
+  continue-on-error"; MSVC has gated green for 100+ releases.
+- **phase-12** — "(partial)" dropped; all five criteria shipped.
+- **phase-22 (SBOM + signing)** — the SBOM box ticked; the three
+  signing boxes annotated DELIBERATELY OPEN (needs your OIDC /
+  secrets setup) instead of silently rotting unticked.
+
+Deliberately left unticked: TLS / gRPC (v1.x WONTFIX),
+out-of-scope items, the arena file (work shipped then was
+removed), vcpkg registry externals (user-owned), artifact
+signing (user-owned), and TODO 44's v0.2 social actions
+(unverifiable from the repo).
+
 ## [1.1.6] - 2026-08-26
 
 Roadmap truth, status edition — docs only.

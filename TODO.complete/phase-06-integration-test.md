@@ -11,14 +11,14 @@ End-to-end test: real `otelcol` container + real Jaeger container, real spans em
 
 ## Acceptance criteria
 
-- [ ] `tests/integration/docker-compose.yml` brings up `otelcol` + `jaeger`.
-- [ ] `tests/integration/otelcol-config.yaml` configures otelcol receiver (otlp http :4318) and exporter (jaeger).
-- [ ] `tests/integration/test_integration_jaeger.c` emits 100 spans with a unique `test_run_id`, drives `tick()` until drained, then queries Jaeger API.
-- [ ] Test asserts the service appears in `/api/services` and ≥100 traces appear in `/api/traces?...&tags={"test_run_id":"..."}`.
-- [ ] `tests/CMakeLists.txt` uncommented for `add_subdirectory(integration)`.
-- [ ] `.github/workflows/build.yml` extended with an `integration` job (Linux + macOS).
-- [ ] Test gated by `OTLP_C_RUN_INTEGRATION=1` so missing Docker doesn't fail local dev.
-- [ ] `docs/integration-test.md` explains how to run locally + shows the sidecar topology.
+- [x] `tests/integration/docker-compose.yml` brings up `otelcol` + `jaeger`.
+- [x] `tests/integration/otelcol-config.yaml` configures otelcol receiver (otlp http :4318) and exporter (jaeger).
+- [x] `tests/integration/test_integration_jaeger.c` emits 100 spans with a unique `test_run_id`, drives `tick()` until drained, then queries Jaeger API.
+- [x] Test asserts the service appears in `/api/services` and ≥100 traces appear in `/api/traces?...&tags={"test_run_id":"..."}`.
+- [x] `tests/CMakeLists.txt` uncommented for `add_subdirectory(integration)`.
+- [x] `.github/workflows/build.yml` extended with an `integration` job (Linux + macOS).
+- [x] Test gated by `OTLP_C_RUN_INTEGRATION=1` so missing Docker doesn't fail local dev.
+- [x] `docs/integration-test.md` explains how to run locally + shows the sidecar topology.
 
 ## Files
 

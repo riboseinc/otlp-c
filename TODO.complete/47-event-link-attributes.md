@@ -84,12 +84,12 @@ attributes). Just need to wire `otlp_span_get_event_attrs` accessor
 and call `otlp_emit_attributes` in `emit_event`.
 
 ## Acceptance criteria
-- [ ] Builder API for events + links.
-- [ ] Storage for attributes on event/link structs.
-- [ ] Encoder emits Event.attributes and Link.attributes.
-- [ ] Link.trace_state and Link.flags emitted.
-- [ ] Property tests for round-trip.
-- [ ] Backwards compat: existing `otlp_span_add_event` /
+- [x] Builder API for events + links.
+- [x] Storage for attributes on event/link structs.
+- [x] Encoder emits Event.attributes and Link.attributes.
+- [x] Link.trace_state and Link.flags emitted.
+- [x] Property tests for round-trip.
+- [x] Backwards compat: existing `otlp_span_add_event` /
       `otlp_span_add_link` continue to work (zero attributes).
 
 ## Out of scope (deferred further)

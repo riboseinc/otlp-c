@@ -13,10 +13,10 @@ hot paths emitting thousands of spans, that's measurable.
 
 ## Acceptance criteria
 
-- [ ] `otlp_exporter_emit_move(exp, span)` — takes ownership of `span`; caller must NOT free or touch it afterward.
-- [ ] Existing `otlp_exporter_emit()` unchanged (deep copy, safe for callers that reuse the span).
-- [ ] Document the tradeoff in `include/otlp-c/exporter.h`.
-- [ ] Benchmark in `bench/bench_emit.c` (added under TODO 17) shows move is ~3× faster than clone for a 10-attribute span.
+- [x] `otlp_exporter_emit_move(exp, span)` — takes ownership of `span`; caller must NOT free or touch it afterward.
+- [x] Existing `otlp_exporter_emit()` unchanged (deep copy, safe for callers that reuse the span).
+- [x] Document the tradeoff in `include/otlp-c/exporter.h`.
+- [x] Benchmark in `bench/bench_emit.c` (added under TODO 17) shows move is ~3× faster than clone for a 10-attribute span.
 
 ## Files
 

@@ -62,11 +62,11 @@ otlp_context_t otlp_context_extract(otlp_carrier_get_fn get,
   `key=value` pairs into entries
 
 ## Acceptance criteria
-- [ ] `otlp_context_t` carries up to 32 tracestate entries.
-- [ ] Inject emits both traceparent and tracestate.
-- [ ] Extract parses tracestate into entries; missing header = 0 entries.
-- [ ] Property tests for round-trip + max-entries cap.
-- [ ] Backwards compat: existing context_from_span / inject / extract
+- [x] `otlp_context_t` carries up to 32 tracestate entries.
+- [x] Inject emits both traceparent and tracestate.
+- [x] Extract parses tracestate into entries; missing header = 0 entries.
+- [x] Property tests for round-trip + max-entries cap.
+- [x] Backwards compat: existing context_from_span / inject / extract
       still work for spans without tracestate.
 
 ## Out of scope (deferred further)
