@@ -127,6 +127,7 @@ Module responsibilities are MECE: each file owns exactly one concern. The protob
 | `src/atomic_compat.h` | Atomic abstraction (MSVC intrinsics fallback) |
 | `tests/golden/` | Reference-serialized golden vectors + generator |
 | `tests/test_util.h` | check_ok/check_true — always-evaluated, always-enforced test checks |
+| `tests/test_portable.h` | Test portability shims — always-local byte-search + loopback constant; one deterministic code path per platform (FreeBSD-safe, v1.1.3) |
 | `tests/property/` | Property-based tests (QuickCheck-style, deterministic) |
 | `tests/consumers/` | Standalone consumer projects (find_package / FetchContent / vcpkg overlay) — packaging tests driven by CI, runnable locally; NOT in the build tree |
 | `tests/integration/` | End-to-end against a local otelcol |

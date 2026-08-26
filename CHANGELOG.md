@@ -4,6 +4,25 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.4] - 2026-08-26
+
+Docs truth, architecture edition — no code changes.
+
+### Fixed — docs/architecture.md drifted three releases behind
+
+- The layer diagram's exporter box still said "Metrics/Logs:
+  sync flush" — all three signals have been async since v0.5.28;
+  the box now names exporter.c + exporter_sync.c and the real
+  split (async tick pipeline vs the sync flush engine).
+- The module-responsibilities table gains the exporter_sync.c
+  row (extracted v1.1.2).
+- The diagnostics note now says the event model spans both
+  exporter.c and exporter_sync.c (SYNC_FLUSH_FAILED).
+- Testing strategy gets the true counts (53 total; 25 property
+  tests, not 27), the soak protocol, the unit-test inventory,
+  and the tests/test_portable.h lesson from v1.1.3.
+- CLAUDE.md key-files gains the tests/test_portable.h row.
+
 ## [1.1.3] - 2026-08-25
 
 FreeBSD becomes a gating check; the changelog gets a home.
