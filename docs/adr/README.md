@@ -17,3 +17,4 @@ Index:
 - [0003 — Vyukov bounded MPSC queue](0003-mpsc-via-vyukov.md)
 - [0004 — otlpcol sidecar for TLS](0004-otlpcol-sidecar-tls.md)
 - [0005 — C11 atomics only for the MPSC queue](0005-c11-atomics-only-for-mpsc.md)
+- [0006 — Module boundaries hold: no further splits](0006-module-boundaries-hold.md)

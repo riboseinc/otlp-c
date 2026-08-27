@@ -170,6 +170,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.8 | Install-docs truth: consumer instructions pointed at a nonexistent vcpkg port (verified against the registry) — FetchContent/add_subdirectory/install now documented; release-notes/ marked frozen at v0.5.0 with pointers to the canonical CHANGELOG + GitHub Releases; property-http-timeout made VPN-safe (cap no longer equals the read deadline); roadmap backslash-ref literal fixed | #145 |
 | 0.6.9 | **Embedded-build hygiene**: the just-documented FetchContent path clobbered the consumer's CMAKE_INSTALL_LIBDIR (CACHE FORCE) and leaked CPack config into its build tree — both gated on top-level-only; new CI job builds a real FetchContent consumer (ubuntu+windows) with clobber/leak assertions | #146 |
 | 0.6.10 | CI hygiene: consumer fixtures move from workflow-YAML heredocs (unlintable, first-executed-by-CI) to standalone projects in tests/consumers/ — runnable locally with the exact CI commands; hygiene assertions now configure-time FATAL_ERRORs, both mutation-tested | #147 |
+| 1.1.8 | Fourth architecture review: no strong candidates remain — ADR 0006 records the decline of the four extraction candidates (diagnostics, messages split, outcome classifier, internal_util) with deletion-test reasoning; the next module-shape change is feature-driven (a 4th signal = one SIGNAL_SPECS row) | #175 |
 | 1.1.7 | The TODO ledger catches up with itself: 212 acceptance boxes ticked across 42 files whose Status was Complete but whose paperwork never was; FreeBSD's v0.x WONTFIX reframed (the quirk WAS fixable — v1.1.3 proved it); phase-22 signing annotated deliberately-open; two stale closed-because lines corrected | #174 |
 | 1.1.6 | Roadmap truth, status edition: phase 20 (Windows MSVC) Done (green across the matrix for 100+ releases), the v0.4 "(current)" marker (1.1.5 is current), FreeBSD's stale out-of-scope row dropped (gating since 1.1.3), README platform line stops saying best-effort | #173 |
 | 1.1.5 | The adoption path: quickstart shows the vcpkg overlay port end-to-end (the CI-pinned recipe), README/quickstart latest-tag examples bumped off v1.0.5, site changelog catches up with 1.1.4+1.1.5; phase-21's in-repo criteria ticked (registry PR remains user-owned) | #172 |
@@ -196,7 +197,7 @@ bugs found and fixed, all sanitizers green, zero warnings.
 | 0.6.12 | **One signal table**: exporter's five descriptor families (drain/emit/tick/record/start-post, three instances each assembled at five call sites) collapse into one static spec table + per-signal sig[3] state; exporter.c −268 lines; add-a-signal = one table row (mutation-tested: wrong row id aborts the events suite) | #149 |
 | 0.6.11 | **Response parser as a deep module**: ~300 lines of wire-format logic (smuggling rejection, chunked decode) extracted from the socket machine into src/http_response_parser; byte-fixture suite (no sockets/threads, runs on MSVC — closes the Windows smuggling-coverage gap); fuzz property pure + portable, 300 → 20000 iterations | #148 |
 
-**Key metrics (v1.1.7):** 182 TODOs complete, 53 tests, **50+
+**Key metrics (v1.1.8):** 183 TODOs complete, 53 tests, **50+
 distinct bugs found and fixed**, all sanitizers green, zero
 warnings, verified in Debug AND Release configurations, every
 library file at 82%+ region coverage. `sizeof(otlp_span)`:
