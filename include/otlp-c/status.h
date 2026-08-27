@@ -47,7 +47,10 @@ typedef enum
 	OTLP_ERR_WOULDBLOCK = -32, /* non-blocking op would block; caller should
 				      poll and retry */
 
-	/* Placeholder for unimplemented code (Phase 0). */
+	/* Phase 0 relic: no code path returns this — the 1.x
+	 * surface implements everything (CLAUDE.md invariant 6).
+	 * Retained in the frozen enum for API stability; strerror
+	 * still maps it (completeness-pinned). */
 	OTLP_ERR_NOT_IMPLEMENTED = -100
 } otlp_status_t;
 

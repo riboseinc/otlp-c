@@ -45,11 +45,8 @@ main(void)
 			printf("  status %d: %s\n", i, s);
 	}
 
-	/* Stubs return OTLP_ERR_NOT_IMPLEMENTED for the typical API
-	 * surface. This is the expected Phase 0 behavior; the property
-	 * tests in tests/property/ cover the same shape more rigorously.
-	 */
-	/* Span creation is real (Phase 4+). */
+	/* Real surfaces (the Phase 0 stubs were gone by v0.5; the
+	 * property tests cover these shapes more rigorously). */
 	otlp_span_t *span = otlp_span_create("hello");
 
 	assert(span != NULL);

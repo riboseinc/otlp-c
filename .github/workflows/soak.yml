@@ -1,0 +1,65 @@
+name: Soak
+
+# The 100k-iteration property soak, mechanized. The CPU-side
+# binaries scale with OTLP_C_PROPERTY_ITERS; the four
+# socket/timing properties (keepalive, flush_timeout,
+# http_timeout, async_metrics) sleep real wall-clock per
+# iteration and stay at their default 1000 — that IS their soak
+# (docs/roadmap.md, v1.0.4 protocol).
+#
+# Runs the binaries directly: ctest's per-test TIMEOUT 60
+# predates the soak flow and `--timeout` does not override a
+# set TIMEOUT property, so the 100k runs would trip it.
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Sundays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  soak:
+    name: "100k property soak (21 CPU-side binaries)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build the property suite
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOTLP_C_BUILD_TESTS=ON
+          cmake --build build
+      - name: Soak at 100k iterations
+        run: |
+          set -e
+          EXCLUDE="keepalive flush_timeout http_timeout async_metrics"
+          fail=0
+          for bin in build/tests/property/otlp_property_*; do
+            name=$(basename "$bin" | sed 's/^otlp_property_//')
+            skip=0
+            for ex in $EXCLUDE; do [ "$name" = "$ex" ] && skip=1; done
+            if [ "$skip" = 1 ]; then
+              echo "SKIP $name (socket/timing; default 1000 is its soak)"
+              continue
+            fi
+            echo "SOAK $name at 100000 iterations"
+            if ! OTLP_C_PROPERTY_ITERS=100000 "$bin" > "$name.soak.log" 2>&1; then
+              echo "FAIL $name — tail:"
+              tail -20 "$name.soak.log"
+              fail=1
+            fi
+          done
+          exit $fail
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue create \
+            --title "Weekly soak FAILED ($(date -u +%F))" \
+            --body "The 100k property soak failed. Run: $run_url — reproduce locally with OTLP_C_PROPERTY_ITERS=100000 against the affected binary (seed in its output; OTLP_C_PROPERTY_SEED replays it)." \
+            --label ci
