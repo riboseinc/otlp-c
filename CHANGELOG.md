@@ -4,6 +4,34 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.11] - 2026-08-27
+
+Seventh review — the soak protocol was the last manual
+discipline, and a Phase 0 ghost was evicted.
+
+### Added — weekly soak workflow
+
+The 100k-iteration property soak (21 CPU-side binaries; the 4
+socket/timing properties sleep real wall-clock per iteration,
+so their default 1000 IS their soak) ran only when a human
+remembered. `.github/workflows/soak.yml` now runs it every
+Sunday 03:00 UTC (and on demand): binaries run directly —
+ctest's per-test TIMEOUT 60 predates the soak flow and
+`--timeout` cannot override a set TIMEOUT property — and a
+failure opens an issue with the reproduction recipe
+(OTLP_C_PROPERTY_SEED replays the exact failure). Loop logic
+dry-run-validated locally: 21 soaked, 4 skipped, all green.
+
+### Fixed — the Phase 0 ghost in the error taxonomy
+
+The taxonomy audit found the enum sound (four recoverability
+classes, spaced for growth) but two comments lying:
+`OTLP_ERR_NOT_IMPLEMENTED` was annotated "Placeholder for
+unimplemented code (Phase 0)" — no code path returns it since
+v0.5 (invariant 6: no stubs); test_smoke.c still narrated stub
+behavior. The frozen enum keeps the value (strerror maps it,
+completeness-pinned); both comments now tell the truth.
+
 ## [1.1.10] - 2026-08-27
 
 Sixth review — performance was the last memory-enforced claim
