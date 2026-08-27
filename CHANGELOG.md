@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.13] - 2026-08-27
+
+Ninth review — the last known-rotting literals, gated.
+
+### Fixed — the install examples were 8 releases stale
+
+README and quickstart both showed `GIT_TAG v1.1.4` ("the
+latest") while the project shipped v1.1.12 — the exact rot
+class the v1.1.9 sync gate exists for, one surface it didn't
+cover. The gate now parses the GIT_TAG examples in both files
+and requires them to equal the release version; they ride
+every release from here.
+
+### Added — Doxygen warnings fail the build
+
+The API reference was made warning-free in v0.6.5 with nothing
+keeping it that way. `WARN_AS_ERROR = YES`: a docstring
+regression fails the docs build instead of warning invisibly.
+
+### Declined — a tests/-level registration helper
+
+The R8 property-helper pattern evaluated for tests/ and
+tests/unit/: 27 blocks, but genuinely varied (per-test POSIX
+guards, echo-helper inclusion, stress structures). A helper
+covering that variance would be as wide as what it replaces —
+the ADR 0006 deletion test, declined.
+
 ## [1.1.12] - 2026-08-27
 
 Eighth review — the property-test harness was the last shallow
