@@ -2,12 +2,14 @@
 import Docs from "../../layouts/Docs.astro";
 import "../../styles/global.css";
 
+const stamp = "Measured v1.1.9, 2026-08-27 — bench preset, Release, Apple silicon";
+
 const numbers = [
-  { v: "89 ns", l: "per span, emit pipeline (Release, null transport, 0 attrs)" },
-  { v: "~150 ns", l: "per span at 5 attributes" },
-  { v: "360 ns", l: "encode, per span (4 attrs)" },
-  { v: "~60 ns", l: "per additional attribute at encode" },
-  { v: "176 B", l: "sizeof(otlp_span) — 789× smaller than v0.5.67" },
+  { v: "~150 ns", l: "per span, emit pipeline (0 attrs, null transport)" },
+  { v: "~540 ns", l: "per span, emit pipeline (5 attributes)" },
+  { v: "~380 ns", l: "encode, per span (4 attrs)" },
+  { v: "~58 ns", l: "per additional attribute at encode" },
+  { v: "176 B", l: "sizeof(otlp_span), as measured at v0.5.76 — 789× smaller than v0.5.67" },
 ];
 ---
 <Docs title="Performance — otlp-c docs">
@@ -34,8 +36,9 @@ cmake --build --preset bench
 ./build-bench/bench/otlp_bench_emit
 ./build-bench/bench/otlp_bench_encode</code></pre>
   <p class="mt-3 text-sm text-slate-500">
-    The numbers above are Release-build figures on Apple silicon;
-    Debug is roughly 2× slower.
+    {stamp}. Debug is roughly 2× slower. The numbers carry the
+    release they were measured at — re-run the bench preset on
+    your own hardware before relying on a figure.
   </p>
 
   <h2 class="mt-12 text-xl font-semibold text-slate-100">Why it's fast</h2>

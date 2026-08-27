@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.10] - 2026-08-27
+
+Sixth review — performance was the last memory-enforced claim
+surface.
+
+### Fixed — the perf page's numbers were unversioned (and one
+was mis-attributed)
+
+The site's performance page claimed "~150 ns per span at 5
+attributes" — that figure was always the 0-attribute number
+(the v0.5.76-era measurement); 5 attributes costs ~540 ns.
+Re-measured on the bench preset and re-stamped with the
+release and date every figure came from: emit ~150 ns/span (0
+attrs), ~540 ns (5 attrs), encode ~380 ns/span (4 attrs),
+~58 ns/attr, sizeof(otlp_span) 176 B (attributed to its
+v0.5.76 measurement). The encode figures survived scrutiny;
+the emit line did not.
+
+### Added — bench-smoke CI job
+
+The perf page also claimed "every release re-verifies the
+pipeline numbers before merging" — a memory-enforced
+discipline. A bench-smoke job now runs the emit benchmark on
+every PR under a deliberately generous ceiling (3000 ns/span,
+~20× the median): it catches algorithmic blowups, not noise.
+32 checks now.
+
 ## [1.1.9] - 2026-08-27
 
 Fifth architecture review — the last memory-enforced surfaces
