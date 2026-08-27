@@ -4,6 +4,14 @@ import "../../styles/global.css";
 
 const releases = [
   {
+    v: "1.1.10", d: "2026-08-27",
+    t: "The perf truth",
+    points: [
+      "The site's performance numbers now carry the release and date they were measured at — and the emit line was mis-attributed (5 attrs is ~540 ns, not ~150)",
+      "A bench-smoke CI job holds an anti-blowup ceiling on the emit pipeline: catches 10x regressions, tolerates runner noise",
+    ],
+  },
+  {
     v: "1.1.9", d: "2026-08-27",
     t: "The last memory-enforced surfaces",
     points: [

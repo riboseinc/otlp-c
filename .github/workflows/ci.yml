@@ -357,6 +357,29 @@ jobs:
           cmake -B build -G Ninja -DOTLP_C_BUILD_EXAMPLES=ON
           cmake --build build
 
+  bench-smoke:
+    name: Bench smoke (anti-blowup ceiling)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build benchmarks
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOTLP_C_BUILD_BENCH=ON
+          cmake --build build
+      - name: Emit pipeline under a generous ceiling
+        run: |
+          # Not a precision gate: shared runners are noisy. This
+          # catches algorithmic blowups (~20x the Apple-silicon
+          # median of ~150 ns/span), not regressions in the noise.
+          out=$(./build/bench/otlp_bench_emit)
+          echo "$out"
+          ns=$(echo "$out" | awk '/spans=1000   attrs=0/ {print $3; exit}')
+          echo "emit 0-attrs: $ns ns/span (ceiling 3000)"
+          python3 -c "import sys; sys.exit(0 if float('$ns' or 999999) < 3000 else 1)"
+
   conformance-gates:
     name: Conformance gates (descriptor audit + goldens)
     runs-on: ubuntu-24.04
