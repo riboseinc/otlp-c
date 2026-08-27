@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.12] - 2026-08-27
+
+Eighth review — the property-test harness was the last shallow
+seam that forced real workarounds.
+
+### Changed — one registration helper for every property test
+
+tests/property/CMakeLists.txt had 25 near-identical blocks
+(add_executable + link + includes + add_test + LABELS + TIMEOUT).
+otlp_add_property_test() owns the whole dance: SOURCES, THREADS,
+TIMING, RUN_SERIAL, INCLUDES. Adding a property is one call.
+
+Labels encode the soak protocol:
+- soak — CPU-side; scales with OTLP_C_PROPERTY_ITERS; TIMEOUT 600
+  (enough for the weekly 100k run through ctest)
+- timing — wall-clock per iteration; default 1000 IS the soak;
+  TIMEOUT 60
+
+### Changed — the soak workflow runs through ctest
+
+.github/workflows/soak.yml no longer shells binaries or
+hand-lists four exclusions. It is:
+  OTLP_C_PROPERTY_ITERS=100000 ctest -L soak
+The TIMEOUT-60 ceiling that forced the binary loop is gone for
+soak-capable tests — that was the v1.0.4/v1.1.11 lesson made
+structural rather than workarounded.
+
 ## [1.1.11] - 2026-08-27
 
 Seventh review — the soak protocol was the last manual
