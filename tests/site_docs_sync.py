@@ -62,6 +62,15 @@ check(
     f"{m.group(1) if m else 'none'}, not {version}",
 )
 
+# 2b. The install examples' GIT_TAG pins ride every release.
+for doc in ("README.md", "docs/quickstart.md"):
+    text = (ROOT / doc).read_text()
+    tags = re.findall(r"GIT_TAG\s+v(\d+\.\d+\.\d+)", text)
+    check(
+        bool(tags) and all(t == version for t in tags),
+        f"{doc} GIT_TAG examples are {tags}, not the release version {version}",
+    )
+
 # 3. Env-var parity: env_config.c's getenv table vs the site island.
 env_src = (ROOT / "src/env_config.c").read_text()
 code_vars = set(re.findall(r'getenv\("(OTEL_[A-Z_]+)"\)', env_src))

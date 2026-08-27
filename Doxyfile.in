@@ -58,6 +58,7 @@ EXCLUDE_PATTERNS       = */internal_util.h */span_internal.h */platform.h */prot
 
 # Quieter output.
 QUIET                  = NO
+WARN_AS_ERROR          = YES
 WARN_IF_UNDOCUMENTED   = YES
 WARN_NO_PARAMDOC       = NO
 
