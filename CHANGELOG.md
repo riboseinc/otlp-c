@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.8] - 2026-08-27
+
+Fourth architecture review — the review whose outcome is a
+recorded "no".
+
+### Added — ADR 0006: module boundaries hold
+
+Review #4 walked the hot spots (exporter.c, otlp_messages.c,
+internal_util.c, the encoder layering, the internal include
+graph) and applied the deletion test to every remaining
+extraction candidate. All four fail it — each would create a
+shallow module or rename a working seam:
+
+- diagnostics extraction (the depth is the one-model/one-
+  formatter invariant, not the filename)
+- otlp_messages.c split (the boundary already exists as its
+  header; the metrics/logs encoders consume exactly the shared
+  surface)
+- a pure outcome classifier (the retry half is already pure;
+  the rest is glue with an interface as wide as its body)
+- internal_util.c split (declined in reviews 1–3; the
+  one-engine locality IS the design)
+
+ADR 0006 records the reasoning so review #5 does not re-litigate
+it. The evidence the shape is finished: uniform encoder
+layering, a cross-seam-free include graph, every file above the
+82% coverage floor, and docs that match the code. The next
+module-shape change is feature-driven — a 4th signal lands as
+one SIGNAL_SPECS[] row.
+
 ## [1.1.7] - 2026-08-26
 
 The TODO ledger catches up with itself — docs only.
