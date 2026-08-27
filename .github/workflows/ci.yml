@@ -344,6 +344,19 @@ jobs:
   # checked-in golden vectors regenerated and byte-compared - so
   # schema drift, stale fixtures, and upstream proto changes all
   # fail here. Manual tools become CI-enforced.
+  examples:
+    name: Examples build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get CMake and Ninja
+        uses: lukka/get-cmake@latest
+      - name: Build the demo programs
+        run: |
+          cmake -B build -G Ninja -DOTLP_C_BUILD_EXAMPLES=ON
+          cmake --build build
+
   conformance-gates:
     name: Conformance gates (descriptor audit + goldens)
     runs-on: ubuntu-24.04
@@ -361,6 +374,8 @@ jobs:
         run: |
           python tests/golden/generate.py
           git diff --exit-code --stat -- tests/golden/
+      - name: Docs/site sync (quartet, changelogs, env-var parity)
+        run: python tests/site_docs_sync.py
 
   # The in-repo vcpkg overlay port (ports/otlp-c). Until v0.6.15
   # this recipe had never been built once - pinned at v0.5.17 with

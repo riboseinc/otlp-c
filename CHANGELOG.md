@@ -4,6 +4,33 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.9] - 2026-08-27
+
+Fifth architecture review — the last memory-enforced surfaces
+become check-enforced (the same move as the 1.0.3 conformance
+gates and the 1.0.4 coverage floor, applied to our own docs
+and demos).
+
+### Added — Examples build job
+
+`examples/` (minimal, event_loop_integration, multithread) had
+never been compiled by CI — `OTLP_C_BUILD_EXAMPLES` existed,
+no job set it. A dedicated job now builds all three on every
+PR; the compile is the gate. (v0.5.105 already paid this rot
+once: the event-loop example was never built for 100+
+releases.)
+
+### Added — docs/site sync gate
+
+`tests/site_docs_sync.py`, wired into conformance-gates:
+- version quartet equality (version.h, CMakeLists.txt, both
+  vcpkg manifests) — bumped by hand every release until now
+- changelog coherence: CHANGELOG.md's newest entry and the
+  site /docs/changelog newest entry both equal the quartet
+  (the TODO 180 lesson, mechanized)
+- env-var parity: every OTEL_* read by env_config.c appears
+  in the site's EnvVarExplorer island, and vice versa
+
 ## [1.1.8] - 2026-08-27
 
 Fourth architecture review — the review whose outcome is a
