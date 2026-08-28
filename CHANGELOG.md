@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.16] - 2026-08-28
+
+Twelfth review — the gates defend themselves.
+
+### Added — gates self-test (mutation testing for the gate suite)
+
+Eleven reviews built gates; nothing tested the gates — and the
+class is real (R10 shipped a gate bug, a raw-string escape that
+matched nothing, in the same session it was written).
+`tests/gates_selftest.py`, wired into conformance-gates, applies
+one crafted lie per check branch:
+
+- version quartet, CHANGELOG newest, site-changelog newest
+- env-var parity in both directions
+- the README tag examples
+- invented API mentions in reader-facing docs
+- a new internal include edge
+- a module-table row removed
+
+Each lie must make its gate exit nonzero AND name the mutated
+file; git then restores it. Dirty-tree guard aborts before
+touching anything (untracked files are safe — only tracked
+files are mutated and restored). All 9 lies caught on the first
+run; the one mutation that initially slipped through was the
+lie's fault, not the gate's (the filename survived inside the
+replacement) — strengthened and re-caught.
+
+The v0.5.99 lesson (checks that evaluate but don't enforce),
+applied to the checks themselves.
+
 ## [1.1.15] - 2026-08-28
 
 Eleventh review — ADR 0006's claims, enforced.
