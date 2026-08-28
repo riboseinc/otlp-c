@@ -15,6 +15,7 @@ not a human discovery. Covers:
 
 Exit 0 = in sync. Exit 1 = printed mismatches.
 """
+import glob
 import json
 import re
 import sys
@@ -86,6 +87,41 @@ check(
     not (site_vars - code_vars),
     f"env vars on the site but not read by env_config.c: {sorted(site_vars - code_vars)}",
 )
+
+# 4. API-mention parity on reader-facing surfaces: every otlp_*
+headers = "".join(
+    (ROOT / f).read_text() for f in glob.glob("include/otlp-c/*.h")
+)
+syms = set(re.findall(r"\b(otlp_[a-z0-9_]+)\s*\(", headers))
+types = set(re.findall(r"\b(otlp_[a-z0-9_]+_t)\b", headers))
+
+# (section 4 continues) every otlp_*
+#    mention must exist in the public headers or the allowlist.
+#    Internal/history docs (roadmap, spec, architecture, CLAUDE.md)
+#    document internals by design and are out of scope.
+reader_facing = sorted(
+    set(glob.glob("website/src/**/*.astro", recursive=True))
+    | set(glob.glob("website/src/**/*.vue", recursive=True))
+    | {"docs/quickstart.md", "docs/cookbook.md", "README.md"}
+)
+allow = {
+    "otlp_span", "otlp_metric", "otlp_exporter",  # prose short names
+    "otlp_c", "otlp_add_property_test",           # target; build helper
+    "otlp_malloc",  # slab.h's own docstring vocabulary (routing prose)
+}
+known = syms | types | allow
+known |= {f"otlp_bench_{n}" for n in (
+    "emit", "encode", "encode_batch", "logs", "slab")}
+for rf in reader_facing:
+    text = (ROOT / rf).read_text()
+    unknown = sorted(
+        m for m in set(re.findall(r"\botlp_[a-z0-9_]+\b", text))
+        if m not in known and not m.startswith("otlp-c")
+    )
+    check(
+        not unknown,
+        f"{rf} mentions API that does not exist: {unknown}",
+    )
 
 if fail:
     print("docs-sync: FAILED")

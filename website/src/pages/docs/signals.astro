@@ -37,11 +37,10 @@ otlp_metric_t *g = otlp_metric_create(
     OTLP_METRIC_GAUGE, "heap_bytes", "By", NULL, NULL, 0);
 otlp_metric_record(g, 4096.0);
 
-/* Histogram — explicit bucket bounds */
-otlp_metric_t *h = otlp_metric_create(
-    OTLP_METRIC_HISTOGRAM, "latency", "ms", NULL, NULL, 0);
+/* Histogram — explicit bucket bounds, at create time */
 double bounds[] = { 10, 50, 100 };
-otlp_metric_set_exp_histogram_bounds(h, bounds, 3);
+otlp_metric_t *h = otlp_metric_create(
+    OTLP_METRIC_HISTOGRAM, "latency", "ms", NULL, bounds, 3);
 otlp_metric_record(h, 42.0);
 
 /* ExponentialHistogram — scale-based buckets */
