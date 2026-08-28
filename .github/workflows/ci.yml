@@ -401,6 +401,8 @@ jobs:
         run: python tests/site_docs_sync.py
       - name: Include graph matches ADR 0006's record
         run: python tests/include_lint.py
+      - name: Gates self-test (every check branch proven to fail)
+        run: python tests/gates_selftest.py
 
   # The in-repo vcpkg overlay port (ports/otlp-c). Until v0.6.15
   # this recipe had never been built once - pinned at v0.5.17 with
