@@ -21,7 +21,7 @@
  */
 #include <otlp-c/slab.h>
 
-#include "../include/otlp-c/allocator.h"
+#include <otlp-c/allocator.h>
 #include "internal_util.h"
 
 #include <stdbool.h>
