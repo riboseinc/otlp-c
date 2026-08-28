@@ -4,6 +4,36 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.14] - 2026-08-28
+
+Tenth review — the parity-gate family's last uncovered claim
+class: prose that references public API.
+
+### Fixed — two site pages referenced API that does not exist
+
+- /docs/signals showed
+  `otlp_metric_set_exp_histogram_bounds(h, bounds, 3)` — no
+  such function; bucket bounds are a `otlp_metric_create()`
+  parameter. Snippet corrected.
+- /examples showed `otlp_exporter_poll_events()` and called
+  `otlp_exporter_poll_fds()` with a bare fd — the real API
+  fills an `otlp_poll_fd_t {fd, events}`. Snippet rewritten.
+
+Both fixed snippets compile against the real headers under
+`-Wall -Wextra -Werror` (verified). Readers copying the old
+code got broken builds.
+
+### Added — API-mention parity in the sync gate
+
+Every `otlp_*` symbol mentioned on reader-facing surfaces —
+website pages, quickstart, cookbook, README — must exist in
+the public headers or a small explicit allowlist (prose short
+names, the slab docstring's otlp_malloc vocabulary, bench
+binary names, the property-test build helper). Internal and
+history docs (roadmap, spec, architecture, CLAUDE.md) document
+internals by design and stay out of scope. The check found
+both real drifts above before it was even wired into CI.
+
 ## [1.1.13] - 2026-08-27
 
 Ninth review — the last known-rotting literals, gated.

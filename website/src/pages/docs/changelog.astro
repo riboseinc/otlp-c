@@ -4,6 +4,14 @@ import "../../styles/global.css";
 
 const releases = [
   {
+    v: "1.1.14", d: "2026-08-28",
+    t: "API-mention parity",
+    points: [
+      "Two site pages referenced API that does not exist — a metric setter that was never real and a poll_events call; fixed and compile-verified",
+      "The sync gate now requires every otlp_* mention on reader-facing pages to exist in the public headers",
+    ],
+  },
+  {
     v: "1.1.13", d: "2026-08-27",
     t: "The last literals",
     points: [

@@ -35,14 +35,17 @@ int main(void) {
     label: "event loop (poll)",
     code: `/* Drive the exporter from poll()/epoll — the library exposes
    its fd + interest so you never block a dedicated thread. */
+otlp_poll_fd_t ofd;
 struct pollfd pfd;
 size_t n;
 
 while (running) {
     otlp_exporter_tick(exp, 0);
 
-    if (otlp_exporter_poll_fds(exp, &pfd.fd, 1, &n) == OTLP_OK && n) {
-        pfd.events = otlp_exporter_poll_events(exp);
+    if (otlp_exporter_poll_fds(exp, &ofd, 1, &n)
+            == OTLP_OK && n == 1) {
+        pfd.fd = ofd.fd;
+        pfd.events = ofd.events;   /* POLLIN=1, POLLOUT=2 */
         pfd.revents = 0;
         poll(&pfd, 1, batch_ms);
         if (pfd.revents)
