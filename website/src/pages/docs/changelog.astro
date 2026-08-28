@@ -4,6 +4,14 @@ import "../../styles/global.css";
 
 const releases = [
   {
+    v: "1.1.15", d: "2026-08-28",
+    t: "ADR 0006, enforced",
+    points: [
+      "The include-graph lint snapshots the module map — a new internal include edge needs a conscious, reviewable allowlist edit",
+      "Module-table parity: every src/*.c must have an architecture.md row — the lint's first catch was common.c, rowless since creation",
+    ],
+  },
+  {
     v: "1.1.14", d: "2026-08-28",
     t: "API-mention parity",
     points: [

@@ -4,6 +4,32 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.15] - 2026-08-28
+
+Eleventh review — ADR 0006's claims, enforced.
+
+### Added — the include-graph lint
+
+ADR 0006 records the module map as settled, but nothing checked
+it: a new internal include edge could have appeared silently.
+`tests/include_lint.py` (wired into conformance-gates)
+snapshots the internal include graph — the allowlist IS the
+architecture — and also enforces module-table parity: every
+src/*.c file must have a docs/architecture.md row.
+
+Adding an edge is now a conscious decision: the allowlist edit
+and the module-table row land in one commit, where a reviewer
+sees them.
+
+### Fixed — the lint's first catch, plus a path wart
+
+- `common.c` (otlp_version/otlp_strerror) had no
+  architecture.md module-table row since its creation — the
+  parity half of the lint caught it before shipping.
+- `slab.c` reached a public header via a relative
+  `"../include/otlp-c/allocator.h"` — normalized to
+  `<otlp-c/allocator.h>` like every other public include.
+
 ## [1.1.14] - 2026-08-28
 
 Tenth review — the parity-gate family's last uncovered claim
