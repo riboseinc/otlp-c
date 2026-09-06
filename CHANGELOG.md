@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.17] - 2026-08-28
+
+Thirteenth review — the newest gates only ran on main.
+
+### Fixed — Doxygen + the site build now gate every PR
+
+The Doxygen WARN_AS_ERROR gate (v1.1.13) and the Astro build
+ran exclusively in the pages job — `if: push && main`. A
+docstring regression or a broken site page passed every PR
+check and only broke main's deploy, after merge: the same
+failure shape as the FreeBSD continue-on-error mask (green
+PRs, broken main). A new `docs` job builds both on every PR;
+the pages job keeps main-only deployment.
+
+### Changed — bench-smoke covers the encode pipeline too
+
+The other hot path joins the anti-blowup ceiling (5000 ns/span
+at 1 attr, ~20x the ~220 ns median — catches algorithmic
+regressions, tolerates runner noise). Gate logic verified
+end-to-end locally before shipping.
+
 ## [1.1.16] - 2026-08-28
 
 Twelfth review — the gates defend themselves.

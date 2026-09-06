@@ -260,6 +260,30 @@ jobs:
   # The marketing pages are hand-written; the API reference is
   # generated — the two halves cannot drift apart because they
   # deploy together.
+  # Docs build on every PR (v1.1.17): Doxygen (WARN_AS_ERROR)
+  # and the Astro site build only ran in the main-push pages
+  # job before — a docstring or site regression merged green and
+  # broke main's deploy. Same shape as the FreeBSD mask lesson.
+  docs:
+    name: Docs build (Doxygen WARN_AS_ERROR + site)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Doxygen + Astro
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q doxygen graphviz
+          cmake -B build-docs
+          cmake --build build-docs --target docs
+          cd website
+          npm ci
+          npm run build
+
   pages:
     name: Website (Astro + Doxygen -> GitHub Pages)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -379,6 +403,14 @@ jobs:
           ns=$(echo "$out" | awk '/spans=1000   attrs=0/ {print $3; exit}')
           echo "emit 0-attrs: $ns ns/span (ceiling 3000)"
           python3 -c "import sys; sys.exit(0 if float('$ns' or 999999) < 3000 else 1)"
+
+      - name: Encode pipeline under a generous ceiling
+        run: |
+          out=$(./build/bench/otlp_bench_encode)
+          echo "$out"
+          ns=$(echo "$out" | awk '/100 spans .* 1 attrs:/ {print $10; exit}')
+          echo "encode 1-attr: $ns ns/span (ceiling 5000)"
+          python3 -c "import sys; sys.exit(0 if float('$ns' or 999999) < 5000 else 1)"
 
   conformance-gates:
     name: Conformance gates (descriptor audit + goldens)
