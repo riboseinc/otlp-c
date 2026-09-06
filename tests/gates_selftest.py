@@ -43,6 +43,12 @@ MUTATIONS = [
     ("docs/architecture.md",
      "| `common.c` |", "| `comm0n.c` |",
      GATES[1], "common.c"),
+    ("CLAUDE.md",
+     "| `src/exporter.c` |", "| `src/exporter_gone.c` |",
+     GATES[1], "exporter_gone"),
+    ("docs/adr/README.md",
+     "[0006 —", "[~0006 —",
+     GATES[1], "0006"),
 ]
 
 

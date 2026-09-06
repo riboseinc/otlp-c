@@ -4,6 +4,30 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.19] - 2026-09-07
+
+Fifteenth review — the reference lattice gated; soak gains
+PR-mode proof.
+
+### Added — reference-lattice checks in the include lint
+
+The load-bearing docs name files, and nothing checked they
+were real: CLAUDE.md's key-files table (the map every future
+agent starts from), the ADR index, and architecture.md's
+relative links. All must exist now — brace-expansion notation
+(`src/foo.{h,c}`) understood. The lattice was clean at gating
+time; the self-test grew two mutations (a vanished path, an
+unindexed ADR) to keep it that way — 11 checks now.
+
+### Changed — soak smoke on every PR
+
+The `ctest -L soak` path only ran on the weekly cron: a label
+regression or a broken selection would surface Sunday 03:00
+UTC, not at the PR that caused it. The bench-smoke job (now
+"Bench + soak smoke") also builds the tests and runs
+`OTLP_C_PROPERTY_ITERS=10000 ctest -L soak` — 21/21 green in
+~30s locally; the full 100k stays on the cron.
+
 ## [1.1.18] - 2026-09-07
 
 Fourteenth review — the awk class closed; license hygiene

@@ -140,13 +140,13 @@ ctest --test-dir build --output-on-failure
 ### Consuming from another project
 
 `otlp-c` is not (yet) in the public vcpkg registry. Use CMake
-FetchContent against a release tag (`v1.1.18` shown):
+FetchContent against a release tag (`v1.1.19` shown):
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(otlp-c
     GIT_REPOSITORY https://github.com/riboseinc/otlp-c
-    GIT_TAG        v1.1.18)
+    GIT_TAG        v1.1.19)
 FetchContent_MakeAvailable(otlp-c)
 target_link_libraries(my-app PRIVATE otlp-c::otlp_c)
 ```

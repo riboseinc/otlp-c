@@ -382,17 +382,23 @@ jobs:
           cmake --build build
 
   bench-smoke:
-    name: Bench smoke (anti-blowup ceiling)
+    name: Bench + soak smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Get CMake and Ninja
         uses: lukka/get-cmake@latest
-      - name: Build benchmarks
+      - name: Build benchmarks + tests
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOTLP_C_BUILD_BENCH=ON
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DOTLP_C_BUILD_BENCH=ON -DOTLP_C_BUILD_TESTS=ON
           cmake --build build
+      - name: Soak smoke (the ctest -L soak path, 10k iterations)
+        run: |
+          # PR-mode proof that the soak selection and labels work;
+          # the full 100k run stays on the weekly cron.
+          OTLP_C_PROPERTY_ITERS=10000 ctest --test-dir build -L soak
       - name: Anti-blowup ceilings (emit + encode)
         run: |
           # Not a precision gate: shared runners are noisy. The
