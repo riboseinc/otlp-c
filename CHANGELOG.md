@@ -4,6 +4,27 @@ All notable changes to `otlp-c` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.18] - 2026-09-07
+
+Fourteenth review — the awk class closed; license hygiene
+restored.
+
+### Added — tests/bench_check.py (parse-failure fails)
+
+The bench-smoke job's inline awk field-index parsing was
+guessed wrong twice in one session ($4 vs $3, then $6 vs $10).
+The parsing now lives in one tested script: unparseable output
+exits 2 (a gate that cannot parse must never silently pass —
+the v0.5.99 class), a breach exits 1, good output exits 0. The
+gates self-test feeds it four canned outputs (real emit, real
+encode, a breach, garbage) and requires each behavior.
+
+### Fixed — SPDX headers on the Python tooling
+
+The v0.6.14 license sweep covered 135 C files; the five Python
+tools added since (three gate scripts, two golden generators)
+carried none. All SPDX'd now — BSD-3-Clause, like the tree.
+
 ## [1.1.17] - 2026-08-28
 
 Thirteenth review — the newest gates only ran on main.

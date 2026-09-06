@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """Audit every table in src/otlp_schema.h against the INSTALLED
 opentelemetry-proto descriptors (v1.0.1 lesson: field numbers come
 from descriptors, never memory — v0.8.0 shipped an Exemplar table

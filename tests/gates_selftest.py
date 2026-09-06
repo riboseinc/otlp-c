@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """Gates self-test: every gate check branch is proven to FAIL.
 
 A check that silently passes nothing is worse than no check —
@@ -45,6 +46,21 @@ MUTATIONS = [
 ]
 
 
+# Canned-output checks: bench_check.py must PASS on real-shaped
+# output and FAIL on a breach AND on unparseable text (a gate
+# that cannot parse must never silently pass).
+REAL_EMIT = "  spans=1000   attrs=0         145.0 ns/span (emit)  ...\n"
+REAL_ENCODE = ("  encode  100 spans ×  1 attrs:    21000 ns total,"
+               "  210.0 ns/span,    4761905 spans/s\n")
+OUTPUT_CHECKS = [
+    ("bench real emit passes", "emit0", "3000", REAL_EMIT, 0),
+    ("bench real encode passes", "encode1", "5000", REAL_ENCODE, 0),
+    ("bench breach fails", "emit0", "3000",
+     "  spans=1000   attrs=0       99999.0 ns/span (emit)\n", 1),
+    ("bench garbage fails", "emit0", "3000", "done\n", 2),
+]
+
+
 def sh(*cmd):
     return subprocess.run(cmd, capture_output=True, text=True)
 
@@ -88,6 +104,16 @@ def main():
               f"{' (restore failed!)' if not restored else ''}")
         if not ok and r.returncode == 0:
             print(f"          gate PASSED on a lie: {find!r} in {path}")
+
+    for name, metric, ceiling, text, expect in OUTPUT_CHECKS:
+        import subprocess as _sp
+        r = _sp.run(["python3", "tests/bench_check.py", metric, ceiling],
+                    input=text, capture_output=True, text=True)
+        status = "caught" if r.returncode == expect else "MISSED"
+        if status != "caught":
+            failed += 1
+            print(f"          rc={r.returncode} expected={expect}")
+        print(f"  {status:7} bench_check.py        {name}")
 
     for gate in GATES:
         if sh("python3", gate).returncode != 0:
