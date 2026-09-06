@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
+# SPDX-License-Identifier: BSD-3-Clause
 """Generate golden wire vectors for otlp-c.
 
 Builds three Export*ServiceRequest payloads with the REFERENCE

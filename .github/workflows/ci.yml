@@ -393,24 +393,14 @@ jobs:
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOTLP_C_BUILD_BENCH=ON
           cmake --build build
-      - name: Emit pipeline under a generous ceiling
+      - name: Anti-blowup ceilings (emit + encode)
         run: |
-          # Not a precision gate: shared runners are noisy. This
-          # catches algorithmic blowups (~20x the Apple-silicon
-          # median of ~150 ns/span), not regressions in the noise.
-          out=$(./build/bench/otlp_bench_emit)
-          echo "$out"
-          ns=$(echo "$out" | awk '/spans=1000   attrs=0/ {print $3; exit}')
-          echo "emit 0-attrs: $ns ns/span (ceiling 3000)"
-          python3 -c "import sys; sys.exit(0 if float('$ns' or 999999) < 3000 else 1)"
-
-      - name: Encode pipeline under a generous ceiling
-        run: |
-          out=$(./build/bench/otlp_bench_encode)
-          echo "$out"
-          ns=$(echo "$out" | awk '/100 spans .* 1 attrs:/ {print $10; exit}')
-          echo "encode 1-attr: $ns ns/span (ceiling 5000)"
-          python3 -c "import sys; sys.exit(0 if float('$ns' or 999999) < 5000 else 1)"
+          # Not a precision gate: shared runners are noisy. The
+          # ceilings (~20x median) catch algorithmic blowups.
+          # bench_check.py FAILS on unparseable output — the
+          # field-index guessing bit twice before it existed.
+          ./build/bench/otlp_bench_emit   | python3 tests/bench_check.py emit0 3000
+          ./build/bench/otlp_bench_encode | python3 tests/bench_check.py encode1 5000
 
   conformance-gates:
     name: Conformance gates (descriptor audit + goldens)

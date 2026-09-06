@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """Docs/site sync gate: the hand-maintained truth surfaces vs the
 machine-knowable facts.
 

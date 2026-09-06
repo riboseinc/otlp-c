@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """Include-graph lint: ADR 0006's claims, enforced.
 
 The module map is settled (ADR 0006, docs/adr/). This lint
