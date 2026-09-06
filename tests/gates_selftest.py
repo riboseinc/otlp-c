@@ -47,7 +47,7 @@ MUTATIONS = [
      "| `src/exporter.c` |", "| `src/exporter_gone.c` |",
      GATES[1], "exporter_gone"),
     ("docs/adr/README.md",
-     "[0006 —", "[~0006 —",
+     "(0006-module-boundaries-hold.md)", "(gone-adr.md)",
      GATES[1], "0006"),
 ]
 
