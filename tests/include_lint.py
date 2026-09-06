@@ -106,6 +106,34 @@ if missing:
         f"src/ modules with no docs/architecture.md row: {missing}"
     )
 
+# Reference lattice: file paths named by the load-bearing docs
+# must exist, and every ADR must be indexed.
+def expand(path):
+    m = re.match(r"^(.*)\{(.*)\}$", path)
+    if not m:
+        return [path]
+    return [m.group(1) + ext for ext in m.group(2).split(",")]
+
+claude = open(f"{ROOT}/CLAUDE.md").read()
+key_files = re.search(r"\| Path \| Purpose \|(.*?)\n\n", claude, re.S)
+for mentioned in re.findall(r"\| `([^`]+)` \|",
+                            key_files.group(1) if key_files else ""):
+    if not any(os.path.exists(f"{ROOT}/{p}") for p in expand(mentioned)):
+        fail.append(
+            f"CLAUDE.md key-files names {mentioned}, which does not exist"
+        )
+
+adr_files = sorted(
+    os.path.basename(f) for f in glob.glob(f"{ROOT}/docs/adr/0*.md"))
+adr_index = open(f"{ROOT}/docs/adr/README.md").read()
+for a in adr_files:
+    if a not in adr_index:
+        fail.append(f"docs/adr/{a} is not listed in the ADR index")
+
+for link in re.findall(r"\]\((?!http)([^)]+)\)", arch):
+    if not os.path.exists(f"{ROOT}/docs/{link}"):
+        fail.append(f"architecture.md links {link}, which does not exist")
+
 if fail:
     print("include-lint: FAILED")
     for f in fail:
