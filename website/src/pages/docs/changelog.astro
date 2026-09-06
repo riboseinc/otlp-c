@@ -4,6 +4,14 @@ import "../../styles/global.css";
 
 const releases = [
   {
+    v: "1.1.17", d: "2026-08-28",
+    t: "The gates that only ran on main",
+    points: [
+      "Doxygen (WARN_AS_ERROR) and the site build now gate every PR — before, a docs regression merged green and broke main's deploy",
+      "bench-smoke gains the encode pipeline: both hot paths carry anti-blowup ceilings",
+    ],
+  },
+  {
     v: "1.1.16", d: "2026-08-28",
     t: "The gates defend themselves",
     points: [
