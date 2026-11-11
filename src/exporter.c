@@ -1162,6 +1162,11 @@ otlp_exporter_tick(struct otlp_exporter *e, uint32_t max_wait_ms)
 		/* 1. Drain all three queues into their pending arrays. */
 		for (s = 0; s < 3; s++)
 		{
+			/* Keep the batch immutable while its HTTP request is in flight.
+			 * It may be retried and is freed only when the request reaches
+			 * a terminal outcome. */
+			if (e->in_flight && e->in_flight_signal == s)
+				continue;
 			while (e->sig[s].pending_count < e->sig[s].pending_cap)
 			{
 				void *item = mpsc_queue_pop(&e->sig[s].queue);
