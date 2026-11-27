@@ -9,6 +9,10 @@
  */
 #include "exporter_internal.h"
 
+#if defined(_WIN32)
+#include <windows.h>  /* Sleep() — VS 2026 errors on implicit declarations */
+#endif
+
 #include "http_client.h"
 #include "retry_policy.h"
 

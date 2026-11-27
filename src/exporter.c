@@ -24,6 +24,10 @@
 #include <otlp-c/version.h>
 
 #include "exporter_internal.h"
+
+#if defined(_WIN32)
+#include <windows.h>  /* Sleep() — VS 2026 errors on implicit declarations */
+#endif
 #include "exporter_otel.h"
 #include "http_client.h"
 #include "internal_util.h"
