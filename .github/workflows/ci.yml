@@ -43,7 +43,7 @@ jobs:
             os: macos-15-intel
             cc: clang
           - name: macOS ARM64
-            os: macos-14
+            os: macos-15
             cc: clang
           - name: Windows x64 MSVC
             os: windows-2022
@@ -191,7 +191,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        os: [ubuntu-24.04, macos-15, windows-2022]
     # LIBDIR pinned to "lib" at top level so the installed config
     # lands deterministically at <prefix>/lib/cmake/otlp-c on every
     # platform. Uses $GITHUB_WORKSPACE (forward slashes) instead of
