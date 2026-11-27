@@ -66,14 +66,24 @@ jobs:
       - name: Get CMake and Ninja
         uses: lukka/get-cmake@latest
 
-      - name: Setup MSVC
-        if: matrix.msvc == true
+      - name: Setup MSVC (x64, VS 2022)
+        if: matrix.msvc == true && matrix.os != 'windows-11-arm'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ contains(matrix.os, 'arm') && 'arm64' || 'x64' }}
+          arch: x64
           # Pin to VS 2022 stable. VS 18 Enterprise (preview) breaks
           # C11 atomics — see release.yml for full comment.
           vsversion: 2022
+
+      - name: Setup MSVC (ARM64, VS 2026)
+        if: matrix.msvc == true && matrix.os == 'windows-11-arm'
+        shell: cmd
+        run: |
+          rem windows-11-arm now carries the VS 2026 image
+          rem (actions/runner-images#14602); ilammy/msvc-dev-cmd v1.13
+          rem cannot locate the VS 18 layout, so set it up directly.
+          "C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=arm64 -no_logo
+          set >> "%GITHUB_ENV%"
 
       - name: Configure (Unix)
         if: runner.os != 'Windows'
